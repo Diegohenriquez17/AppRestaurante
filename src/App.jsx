@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import QRCode from 'qrcode'
 import { motion } from 'framer-motion'
 import {
@@ -18,6 +18,8 @@ import {
   CalendarDays,
   ChefHat,
   CheckCircle2,
+  ChevronDown,
+  Check,
   ClipboardList,
   Clock3,
   DollarSign,
@@ -61,6 +63,133 @@ const currency = new Intl.NumberFormat('es-CL', {
   currency: 'CLP',
   maximumFractionDigits: 0,
 })
+
+function CustomSelect({
+  value,
+  onChange,
+  options,
+  placeholder = 'Seleccionar...',
+  className = '',
+  buttonClassName = '',
+  disabled = false,
+}) {
+  const [open, setOpen] = useState(false)
+  const [activeIndex, setActiveIndex] = useState(-1)
+  const wrapperRef = useRef(null)
+  const listRef = useRef(null)
+
+  const normalized = options.map((opt) =>
+    typeof opt === 'string' ? { value: opt, label: opt } : opt,
+  )
+  const current = normalized.find((opt) => opt.value === value)
+
+  useEffect(() => {
+    if (!open) return
+    const onDocClick = (e) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) setOpen(false)
+    }
+    const onEsc = (e) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onDocClick)
+    document.addEventListener('keydown', onEsc)
+    return () => {
+      document.removeEventListener('mousedown', onDocClick)
+      document.removeEventListener('keydown', onEsc)
+    }
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    const idx = normalized.findIndex((opt) => opt.value === value)
+    setActiveIndex(idx >= 0 ? idx : 0)
+  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleKeyDown = (e) => {
+    if (disabled) return
+    if (!open) {
+      if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') {
+        e.preventDefault()
+        setOpen(true)
+      }
+      return
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setActiveIndex((i) => Math.min(normalized.length - 1, i + 1))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setActiveIndex((i) => Math.max(0, i - 1))
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      const opt = normalized[activeIndex]
+      if (opt) {
+        onChange(opt.value)
+        setOpen(false)
+      }
+    }
+  }
+
+  return (
+    <div ref={wrapperRef} className={`relative ${className}`}>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => !disabled && setOpen((v) => !v)}
+        onKeyDown={handleKeyDown}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className={`flex w-full items-center justify-between gap-2 rounded-lg border bg-white px-3 py-2.5 text-left text-[0.92rem] text-stone-800 outline-none transition disabled:cursor-not-allowed disabled:opacity-50 ${
+          open ? 'border-[#c2553d] ring-2 ring-[#c2553d]/15' : 'border-stone-200 hover:border-stone-300'
+        } ${buttonClassName}`}
+      >
+        <span className={current ? 'truncate' : 'truncate text-stone-400'}>
+          {current ? current.label : placeholder}
+        </span>
+        <ChevronDown
+          size={16}
+          className={`shrink-0 text-stone-500 transition-transform ${open ? 'rotate-180' : ''}`}
+        />
+      </button>
+
+      {open ? (
+        <ul
+          ref={listRef}
+          role="listbox"
+          className="absolute left-0 right-0 z-50 mt-1.5 max-h-64 overflow-y-auto rounded-lg border border-stone-200 bg-white py-1 shadow-lg shadow-stone-900/10"
+        >
+          {normalized.map((opt, idx) => {
+            const isSelected = opt.value === value
+            const isActive = idx === activeIndex
+            return (
+              <li
+                key={opt.value}
+                role="option"
+                aria-selected={isSelected}
+                onMouseEnter={() => setActiveIndex(idx)}
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  onChange(opt.value)
+                  setOpen(false)
+                }}
+                className={`flex cursor-pointer items-center justify-between gap-2 px-3 py-2 text-[0.92rem] transition ${
+                  isActive
+                    ? 'bg-[#fbf2ea] text-[#9a3f2c]'
+                    : isSelected
+                      ? 'text-[#9a3f2c]'
+                      : 'text-stone-700'
+                }`}
+              >
+                <span className="truncate font-medium">{opt.label}</span>
+                {isSelected ? <Check size={15} className="shrink-0 text-[#c2553d]" /> : null}
+              </li>
+            )
+          })}
+        </ul>
+      ) : null}
+    </div>
+  )
+}
 
 function App() {
   return (
@@ -195,7 +324,7 @@ function MenuPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 pb-28 text-slate-950 lg:pb-8">
+    <main className="min-h-screen bg-stone-50 pb-28 text-stone-950 lg:pb-8">
       {isHydrating ? <SyncBanner text="Conectando con Supabase..." /> : null}
       {remoteError ? (
         <SyncBanner text={`Supabase no disponible: ${remoteError}`} warning />
@@ -203,7 +332,7 @@ function MenuPage() {
 
       <MenuHeader restaurant={state.restaurant} mesaId={mesaId} />
 
-      <section className="sticky top-0 z-30 border-b border-slate-200 bg-slate-50/95 px-4 py-3 backdrop-blur lg:px-8">
+      <section className="sticky top-0 z-30 border-b border-stone-200 bg-stone-50/95 px-4 py-3 backdrop-blur lg:px-8">
         <div className="mx-auto grid max-w-7xl gap-3">
           <SearchBar value={search} onChange={setSearch} />
           <CategoryChips categories={categories} active={category} onChange={setCategory} />
@@ -258,7 +387,7 @@ function MenuPage() {
         </section>
 
         <aside className="hidden lg:block">
-          <div className="sticky top-32 max-h-[calc(100vh-9rem)] overflow-y-auto overscroll-contain rounded-2xl border border-slate-200 bg-white p-4 shadow-soft [scrollbar-width:thin]">
+          <div className="sticky top-32 max-h-[calc(100vh-9rem)] overflow-y-auto overscroll-contain rounded-2xl border border-stone-200 bg-white p-4 shadow-soft [scrollbar-width:thin]">
             <CartContent
               mesaId={mesaId}
               cart={cart}
@@ -320,10 +449,10 @@ function MenuHeader({ restaurant, mesaId }) {
     <header className="bg-white">
       <div className="mx-auto max-w-7xl px-4 pb-4 pt-4 lg:px-8 lg:pt-8">
         <div
-          className="relative overflow-hidden rounded-[2rem] bg-slate-950 p-5 text-white shadow-soft sm:p-7 lg:p-9"
+          className="relative overflow-hidden rounded-[2rem] bg-stone-950 p-5 text-white shadow-soft sm:p-7 lg:p-9"
           style={{
             background:
-              'radial-gradient(circle at 12% 20%, rgba(16,185,129,0.32), transparent 28%), radial-gradient(circle at 88% 8%, rgba(244,63,94,0.28), transparent 32%), linear-gradient(135deg, #06131a 0%, #0f172a 55%, #111827 100%)',
+              'radial-gradient(circle at 12% 20%, rgba(194,85,61,0.32), transparent 28%), radial-gradient(circle at 88% 8%, rgba(217,150,65,0.28), transparent 32%), linear-gradient(135deg, #1c1410 0%, #2a201a 55%, #2f2620 100%)',
           }}
         >
           <div className="absolute -right-16 -top-20 h-44 w-44 rounded-full bg-white/10 blur-sm" />
@@ -331,11 +460,11 @@ function MenuHeader({ restaurant, mesaId }) {
           <div className="relative grid gap-8 lg:grid-cols-[1fr_360px] lg:items-end">
             <div>
               <div className="flex items-center gap-3">
-                <div className="grid h-14 w-14 place-items-center rounded-2xl bg-emerald-400 text-xl font-black text-slate-950 shadow-lg shadow-emerald-950/30">
+                <div className="grid h-14 w-14 place-items-center rounded-2xl bg-orange-400 text-xl font-black text-stone-950 shadow-lg shadow-orange-950/30">
                   A
                 </div>
                 <div>
-                  <p className="text-xs font-black uppercase tracking-[0.22em] text-emerald-300">
+                  <p className="text-xs font-black uppercase tracking-[0.22em] text-orange-300">
                     AcroDevs Restaurant
                   </p>
                   <h1 className="text-2xl font-black leading-tight sm:text-4xl">
@@ -346,7 +475,7 @@ function MenuHeader({ restaurant, mesaId }) {
               <p className="mt-5 max-w-xl text-lg font-semibold text-white">
                 Haz tu pedido desde la mesa
               </p>
-              <p className="mt-2 max-w-xl text-sm leading-6 text-slate-300 sm:text-base">
+              <p className="mt-2 max-w-xl text-sm leading-6 text-stone-300 sm:text-base">
                 Escoge, agrega notas y envia tu orden directo a cocina.
               </p>
             </div>
@@ -366,12 +495,12 @@ function MenuHeader({ restaurant, mesaId }) {
 function MenuHeaderStat({ label, value, suffix }) {
   return (
     <div className="rounded-2xl bg-white/10 p-3 text-center ring-1 ring-white/10">
-      <p className="text-[0.65rem] font-black uppercase tracking-[0.14em] text-slate-300">
+      <p className="text-[0.65rem] font-black uppercase tracking-[0.14em] text-stone-300">
         {label}
       </p>
       <p className="mt-1 text-lg font-black text-white">
         {value}
-        {suffix ? <span className="ml-1 text-xs font-bold text-slate-300">{suffix}</span> : null}
+        {suffix ? <span className="ml-1 text-xs font-bold text-stone-300">{suffix}</span> : null}
       </p>
     </div>
   )
@@ -380,9 +509,9 @@ function MenuHeaderStat({ label, value, suffix }) {
 function SearchBar({ value, onChange }) {
   return (
     <label className="relative block">
-      <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+      <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-stone-400" />
       <input
-        className="h-14 w-full rounded-2xl border border-slate-200 bg-white pl-12 pr-4 text-base font-semibold text-slate-950 shadow-sm outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+        className="h-14 w-full rounded-2xl border border-stone-200 bg-white pl-12 pr-4 text-base font-semibold text-stone-950 shadow-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
         type="search"
         value={value}
         onChange={(event) => onChange(event.target.value)}
@@ -403,8 +532,8 @@ function CategoryChips({ categories, active, onChange }) {
           onClick={() => onChange(item)}
           className={`shrink-0 rounded-full px-5 py-3 text-sm font-black transition ${
             active === item
-              ? 'bg-slate-950 text-white shadow-lg shadow-slate-300'
-              : 'border border-slate-200 bg-white text-slate-600 shadow-sm'
+              ? 'bg-stone-950 text-white shadow-lg shadow-stone-300'
+              : 'border border-stone-200 bg-white text-stone-600 shadow-sm'
           }`}
         >
           {item}
@@ -430,8 +559,8 @@ function FilterChips({ active, onChange }) {
           onClick={() => onChange(filter.id)}
           className={`shrink-0 rounded-full px-4 py-2 text-sm font-black transition ${
             active === filter.id
-              ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-100'
-              : 'bg-white text-slate-500 ring-1 ring-slate-200'
+              ? 'bg-orange-500 text-stone-950 shadow-md shadow-orange-100'
+              : 'bg-white text-stone-500 ring-1 ring-stone-200'
           }`}
         >
           {filter.label}
@@ -445,8 +574,8 @@ function SectionTitle({ title, subtitle }) {
   return (
     <div className="flex items-end justify-between gap-3">
       <div>
-        <h2 className="text-xl font-black text-slate-950 sm:text-2xl">{title}</h2>
-        <p className="text-sm font-semibold text-slate-500">{subtitle}</p>
+        <h2 className="text-xl font-black text-stone-950 sm:text-2xl">{title}</h2>
+        <p className="text-sm font-semibold text-stone-500">{subtitle}</p>
       </div>
     </div>
   )
@@ -456,7 +585,7 @@ function PromoBanner({ product, onAdd }) {
   return (
     <motion.article
       whileTap={{ scale: 0.98 }}
-      className="grid min-w-[285px] grid-cols-[1fr_112px] overflow-hidden rounded-3xl bg-slate-950 text-white shadow-soft sm:min-w-[360px]"
+      className="grid min-w-[285px] grid-cols-[1fr_112px] overflow-hidden rounded-3xl bg-stone-950 text-white shadow-soft sm:min-w-[360px]"
     >
       <div className="grid gap-3 p-4">
         <span className="w-fit rounded-full bg-rose-500 px-3 py-1 text-xs font-black uppercase tracking-[0.12em]">
@@ -464,14 +593,14 @@ function PromoBanner({ product, onAdd }) {
         </span>
         <div>
           <h3 className="text-xl font-black leading-tight">{product.name}</h3>
-          <p className="mt-1 line-clamp-2 text-sm text-slate-300">{product.description}</p>
+          <p className="mt-1 line-clamp-2 text-sm text-stone-300">{product.description}</p>
         </div>
         <div className="flex items-center justify-between gap-2">
           <strong className="text-lg">{currency.format(product.price)}</strong>
           <button
             type="button"
             onClick={() => onAdd(product)}
-            className="rounded-full bg-emerald-400 px-4 py-2 text-sm font-black text-slate-950"
+            className="rounded-full bg-orange-400 px-4 py-2 text-sm font-black text-stone-950"
           >
             Agregar
           </button>
@@ -490,10 +619,10 @@ function RecommendedCard({ product, onAdd }) {
   return (
     <motion.article
       whileTap={{ scale: 0.98 }}
-      className="min-w-[235px] overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm"
+      className="min-w-[235px] overflow-hidden rounded-3xl border border-stone-200 bg-white shadow-sm"
     >
       <div
-        className="h-32 bg-slate-200 bg-cover bg-center"
+        className="h-32 bg-stone-200 bg-cover bg-center"
         style={{ backgroundImage: `url("${product.image}")` }}
       />
       <div className="grid gap-2 p-4">
@@ -501,13 +630,13 @@ function RecommendedCard({ product, onAdd }) {
           <Flame className="h-4 w-4" />
           Más pedido
         </div>
-        <h3 className="line-clamp-1 text-lg font-black text-slate-950">{product.name}</h3>
+        <h3 className="line-clamp-1 text-lg font-black text-stone-950">{product.name}</h3>
         <div className="flex items-center justify-between">
           <strong>{currency.format(product.price)}</strong>
           <button
             type="button"
             onClick={() => onAdd(product)}
-            className="grid h-10 w-10 place-items-center rounded-full bg-slate-950 text-white"
+            className="grid h-10 w-10 place-items-center rounded-full bg-stone-950 text-white"
             aria-label={`Agregar ${product.name}`}
           >
             <Plus className="h-5 w-5" />
@@ -523,15 +652,15 @@ function ProductCard({ product, quantity, onAdd }) {
     <motion.article
       whileHover={{ y: -3 }}
       whileTap={{ scale: 0.99 }}
-      className="overflow-hidden rounded-[1.7rem] border border-slate-200 bg-white shadow-sm transition hover:shadow-soft"
+      className="overflow-hidden rounded-[1.7rem] border border-stone-200 bg-white shadow-sm transition hover:shadow-soft"
     >
       <div className="relative">
         <div
-          className="h-48 bg-slate-200 bg-cover bg-center sm:h-44"
+          className="h-48 bg-stone-200 bg-cover bg-center sm:h-44"
           style={{ backgroundImage: `url("${product.image}")` }}
         />
         {quantity ? (
-          <span className="absolute right-3 top-3 rounded-full bg-slate-950 px-3 py-1 text-sm font-black text-white shadow-lg">
+          <span className="absolute right-3 top-3 rounded-full bg-stone-950 px-3 py-1 text-sm font-black text-white shadow-lg">
             {quantity} en pedido
           </span>
         ) : null}
@@ -543,12 +672,12 @@ function ProductCard({ product, quantity, onAdd }) {
           {product.category === 'Promociones' ? <ProductBadge label="Promo" tone="rose" /> : null}
         </div>
         <div>
-          <h3 className="text-xl font-black leading-tight text-slate-950">{product.name}</h3>
-          <p className="mt-1 line-clamp-2 min-h-[2.5rem] text-sm leading-5 text-slate-500">
+          <h3 className="text-xl font-black leading-tight text-stone-950">{product.name}</h3>
+          <p className="mt-1 line-clamp-2 min-h-[2.5rem] text-sm leading-5 text-stone-500">
             {product.description}
           </p>
         </div>
-        <div className="flex items-center justify-between text-sm font-bold text-slate-400">
+        <div className="flex items-center justify-between text-sm font-bold text-stone-400">
           <span>{product.category}</span>
           <span className="inline-flex items-center gap-1">
             <Clock3 className="h-4 w-4" />
@@ -556,13 +685,13 @@ function ProductCard({ product, quantity, onAdd }) {
           </span>
         </div>
         <div className="flex items-center justify-between gap-3">
-          <strong className="text-xl font-black text-slate-950">
+          <strong className="text-xl font-black text-stone-950">
             {currency.format(product.price)}
           </strong>
           <button
             type="button"
             onClick={() => onAdd(product)}
-            className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-5 text-sm font-black text-slate-950 shadow-lg shadow-emerald-100 transition hover:bg-emerald-400"
+            className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-orange-500 px-5 text-sm font-black text-stone-950 shadow-lg shadow-orange-100 transition hover:bg-orange-400"
           >
             <Plus className="h-5 w-5" />
             Agregar
@@ -576,7 +705,7 @@ function ProductCard({ product, quantity, onAdd }) {
 function ProductBadge({ label, tone }) {
   const tones = {
     amber: 'bg-amber-50 text-amber-700',
-    green: 'bg-emerald-50 text-emerald-700',
+    green: 'bg-orange-50 text-orange-700',
     rose: 'bg-rose-50 text-rose-700',
   }
   return (
@@ -593,15 +722,15 @@ function FloatingCartButton({ count, total, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      className="fixed inset-x-4 bottom-4 z-40 flex h-16 items-center justify-between rounded-2xl bg-slate-950 px-5 text-left text-white shadow-2xl shadow-slate-400/40 lg:hidden"
+      className="fixed inset-x-4 bottom-4 z-40 flex h-16 items-center justify-between rounded-2xl bg-stone-950 px-5 text-left text-white shadow-2xl shadow-stone-400/40 lg:hidden"
     >
       <span className="inline-flex items-center gap-3">
-        <span className="grid h-10 w-10 place-items-center rounded-full bg-emerald-400 text-slate-950">
+        <span className="grid h-10 w-10 place-items-center rounded-full bg-orange-400 text-stone-950">
           <ShoppingBag className="h-5 w-5" />
         </span>
         <span>
           <span className="block text-sm font-black">Ver pedido</span>
-          <span className="text-xs text-slate-300">{count} productos</span>
+          <span className="text-xs text-stone-300">{count} productos</span>
         </span>
       </span>
       <strong className="text-lg">{currency.format(total)}</strong>
@@ -616,7 +745,7 @@ function CartDrawer({ open, onClose, children }) {
     <div className="fixed inset-0 z-50 lg:hidden">
       <button
         type="button"
-        className="absolute inset-0 bg-slate-950/55 backdrop-blur-sm"
+        className="absolute inset-0 bg-stone-950/55 backdrop-blur-sm"
         onClick={onClose}
         aria-label="Cerrar pedido"
       />
@@ -627,11 +756,11 @@ function CartDrawer({ open, onClose, children }) {
         className="absolute inset-x-0 bottom-0 max-h-[88vh] overflow-y-auto rounded-t-[2rem] bg-white p-4 shadow-2xl"
       >
         <div className="mb-3 flex items-center justify-between">
-          <strong className="text-lg font-black text-slate-950">Tu pedido</strong>
+          <strong className="text-lg font-black text-stone-950">Tu pedido</strong>
           <button
             type="button"
             onClick={onClose}
-            className="grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-slate-600"
+            className="grid h-10 w-10 place-items-center rounded-full bg-stone-100 text-stone-600"
             aria-label="Cerrar"
           >
             <X className="h-5 w-5" />
@@ -664,8 +793,8 @@ function CartContent({
 }) {
   return (
     <div className="grid gap-4">
-      <div className="rounded-2xl bg-slate-950 p-4 text-white">
-        <p className="text-xs font-black uppercase tracking-[0.16em] text-emerald-300">
+      <div className="rounded-2xl bg-stone-950 p-4 text-white">
+        <p className="text-xs font-black uppercase tracking-[0.16em] text-orange-300">
           Pedido mesa
         </p>
         <div className="mt-2 flex items-center justify-between">
@@ -678,13 +807,13 @@ function CartContent({
 
       <div className="grid grid-cols-[1fr_110px] gap-2">
         <label className="grid gap-1">
-          <span className="text-xs font-black uppercase tracking-[0.12em] text-slate-400">
+          <span className="text-xs font-black uppercase tracking-[0.12em] text-stone-400">
             Nombre opcional
           </span>
           <span className="relative">
-            <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
             <input
-              className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-9 pr-3 font-semibold outline-none focus:border-emerald-400"
+              className="h-12 w-full rounded-2xl border border-stone-200 bg-stone-50 pl-9 pr-3 font-semibold outline-none focus:border-orange-400"
               value={customerName}
               onChange={(event) => setCustomerName(event.target.value)}
               placeholder="Tu nombre"
@@ -692,13 +821,13 @@ function CartContent({
           </span>
         </label>
         <label className="grid gap-1">
-          <span className="text-xs font-black uppercase tracking-[0.12em] text-slate-400">
+          <span className="text-xs font-black uppercase tracking-[0.12em] text-stone-400">
             Personas
           </span>
           <span className="relative">
-            <Users className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Users className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
             <input
-              className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-9 pr-2 font-semibold outline-none focus:border-emerald-400"
+              className="h-12 w-full rounded-2xl border border-stone-200 bg-stone-50 pl-9 pr-2 font-semibold outline-none focus:border-orange-400"
               type="number"
               min="1"
               value={guestCount}
@@ -711,17 +840,17 @@ function CartContent({
       <div className="grid gap-3">
         {cart.items.length ? (
           cart.items.map((item) => (
-            <div key={item.id} className="rounded-2xl border border-slate-200 bg-white p-3">
+            <div key={item.id} className="rounded-2xl border border-stone-200 bg-white p-3">
               <div className="grid grid-cols-[58px_1fr_auto] gap-3">
                 <div
-                  className="h-14 w-14 rounded-2xl bg-slate-200 bg-cover bg-center"
+                  className="h-14 w-14 rounded-2xl bg-stone-200 bg-cover bg-center"
                   style={{ backgroundImage: `url("${item.image}")` }}
                 />
                 <div>
-                  <strong className="line-clamp-1 text-sm font-black text-slate-950">
+                  <strong className="line-clamp-1 text-sm font-black text-stone-950">
                     {item.name}
                   </strong>
-                  <p className="mt-1 text-sm font-bold text-slate-500">
+                  <p className="mt-1 text-sm font-bold text-stone-500">
                     {currency.format(item.price)}
                   </p>
                 </div>
@@ -743,7 +872,7 @@ function CartContent({
               </div>
               <div className="mt-3 grid gap-2">
                 <input
-                  className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold outline-none focus:border-emerald-400"
+                  className="h-11 rounded-2xl border border-stone-200 bg-stone-50 px-3 text-sm font-semibold outline-none focus:border-orange-400"
                   value={item.notes ?? ''}
                   onChange={(event) => setCartItemNote(mesaId, item.id, event.target.value)}
                   placeholder="Nota: sin mayo, sin cebolla..."
@@ -760,29 +889,29 @@ function CartContent({
             </div>
           ))
         ) : (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5 text-center">
-            <ShoppingBag className="mx-auto h-8 w-8 text-slate-300" />
-            <p className="mt-2 font-black text-slate-950">Tu pedido esta vacio</p>
-            <p className="text-sm text-slate-500">Agrega productos del menu para comenzar.</p>
+          <div className="rounded-2xl border border-dashed border-stone-300 bg-stone-50 p-5 text-center">
+            <ShoppingBag className="mx-auto h-8 w-8 text-stone-300" />
+            <p className="mt-2 font-black text-stone-950">Tu pedido esta vacio</p>
+            <p className="text-sm text-stone-500">Agrega productos del menu para comenzar.</p>
           </div>
         )}
       </div>
 
       <label className="grid gap-2">
-        <span className="inline-flex items-center gap-2 text-sm font-black text-slate-700">
+        <span className="inline-flex items-center gap-2 text-sm font-black text-stone-700">
           <MessageSquare className="h-4 w-4" />
           Nota general
         </span>
         <textarea
-          className="min-h-24 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm font-semibold outline-none focus:border-emerald-400"
+          className="min-h-24 rounded-2xl border border-stone-200 bg-stone-50 p-3 text-sm font-semibold outline-none focus:border-orange-400"
           value={customerNote}
           onChange={(event) => setCustomerNote(event.target.value)}
           placeholder="Ej: una bebida sin hielo, traer cubiertos..."
         />
       </label>
 
-      <div className="grid gap-2 rounded-2xl bg-slate-50 p-3">
-        <p className="text-sm font-black text-slate-700">Propina sugerida</p>
+      <div className="grid gap-2 rounded-2xl bg-stone-50 p-3">
+        <p className="text-sm font-black text-stone-700">Propina sugerida</p>
         <div className="grid grid-cols-3 gap-2">
           {[0, 10, 15].map((tip) => (
             <button
@@ -791,8 +920,8 @@ function CartContent({
               onClick={() => setCartTip(mesaId, tip)}
               className={`rounded-2xl px-3 py-2 text-sm font-black ${
                 (cart.tipPercent ?? 10) === tip
-                  ? 'bg-slate-950 text-white'
-                  : 'bg-white text-slate-600 ring-1 ring-slate-200'
+                  ? 'bg-stone-950 text-white'
+                  : 'bg-white text-stone-600 ring-1 ring-stone-200'
               }`}
             >
               {tip}%
@@ -801,11 +930,11 @@ function CartContent({
         </div>
       </div>
 
-      <div className="grid gap-2 rounded-2xl border border-slate-200 p-4 text-sm font-bold text-slate-500">
+      <div className="grid gap-2 rounded-2xl border border-stone-200 p-4 text-sm font-bold text-stone-500">
         <CartTotalLine label="Subtotal" value={subtotal} />
         <CartTotalLine label="Descuento" value={-discount} />
         <CartTotalLine label="Propina" value={tipAmount} />
-        <div className="mt-2 flex items-center justify-between border-t border-slate-200 pt-3 text-lg font-black text-slate-950">
+        <div className="mt-2 flex items-center justify-between border-t border-stone-200 pt-3 text-lg font-black text-stone-950">
           <span>Total</span>
           <span>{currency.format(total)}</span>
         </div>
@@ -815,7 +944,7 @@ function CartContent({
         type="button"
         onClick={onSubmit}
         disabled={!cart.items.length}
-        className="h-14 rounded-2xl bg-emerald-500 text-base font-black text-slate-950 shadow-lg shadow-emerald-100 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+        className="h-14 rounded-2xl bg-orange-500 text-base font-black text-stone-950 shadow-lg shadow-orange-100 transition hover:bg-orange-400 disabled:cursor-not-allowed disabled:bg-stone-200 disabled:text-stone-400"
       >
         Enviar pedido
       </button>
@@ -828,7 +957,7 @@ function CartQuantityButton({ label, onClick, children }) {
     <button
       type="button"
       onClick={onClick}
-      className="grid h-8 w-8 place-items-center rounded-full bg-slate-100 text-slate-700"
+      className="grid h-8 w-8 place-items-center rounded-full bg-stone-100 text-stone-700"
       aria-label={label}
     >
       {children}
@@ -860,29 +989,29 @@ function OrderStatus({ order }) {
     <motion.section
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
-      className="overflow-hidden rounded-3xl border-2 border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-emerald-50/80 p-5 shadow-lg shadow-emerald-100/40"
+      className="overflow-hidden rounded-3xl border-2 border-orange-200 bg-gradient-to-br from-orange-50 via-white to-orange-50/80 p-5 shadow-lg shadow-orange-100/40"
     >
       <div className="mb-5 flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-emerald-700">
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-orange-700">
             Seguimiento en vivo
           </p>
-          <h2 className="mt-1 text-2xl font-black text-slate-950">
+          <h2 className="mt-1 text-2xl font-black text-stone-950">
             Pedido #{order.number}
           </h2>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-sm text-stone-500">
             {order.tableLabel} · {formatTime(order.createdAt)}
           </p>
         </div>
-        <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-emerald-500 text-white shadow-lg shadow-emerald-200">
+        <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-orange-500 text-white shadow-lg shadow-orange-200">
           <ActiveIcon size={24} />
         </div>
       </div>
 
       <div className="relative mb-5">
-        <div className="h-2.5 rounded-full bg-slate-200">
+        <div className="h-2.5 rounded-full bg-stone-200">
           <motion.div
-            className="h-2.5 rounded-full bg-gradient-to-r from-emerald-400 to-emerald-600"
+            className="h-2.5 rounded-full bg-gradient-to-r from-orange-400 to-orange-600"
             initial={{ width: '0%' }}
             animate={{ width: `${((activeIndex + 1) / steps.length) * 100}%` }}
             transition={{ duration: 0.8, ease: 'easeOut' }}
@@ -901,27 +1030,27 @@ function OrderStatus({ order }) {
               <div
                 className={`relative grid h-11 w-11 place-items-center rounded-xl transition-all duration-500 ${
                   isCompleted
-                    ? 'bg-emerald-500 text-white shadow-md shadow-emerald-200'
+                    ? 'bg-orange-500 text-white shadow-md shadow-orange-200'
                     : isActive
-                      ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-200 ring-4 ring-emerald-100'
-                      : 'bg-slate-100 text-slate-400'
+                      ? 'bg-orange-500 text-white shadow-lg shadow-orange-200 ring-4 ring-orange-100'
+                      : 'bg-stone-100 text-stone-400'
                 }`}
               >
                 <Icon size={20} />
                 {isActive ? (
-                  <span className="absolute -right-1 -top-1 h-3.5 w-3.5 animate-pulse rounded-full border-2 border-white bg-emerald-400" />
+                  <span className="absolute -right-1 -top-1 h-3.5 w-3.5 animate-pulse rounded-full border-2 border-white bg-orange-400" />
                 ) : null}
               </div>
               <div>
                 <p
                   className={`text-xs font-black leading-tight ${
-                    isCompleted || isActive ? 'text-emerald-800' : 'text-slate-400'
+                    isCompleted || isActive ? 'text-orange-800' : 'text-stone-400'
                   }`}
                 >
                   {step.label}
                 </p>
                 {isActive ? (
-                  <p className="mt-0.5 text-[0.65rem] font-semibold leading-tight text-emerald-600">
+                  <p className="mt-0.5 text-[0.65rem] font-semibold leading-tight text-orange-600">
                     {step.description}
                   </p>
                 ) : null}
@@ -939,9 +1068,9 @@ function ToastNotification({ text }) {
     <motion.div
       initial={{ opacity: 0, y: 18 }}
       animate={{ opacity: 1, y: 0 }}
-      className="fixed left-1/2 top-4 z-[60] flex -translate-x-1/2 items-center gap-2 rounded-full bg-slate-950 px-4 py-3 text-sm font-black text-white shadow-2xl"
+      className="fixed left-1/2 top-4 z-[60] flex -translate-x-1/2 items-center gap-2 rounded-full bg-stone-950 px-4 py-3 text-sm font-black text-white shadow-2xl"
     >
-      <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+      <CheckCircle2 className="h-5 w-5 text-orange-400" />
       {text}
     </motion.div>
   )
@@ -981,11 +1110,11 @@ function KitchenPage() {
   }
 
   return (
-    <main className="mx-auto grid max-w-[1500px] gap-5 px-4 py-5 sm:px-6 lg:px-8">
-      <section className="flex flex-col justify-between gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-soft sm:flex-row sm:items-center">
+    <main className="grid gap-5 w-full px-4 py-5 sm:px-6 lg:px-8">
+      <section className="flex flex-col justify-between gap-4 rounded-xl border border-stone-200 bg-white p-5 shadow-soft sm:flex-row sm:items-center">
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-600">KDS</p>
-          <h1 className="mt-2 text-3xl font-black text-slate-950">Cocina en tiempo real</h1>
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-orange-600">KDS</p>
+          <h1 className="mt-2 text-3xl font-black text-stone-950">Cocina en tiempo real</h1>
         </div>
         <div className="grid grid-cols-2 gap-2 sm:flex">
           <KitchenCounter label={remoteMode ? 'Supabase' : 'Local'} value="Activo" />
@@ -1002,8 +1131,8 @@ function KitchenPage() {
           onClick={() => setTab('activa')}
           className={`inline-flex items-center gap-2 rounded-xl px-5 py-3 text-sm font-black transition ${
             tab === 'activa'
-              ? 'bg-slate-950 text-white shadow-lg shadow-slate-300'
-              : 'border border-slate-200 bg-white text-slate-600 shadow-sm'
+              ? 'bg-stone-950 text-white shadow-lg shadow-stone-300'
+              : 'border border-stone-200 bg-white text-stone-600 shadow-sm'
           }`}
         >
           <Flame size={18} />
@@ -1019,14 +1148,14 @@ function KitchenPage() {
           onClick={() => setTab('historial')}
           className={`inline-flex items-center gap-2 rounded-xl px-5 py-3 text-sm font-black transition ${
             tab === 'historial'
-              ? 'bg-slate-950 text-white shadow-lg shadow-slate-300'
-              : 'border border-slate-200 bg-white text-slate-600 shadow-sm'
+              ? 'bg-stone-950 text-white shadow-lg shadow-stone-300'
+              : 'border border-stone-200 bg-white text-stone-600 shadow-sm'
           }`}
         >
           <ClipboardList size={18} />
           Pedidos de hoy
           {todayCompletedOrders.length ? (
-            <span className="rounded-full bg-slate-500 px-2.5 py-0.5 text-xs font-black text-white">
+            <span className="rounded-full bg-stone-500 px-2.5 py-0.5 text-xs font-black text-white">
               {todayCompletedOrders.length}
             </span>
           ) : null}
@@ -1041,14 +1170,14 @@ function KitchenPage() {
                 key={order.id}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className={`grid gap-4 rounded-xl border bg-white p-4 shadow-soft xl:grid-cols-[210px_minmax(260px,1fr)_minmax(220px,0.8fr)_260px] xl:items-center transition-all duration-700 ${getKitchenBorderClass(order.status)} ${fadingOrders.has(order.id) ? 'scale-95 opacity-40 bg-emerald-50 border-emerald-400' : ''}`}
+                className={`grid gap-4 rounded-xl border bg-white p-4 shadow-soft xl:grid-cols-[210px_minmax(260px,1fr)_minmax(220px,0.8fr)_260px] xl:items-center transition-all duration-700 ${getKitchenBorderClass(order.status)} ${fadingOrders.has(order.id) ? 'scale-95 opacity-40 bg-orange-50 border-orange-400' : ''}`}
               >
                 <div className="grid gap-2">
                   <div>
-                    <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">
+                    <p className="text-xs font-black uppercase tracking-[0.16em] text-stone-400">
                       Pedido #{order.number}
                     </p>
-                    <h2 className="text-2xl font-black text-slate-950">{order.tableLabel}</h2>
+                    <h2 className="text-2xl font-black text-stone-950">{order.tableLabel}</h2>
                   </div>
                   <span className={`status-badge status-${slugify(order.status)}`}>
                     {order.status}
@@ -1056,7 +1185,7 @@ function KitchenPage() {
                 </div>
 
                 <div className="grid gap-2">
-                  <div className="flex flex-wrap gap-2 text-sm text-slate-500">
+                  <div className="flex flex-wrap gap-2 text-sm text-stone-500">
                     <span className="inline-flex items-center gap-1">
                       <Clock3 size={16} />
                       {formatTime(order.createdAt)}
@@ -1064,7 +1193,7 @@ function KitchenPage() {
                     <span>{elapsedMinutes(order.createdAt)} min</span>
                     <span>{currency.format(order.total)}</span>
                   </div>
-                  <ul className="grid gap-1 text-slate-800">
+                  <ul className="grid gap-1 text-stone-800">
                     {order.items.map((item) => (
                       <li key={item.id}>
                         <strong>{item.quantity}x</strong> {item.name}
@@ -1078,7 +1207,7 @@ function KitchenPage() {
                   </ul>
                 </div>
 
-                <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
+                <div className="rounded-lg bg-stone-50 p-3 text-sm text-stone-600">
                   {order.note ? (
                     <>
                     <strong>Notas:</strong>
@@ -1093,7 +1222,7 @@ function KitchenPage() {
                   {order.status === 'Pendiente' ? (
                     <button
                       type="button"
-                      className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 font-black text-blue-700"
+                      className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 font-black text-amber-700"
                       onClick={() => void updateOrderStatus(order.id, 'En preparación')}
                     >
                       Preparar
@@ -1102,14 +1231,14 @@ function KitchenPage() {
                   {order.status === 'Pendiente' || order.status === 'En preparación' ? (
                     <button
                       type="button"
-                      className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 font-black text-emerald-700"
+                      className="rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 font-black text-orange-700"
                       onClick={() => handleMarkReady(order.id)}
                     >
                       Listo
                     </button>
                   ) : null}
                   {fadingOrders.has(order.id) ? (
-                    <div className="flex items-center justify-center gap-2 rounded-lg bg-emerald-500 px-4 py-3 font-black text-white">
+                    <div className="flex items-center justify-center gap-2 rounded-lg bg-orange-500 px-4 py-3 font-black text-white">
                       <CheckCircle2 size={18} />
                       Moviendo a pedidos de hoy...
                     </div>
@@ -1118,10 +1247,10 @@ function KitchenPage() {
               </motion.article>
             ))
           ) : (
-            <div className="rounded-xl border-2 border-dashed border-emerald-300 bg-emerald-50 p-10 text-center">
-              <CheckCircle2 className="mx-auto h-14 w-14 text-emerald-400" />
-              <strong className="mt-4 block text-xl text-emerald-800">¡Todo al día!</strong>
-              <p className="mt-1 text-emerald-600">No hay pedidos pendientes en cocina.</p>
+            <div className="rounded-xl border-2 border-dashed border-orange-300 bg-orange-50 p-10 text-center">
+              <CheckCircle2 className="mx-auto h-14 w-14 text-orange-400" />
+              <strong className="mt-4 block text-xl text-orange-800">¡Todo al día!</strong>
+              <p className="mt-1 text-orange-600">No hay pedidos pendientes en cocina.</p>
             </div>
           )}
         </section>
@@ -1137,23 +1266,23 @@ function KitchenPage() {
               >
                 <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">
+                    <p className="text-xs font-black uppercase tracking-[0.14em] text-stone-400">
                       Pedido #{order.number}
                     </p>
-                    <h2 className="text-xl font-black text-slate-950">{order.tableLabel}</h2>
-                    <p className="mt-1 text-sm text-slate-500">{formatTime(order.createdAt)}</p>
+                    <h2 className="text-xl font-black text-stone-950">{order.tableLabel}</h2>
+                    <p className="mt-1 text-sm text-stone-500">{formatTime(order.createdAt)}</p>
                   </div>
                   <div className="flex items-center gap-3">
-                    <strong className="text-lg font-black text-slate-950">{currency.format(order.total)}</strong>
+                    <strong className="text-lg font-black text-stone-950">{currency.format(order.total)}</strong>
                     <span className={`status-badge status-${slugify(order.status)}`}>
                       {order.status}
                     </span>
                   </div>
                 </div>
 
-                <div className="grid gap-2 rounded-lg bg-slate-50 p-3">
-                  <p className="text-xs font-black uppercase tracking-[0.12em] text-slate-400">Detalle del pedido</p>
-                  <ul className="grid gap-1 text-sm text-slate-800">
+                <div className="grid gap-2 rounded-lg bg-stone-50 p-3">
+                  <p className="text-xs font-black uppercase tracking-[0.12em] text-stone-400">Detalle del pedido</p>
+                  <ul className="grid gap-1 text-sm text-stone-800">
                     {order.items.map((item) => (
                       <li key={item.id} className="flex items-start gap-2">
                         <span><strong>{item.quantity}x</strong> {item.name} — {currency.format(item.price * item.quantity)}</span>
@@ -1168,30 +1297,30 @@ function KitchenPage() {
                 </div>
 
                 {order.note ? (
-                  <div className="mt-2 rounded-lg bg-blue-50 p-3 text-sm text-blue-800">
+                  <div className="mt-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
                     <strong>Notas del cliente:</strong> {order.note}
                   </div>
                 ) : null}
 
-                <div className="mt-3 grid grid-cols-3 gap-2 text-sm text-slate-500">
-                  <div className="rounded-lg bg-slate-50 p-2 text-center">
-                    <p className="text-[0.65rem] font-black uppercase text-slate-400">Subtotal</p>
-                    <strong className="text-slate-700">{currency.format(order.subtotal)}</strong>
+                <div className="mt-3 grid grid-cols-3 gap-2 text-sm text-stone-500">
+                  <div className="rounded-lg bg-stone-50 p-2 text-center">
+                    <p className="text-[0.65rem] font-black uppercase text-stone-400">Subtotal</p>
+                    <strong className="text-stone-700">{currency.format(order.subtotal)}</strong>
                   </div>
-                  <div className="rounded-lg bg-slate-50 p-2 text-center">
-                    <p className="text-[0.65rem] font-black uppercase text-slate-400">Descuento</p>
-                    <strong className="text-slate-700">{currency.format(order.discount)}</strong>
+                  <div className="rounded-lg bg-stone-50 p-2 text-center">
+                    <p className="text-[0.65rem] font-black uppercase text-stone-400">Descuento</p>
+                    <strong className="text-stone-700">{currency.format(order.discount)}</strong>
                   </div>
-                  <div className="rounded-lg bg-slate-50 p-2 text-center">
-                    <p className="text-[0.65rem] font-black uppercase text-slate-400">Propina</p>
-                    <strong className="text-slate-700">{currency.format(order.tipAmount)}</strong>
+                  <div className="rounded-lg bg-stone-50 p-2 text-center">
+                    <p className="text-[0.65rem] font-black uppercase text-stone-400">Propina</p>
+                    <strong className="text-stone-700">{currency.format(order.tipAmount)}</strong>
                   </div>
                 </div>
 
                 {order.status === 'Listo' ? (
                   <button
                     type="button"
-                    className="mt-3 w-full rounded-lg bg-slate-950 px-4 py-3 font-black text-white shadow-lg transition hover:bg-slate-800"
+                    className="mt-3 w-full rounded-lg bg-stone-950 px-4 py-3 font-black text-white shadow-lg transition hover:bg-stone-800"
                     onClick={() => void updateOrderStatus(order.id, 'Entregado')}
                   >
                     Marcar entregado ✓
@@ -1200,9 +1329,9 @@ function KitchenPage() {
               </motion.article>
             ))
           ) : (
-            <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-10 text-center text-slate-500">
-              <ClipboardList className="mx-auto h-12 w-12 text-slate-300" />
-              <strong className="mt-3 block text-lg text-slate-700">Sin pedidos completados hoy</strong>
+            <div className="rounded-xl border border-dashed border-stone-300 bg-stone-50 p-10 text-center text-stone-500">
+              <ClipboardList className="mx-auto h-12 w-12 text-stone-300" />
+              <strong className="mt-3 block text-lg text-stone-700">Sin pedidos completados hoy</strong>
               <p className="mt-1">Los pedidos entregados aparecerán aquí como registro del día.</p>
             </div>
           )}
@@ -1241,131 +1370,160 @@ function PosPage() {
 }
 
 function AdminLayout() {
-  const { state } = useAppStore()
+  const { state, remoteMode } = useAppStore()
   const location = useLocation()
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-  const links = [
+  const [menuOpen, setMenuOpen] = useState(false)
+
+  const navItems = [
     ['Dashboard', '/admin', LayoutDashboard],
-    ['Productos', '/admin/productos', Package],
-    ['Categorias', '/admin/categorias', Tags],
-    ['Promociones', '/admin/promociones', BadgePercent],
-    ['Mesas y QR', '/admin/mesas', QrCode],
     ['Pedidos', '/admin/pedidos', ClipboardList],
     ['Cocina', '/cocina', ChefHat, true],
+    ['Mesas', '/admin/mesas', QrCode],
+    ['Productos', '/admin/productos', Package],
+    ['Categorías', '/admin/categorias', Tags],
+    ['Promociones', '/admin/promociones', BadgePercent],
     ['Clientes', '/admin/clientes', Users],
     ['Usuarios', '/admin/usuarios', UserCog],
-    ['Configuracion', '/admin/configuracion', Settings],
     ['Reportes', '/admin/reportes', BarChart3],
+    ['Configuración', '/admin/configuracion', Settings],
   ]
 
-  return (
-    <div className="min-h-screen bg-slate-100 text-slate-950 lg:grid lg:grid-cols-[280px_minmax(0,1fr)]">
-      <header className="sticky top-0 z-40 flex items-center justify-between border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur lg:hidden">
-        <div>
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-emerald-600">
-            Admin
-          </p>
-          <strong>{state.restaurant.name}</strong>
-        </div>
-        <button
-          type="button"
-          className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-slate-200 bg-white"
-          onClick={() => setSidebarOpen(true)}
-          aria-label="Abrir menu"
+  const isActive = (href) =>
+    href === '/admin' ? location.pathname === '/admin' : location.pathname.startsWith(href)
+
+  const renderDesktopLink = ([label, href, Icon, external]) => {
+    const active = isActive(href)
+    const baseClass =
+      'relative inline-flex items-center gap-1.5 whitespace-nowrap px-3 py-4 text-[0.88rem] transition'
+    const stateClass = active
+      ? 'text-[#9a3f2c] font-semibold'
+      : 'text-stone-600 font-medium hover:text-stone-900'
+
+    const content = (
+      <>
+        <Icon size={15} strokeWidth={active ? 2.4 : 2} />
+        <span>{label}</span>
+        {external ? <Share2 size={11} className="opacity-50" /> : null}
+        {active ? (
+          <span className="absolute inset-x-2 bottom-0 h-[2px] rounded-full bg-[#c2553d]" />
+        ) : null}
+      </>
+    )
+
+    if (external) {
+      return (
+        <a key={href} href={href} target="_blank" rel="noopener noreferrer" className={`${baseClass} ${stateClass}`}>
+          {content}
+        </a>
+      )
+    }
+
+    return (
+      <NavLink key={href} to={href} end={href === '/admin'} className={`${baseClass} ${stateClass}`}>
+        {content}
+      </NavLink>
+    )
+  }
+
+  const renderMobileLink = ([label, href, Icon, external]) => {
+    const active = isActive(href)
+    const baseClass = 'flex items-center gap-3 rounded-lg px-3 py-2.5 text-[0.92rem] transition'
+    const stateClass = active
+      ? 'bg-[#fbf2ea] text-[#9a3f2c] font-semibold'
+      : 'text-stone-700 font-medium hover:bg-stone-100'
+
+    const content = (
+      <>
+        <Icon size={18} strokeWidth={active ? 2.4 : 2} />
+        <span>{label}</span>
+        {external ? <Share2 size={13} className="ml-auto opacity-50" /> : null}
+      </>
+    )
+
+    if (external) {
+      return (
+        <a
+          key={href}
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={() => setMenuOpen(false)}
+          className={`${baseClass} ${stateClass}`}
         >
-          <Menu size={22} />
-        </button>
-      </header>
+          {content}
+        </a>
+      )
+    }
 
-      {sidebarOpen ? (
-        <button
-          type="button"
-          className="fixed inset-0 z-40 bg-slate-950/45 lg:hidden"
-          aria-label="Cerrar menu"
-          onClick={() => setSidebarOpen(false)}
-        />
-      ) : null}
-
-      <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-[280px] flex-col border-r border-white/10 bg-slate-950 px-4 py-5 text-white transition-transform duration-300 lg:sticky lg:top-0 lg:translate-x-0 ${
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
+    return (
+      <NavLink
+        key={href}
+        to={href}
+        end={href === '/admin'}
+        onClick={() => setMenuOpen(false)}
+        className={`${baseClass} ${stateClass}`}
       >
-        <div className="mb-6 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="grid h-11 w-11 place-items-center rounded-lg bg-emerald-500 text-lg font-black text-white">
+        {content}
+      </NavLink>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-[#faf6f0] text-stone-900">
+      <header className="sticky top-0 z-40 border-b border-stone-200/70 bg-white/90 backdrop-blur">
+        <div className="flex w-full items-center gap-4 px-4 py-3 sm:px-6 lg:px-8 lg:py-0">
+          <Link to="/admin" className="flex shrink-0 items-center gap-3">
+            <div
+              className="grid h-10 w-10 place-items-center rounded-md bg-[#2a221c] text-base text-[#faf6f0]"
+              style={{ fontFamily: 'var(--font-display)', fontWeight: 600 }}
+            >
               A
             </div>
-            <div>
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-300">
+            <div className="leading-tight">
+              <p className="text-[0.6rem] font-semibold uppercase tracking-[0.22em] text-[#c2553d]">
                 AcroDevs
               </p>
-              <h2 className="text-base font-black leading-tight">{state.restaurant.name}</h2>
+              <h2
+                className="mt-0.5 text-base text-stone-900"
+                style={{ fontFamily: 'var(--font-display)', fontWeight: 600, letterSpacing: '-0.01em' }}
+              >
+                {state.restaurant.name}
+              </h2>
             </div>
+          </Link>
+
+          <nav className="hidden flex-1 items-center justify-center gap-0.5 overflow-x-auto lg:flex">
+            {navItems.map(renderDesktopLink)}
+          </nav>
+
+          <div className="ml-auto hidden items-center gap-2 rounded-full border border-stone-200 bg-[#fbf8f3] pl-3 pr-3.5 py-1.5 lg:flex">
+            <span className="relative grid h-2 w-2 place-items-center">
+              <span className="absolute inset-0 animate-ping rounded-full bg-[#c2553d] opacity-40" />
+              <span className="relative h-2 w-2 rounded-full bg-[#c2553d]" />
+            </span>
+            <span className="text-xs font-semibold text-stone-700">
+              {remoteMode ? 'Conectado' : 'Local'}
+            </span>
           </div>
+
           <button
             type="button"
-            className="grid h-10 w-10 place-items-center rounded-lg border border-white/10 lg:hidden"
-            onClick={() => setSidebarOpen(false)}
-            aria-label="Cerrar menu"
+            className="ml-auto inline-flex h-10 w-10 items-center justify-center rounded-md border border-stone-200 bg-white text-stone-700 lg:hidden"
+            onClick={() => setMenuOpen((v) => !v)}
+            aria-label="Abrir menu"
           >
-            <X size={20} />
+            {menuOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
         </div>
 
-        <nav className="grid gap-1 overflow-y-auto pr-1">
-          {links.map(([label, href, Icon, external]) => {
-            const active =
-              href === '/admin'
-                ? location.pathname === '/admin'
-                : location.pathname.startsWith(href)
-
-            if (external) {
-              return (
-                <a
-                  key={href}
-                  href={href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={() => setSidebarOpen(false)}
-                  className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-bold transition text-slate-300 hover:bg-white/10 hover:text-white`}
-                >
-                  <Icon size={19} className="shrink-0" />
-                  <span>{label}</span>
-                  <span className="ml-auto text-[0.6rem] uppercase tracking-wider text-slate-500">nueva tab</span>
-                </a>
-              )
-            }
-
-            return (
-              <NavLink
-                key={href}
-                to={href}
-                end={href === '/admin'}
-                onClick={() => setSidebarOpen(false)}
-                className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-bold transition ${
-                  active
-                    ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-950/30'
-                    : 'text-slate-300 hover:bg-white/10 hover:text-white'
-                }`}
-              >
-                <Icon size={19} className="shrink-0" />
-                <span>{label}</span>
-              </NavLink>
-            )
-          })}
-        </nav>
-
-        <div className="mt-auto rounded-lg border border-white/10 bg-white/5 p-3">
-          <p className="text-xs text-slate-400">Estado del sistema</p>
-          <div className="mt-2 flex items-center gap-2 text-sm font-bold text-emerald-300">
-            <CheckCircle2 size={16} />
-            Operativo
+        {menuOpen ? (
+          <div className="border-t border-stone-200/70 bg-white px-4 py-3 lg:hidden">
+            <nav className="grid gap-0.5">{navItems.map(renderMobileLink)}</nav>
           </div>
-        </div>
-      </aside>
+        ) : null}
+      </header>
 
-      <section className="min-w-0 px-4 py-5 sm:px-6 lg:px-8">
+      <section className="min-w-0 w-full px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
         <Outlet />
       </section>
     </div>
@@ -1386,20 +1544,20 @@ function AdminDashboard() {
   const recentActivity = state.orders.slice(0, 6)
 
   return (
-    <div className="mx-auto grid max-w-[1500px] gap-5">
-      <section className="flex flex-col justify-between gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-soft sm:flex-row sm:items-center">
+    <div className="grid gap-5 w-full">
+      <section className="flex flex-col justify-between gap-4 rounded-xl border border-stone-200 bg-white p-5 shadow-soft sm:flex-row sm:items-center">
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-600">
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-orange-600">
             Panel administrador
           </p>
-          <h1 className="mt-2 text-3xl font-black tracking-normal text-slate-950 sm:text-4xl">
+          <h1 className="mt-2 text-3xl font-black tracking-normal text-stone-950 sm:text-4xl">
             Control del restaurante
           </h1>
-          <p className="mt-2 max-w-2xl text-slate-500">
+          <p className="mt-2 max-w-2xl text-stone-500">
             Ventas, cocina, pedidos y catalogo en una vista de operacion diaria.
           </p>
         </div>
-        <div className="flex items-center gap-2 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-700">
+        <div className="flex items-center gap-2 rounded-lg border border-orange-100 bg-orange-50 px-3 py-2 text-sm font-bold text-orange-700">
           <CheckCircle2 size={18} />
           {remoteMode ? 'Supabase conectado' : 'Modo local'}
         </div>
@@ -1419,18 +1577,18 @@ function AdminDashboard() {
               <AreaChart data={chartData.sales}>
                 <defs>
                   <linearGradient id="salesGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#13b889" stopOpacity={0.35} />
-                    <stop offset="95%" stopColor="#13b889" stopOpacity={0.02} />
+                    <stop offset="5%" stopColor="#c2553d" stopOpacity={0.35} />
+                    <stop offset="95%" stopColor="#c2553d" stopOpacity={0.02} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="day" stroke="#64748b" />
-                <YAxis stroke="#64748b" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#e8ddd0" />
+                <XAxis dataKey="day" stroke="#8a7d70" />
+                <YAxis stroke="#8a7d70" />
                 <Tooltip formatter={(value) => currency.format(value)} />
                 <Area
                   type="monotone"
                   dataKey="ventas"
-                  stroke="#13b889"
+                  stroke="#c2553d"
                   strokeWidth={3}
                   fill="url(#salesGradient)"
                 />
@@ -1443,11 +1601,11 @@ function AdminDashboard() {
           <div className="h-[280px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData.status}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="estado" stroke="#64748b" />
-                <YAxis allowDecimals={false} stroke="#64748b" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#e8ddd0" />
+                <XAxis dataKey="estado" stroke="#8a7d70" />
+                <YAxis allowDecimals={false} stroke="#8a7d70" />
                 <Tooltip />
-                <Bar dataKey="pedidos" fill="#0f172a" radius={[8, 8, 0, 0]} />
+                <Bar dataKey="pedidos" fill="#2a201a" radius={[8, 8, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -1459,17 +1617,17 @@ function AdminDashboard() {
           <div className="grid gap-3">
             {topProducts.length ? (
               topProducts.map((item, index) => (
-                <div key={item.name} className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 p-3">
+                <div key={item.name} className="flex items-center justify-between gap-3 rounded-lg bg-stone-50 p-3">
                   <div className="flex items-center gap-3">
-                    <span className="grid h-9 w-9 place-items-center rounded-lg bg-white text-sm font-black text-slate-700 shadow-sm">
+                    <span className="grid h-9 w-9 place-items-center rounded-lg bg-white text-sm font-black text-stone-700 shadow-sm">
                       {index + 1}
                     </span>
                     <div>
                       <strong>{item.name}</strong>
-                      <p className="text-sm text-slate-500">{item.quantity} vendidos</p>
+                      <p className="text-sm text-stone-500">{item.quantity} vendidos</p>
                     </div>
                   </div>
-                  <span className="text-sm font-black text-emerald-600">
+                  <span className="text-sm font-black text-orange-600">
                     {currency.format(item.total)}
                   </span>
                 </div>
@@ -1484,10 +1642,10 @@ function AdminDashboard() {
           <div className="grid gap-3">
             {recentActivity.length ? (
               recentActivity.map((order) => (
-                <div key={order.id} className="flex flex-col gap-2 rounded-lg border border-slate-100 p-3 sm:flex-row sm:items-center sm:justify-between">
+                <div key={order.id} className="flex flex-col gap-2 rounded-lg border border-stone-100 p-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <strong>Pedido #{order.number}</strong>
-                    <p className="text-sm text-slate-500">
+                    <p className="text-sm text-stone-500">
                       {order.tableLabel} · {formatTime(order.createdAt)}
                     </p>
                   </div>
@@ -1531,19 +1689,19 @@ function AdminProductsPage() {
   const startEditing = (product) => setForm(product)
 
   return (
-    <div className="mx-auto grid max-w-[1500px] gap-5">
+    <div className="grid gap-5 w-full">
       <AdminPageHeader
         eyebrow="Catalogo"
         title="Productos"
         description="Gestiona disponibilidad, precios, categorias e imagenes del menu."
         action={
-          <div className="flex rounded-lg border border-slate-200 bg-white p-1">
+          <div className="flex rounded-lg border border-stone-200 bg-white p-1">
             {['tabla', 'grid'].map((mode) => (
               <button
                 key={mode}
                 type="button"
                 className={`rounded-md px-3 py-2 text-sm font-black capitalize ${
-                  viewMode === mode ? 'bg-slate-950 text-white' : 'text-slate-500'
+                  viewMode === mode ? 'bg-stone-950 text-white' : 'text-stone-500'
                 }`}
                 onClick={() => setViewMode(mode)}
               >
@@ -1558,19 +1716,19 @@ function AdminProductsPage() {
         <motion.form
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="rounded-xl border border-slate-200 bg-white p-4 shadow-soft"
+          className="rounded-xl border border-stone-200 bg-white p-4 shadow-soft"
           onSubmit={handleSubmit}
         >
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.16em] text-emerald-600">
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-orange-600">
                 Editor
               </p>
               <h2 className="text-xl font-black">
                 {form.id ? 'Editar producto' : 'Nuevo producto'}
               </h2>
             </div>
-            <Package className="text-emerald-600" size={24} />
+            <Package className="text-orange-600" size={24} />
           </div>
 
           <div className="grid gap-3">
@@ -1584,16 +1742,12 @@ function AdminProductsPage() {
             </label>
             <label className="field">
               <span>Categoria</span>
-              <select
+              <CustomSelect
                 value={form.category}
-                onChange={(event) => setForm({ ...form, category: event.target.value })}
-              >
-                {state.categories.map((category) => (
-                  <option key={category.id} value={category.name}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
+                onChange={(val) => setForm({ ...form, category: val })}
+                options={state.categories.map((c) => ({ value: c.name, label: c.name }))}
+                placeholder="Selecciona categoría"
+              />
             </label>
             <label className="field">
               <span>Descripcion</span>
@@ -1641,7 +1795,7 @@ function AdminProductsPage() {
               ].map(([key, label]) => (
                 <label
                   key={key}
-                  className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-2 text-sm font-bold"
+                  className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-stone-200 bg-stone-50 px-2 py-2 text-sm font-bold"
                 >
                   <input
                     type="checkbox"
@@ -1668,34 +1822,30 @@ function AdminProductsPage() {
           </div>
         </motion.form>
 
-        <section className="min-w-0 rounded-xl border border-slate-200 bg-white shadow-soft">
-          <div className="grid gap-3 border-b border-slate-200 p-4 md:grid-cols-[minmax(0,1fr)_220px]">
+        <section className="min-w-0 rounded-xl border border-stone-200 bg-white shadow-soft">
+          <div className="grid gap-3 border-b border-stone-200 p-4 md:grid-cols-[minmax(0,1fr)_220px]">
             <label className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+              <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" size={18} />
               <input
-                className="w-full rounded-lg border border-slate-200 bg-slate-50 py-3 pl-10 pr-3 outline-none focus:border-emerald-500"
+                className="w-full rounded-lg border border-stone-200 bg-stone-50 py-3 pl-10 pr-3 outline-none focus:border-orange-500"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Buscar producto..."
               />
             </label>
-            <select
-              className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 outline-none focus:border-emerald-500"
+            <CustomSelect
               value={selectedCategory}
-              onChange={(event) => setSelectedCategory(event.target.value)}
-            >
-              <option>Todas</option>
-              {state.categories.map((category) => (
-                <option key={category.id}>{category.name}</option>
-              ))}
-            </select>
+              onChange={setSelectedCategory}
+              options={['Todas', ...state.categories.map((c) => c.name)]}
+              placeholder="Categoría"
+            />
           </div>
 
           {viewMode === 'tabla' ? (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[760px] border-collapse text-left">
                 <thead>
-                  <tr className="border-b border-slate-200 text-xs uppercase tracking-[0.12em] text-slate-500">
+                  <tr className="border-b border-stone-200 text-xs uppercase tracking-[0.12em] text-stone-500">
                     <th className="px-4 py-3">Producto</th>
                     <th className="px-4 py-3">Categoria</th>
                     <th className="px-4 py-3">Precio</th>
@@ -1747,7 +1897,7 @@ function AdminCategoriesPage() {
   const [value, setValue] = useState('')
 
   return (
-    <div className="mx-auto grid max-w-[1500px] gap-5 overflow-hidden">
+    <div className="grid gap-5 w-full overflow-hidden">
       <AdminPageHeader
         eyebrow="Categorias"
         title="Gestion rapida"
@@ -1756,14 +1906,14 @@ function AdminCategoriesPage() {
 
       <section className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
         <form
-          className="rounded-xl border border-slate-200 bg-white p-5 shadow-soft"
+          className="rounded-xl border border-stone-200 bg-white p-5 shadow-soft"
           onSubmit={(event) => {
             event.preventDefault()
             void addCategory(value)
             setValue('')
           }}
         >
-          <h2 className="text-xl font-black text-slate-950">Nueva categoria</h2>
+          <h2 className="text-xl font-black text-stone-950">Nueva categoria</h2>
           <label className="field">
             <span>Nombre</span>
             <input
@@ -1778,23 +1928,23 @@ function AdminCategoriesPage() {
           </button>
         </form>
 
-        <div className="min-w-0 rounded-xl border border-slate-200 bg-white p-5 shadow-soft">
+        <div className="min-w-0 rounded-xl border border-stone-200 bg-white p-5 shadow-soft">
           <div className="mb-4 flex items-center justify-between gap-3">
-            <h2 className="text-xl font-black text-slate-950">Categorias activas</h2>
-            <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-black text-slate-500">
+            <h2 className="text-xl font-black text-stone-950">Categorias activas</h2>
+            <span className="rounded-full bg-stone-100 px-3 py-1 text-sm font-black text-stone-500">
               {state.categories.length}
             </span>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
             {state.categories.map((category) => (
-              <div key={category.id} className="min-w-0 rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <div key={category.id} className="min-w-0 rounded-lg border border-stone-200 bg-stone-50 p-4">
                 <div className="flex items-center gap-3">
-                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-emerald-100 text-emerald-700">
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-orange-100 text-orange-700">
                     <Tags size={19} />
                   </span>
                   <div className="min-w-0">
-                    <strong className="block truncate text-slate-950">{category.name}</strong>
-                    <p className="mt-1 line-clamp-2 text-sm text-slate-500">
+                    <strong className="block truncate text-stone-950">{category.name}</strong>
+                    <p className="mt-1 line-clamp-2 text-sm text-stone-500">
                       {category.description || 'Sin descripcion'}
                     </p>
                   </div>
@@ -1845,7 +1995,7 @@ function AdminPromotionsPage() {
   }
 
   return (
-    <div className="mx-auto grid max-w-[1500px] gap-5">
+    <div className="grid gap-5 w-full">
       <AdminPageHeader
         eyebrow="Promociones"
         title="Promociones del menu"
@@ -1853,12 +2003,12 @@ function AdminPromotionsPage() {
       />
 
       <section className="grid gap-5 xl:grid-cols-[390px_minmax(0,1fr)]">
-        <form className="rounded-xl border border-slate-200 bg-white p-5 shadow-soft" onSubmit={handlePromoSubmit}>
+        <form className="rounded-xl border border-stone-200 bg-white p-5 shadow-soft" onSubmit={handlePromoSubmit}>
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-xl font-black text-slate-950">
+            <h2 className="text-xl font-black text-stone-950">
               {promo.id ? 'Editar promocion' : 'Nueva promocion'}
             </h2>
-            <BadgePercent className="text-emerald-600" size={26} />
+            <BadgePercent className="text-orange-600" size={26} />
           </div>
           <div className="grid gap-3">
             <label className="field">
@@ -1915,13 +2065,13 @@ function AdminPromotionsPage() {
           </div>
         </form>
 
-        <div className="min-w-0 rounded-xl border border-slate-200 bg-white p-5 shadow-soft">
+        <div className="min-w-0 rounded-xl border border-stone-200 bg-white p-5 shadow-soft">
           <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="text-xl font-black text-slate-950">Promociones visibles</h2>
-              <p className="text-sm text-slate-500">Esto es lo que aparece al cliente en el menu.</p>
+              <h2 className="text-xl font-black text-stone-950">Promociones visibles</h2>
+              <p className="text-sm text-stone-500">Esto es lo que aparece al cliente en el menu.</p>
             </div>
-            <span className="rounded-full bg-emerald-50 px-3 py-1 text-sm font-black text-emerald-700">
+            <span className="rounded-full bg-orange-50 px-3 py-1 text-sm font-black text-orange-700">
               {promoProducts.length} activas
             </span>
           </div>
@@ -1949,7 +2099,7 @@ function AdminTablesPage() {
   const [tableName, setTableName] = useState('')
 
   return (
-    <div className="mx-auto grid max-w-[1500px] gap-5 overflow-hidden">
+    <div className="grid gap-5 w-full overflow-hidden">
       <AdminPageHeader
         eyebrow="Mesas y QR"
         title="Codigos por mesa"
@@ -1958,14 +2108,14 @@ function AdminTablesPage() {
 
       <section className="grid gap-5 xl:grid-cols-[340px_minmax(0,1fr)]">
         <form
-          className="rounded-xl border border-slate-200 bg-white p-5 shadow-soft"
+          className="rounded-xl border border-stone-200 bg-white p-5 shadow-soft"
           onSubmit={(event) => {
             event.preventDefault()
             void addTable(tableName)
             setTableName('')
           }}
         >
-          <h2 className="text-xl font-black text-slate-950">Crear mesa</h2>
+          <h2 className="text-xl font-black text-stone-950">Crear mesa</h2>
           <label className="field">
             <span>Nombre visible</span>
             <input
@@ -1995,7 +2145,7 @@ function AdminOrdersPage() {
   usePageTitle(`Pedidos | ${state.restaurant.name}`)
 
   return (
-    <div className="mx-auto grid max-w-[1500px] gap-5 overflow-hidden">
+    <div className="grid gap-5 w-full overflow-hidden">
       <AdminPageHeader
         eyebrow="Pedidos"
         title="Seguimiento manual"
@@ -2007,22 +2157,22 @@ function AdminOrdersPage() {
             state.orders.map((order) => (
               <article
                 key={order.id}
-                className="grid min-w-0 gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-soft lg:grid-cols-[180px_minmax(0,1fr)_240px] lg:items-center"
+                className="grid min-w-0 gap-4 rounded-xl border border-stone-200 bg-white p-4 shadow-soft lg:grid-cols-[180px_minmax(0,1fr)_240px] lg:items-center"
               >
                 <div>
-                  <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">
+                  <p className="text-xs font-black uppercase tracking-[0.14em] text-stone-400">
                     Pedido #{order.number}
                   </p>
-                  <h2 className="text-xl font-black text-slate-950">{order.tableLabel}</h2>
-                  <p className="text-sm text-slate-500">{formatTime(order.createdAt)}</p>
+                  <h2 className="text-xl font-black text-stone-950">{order.tableLabel}</h2>
+                  <p className="text-sm text-stone-500">{formatTime(order.createdAt)}</p>
                 </div>
 
                 <div className="min-w-0">
-                  <p className="line-clamp-2 text-slate-600">
+                  <p className="line-clamp-2 text-stone-600">
                     {order.items.map((item) => `${item.quantity}x ${item.name}`).join(', ')}
                   </p>
                   {order.note ? (
-                    <p className="mt-2 rounded-lg bg-slate-50 p-2 text-sm text-slate-500">
+                    <p className="mt-2 rounded-lg bg-stone-50 p-2 text-sm text-stone-500">
                       {order.note}
                     </p>
                   ) : null}
@@ -2032,26 +2182,18 @@ function AdminOrdersPage() {
                   <span className={`status-badge status-${slugify(order.status)}`}>
                     {order.status}
                   </span>
-                  <select
-                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-bold outline-none focus:border-emerald-500"
+                  <CustomSelect
                     value={order.status}
-                    onChange={(event) => void updateOrderStatus(order.id, event.target.value)}
-                  >
-                    {['Pendiente', 'En preparación', 'Listo', 'Entregado', 'Cancelado'].map(
-                      (status) => (
-                        <option key={status} value={status}>
-                          {status}
-                        </option>
-                      ),
-                    )}
-                  </select>
+                    onChange={(val) => void updateOrderStatus(order.id, val)}
+                    options={['Pendiente', 'En preparación', 'Listo', 'Entregado', 'Cancelado']}
+                  />
                 </div>
               </article>
             ))
           ) : (
-            <div className="rounded-xl border border-slate-200 bg-white p-8 text-center shadow-soft">
+            <div className="rounded-xl border border-stone-200 bg-white p-8 text-center shadow-soft">
               <strong>No hay pedidos cargados</strong>
-              <p className="text-slate-500">Envia uno desde el menu para probar la trazabilidad completa.</p>
+              <p className="text-stone-500">Envia uno desde el menu para probar la trazabilidad completa.</p>
             </div>
           )}
       </section>
@@ -2083,7 +2225,7 @@ function AdminUsersPage() {
   usePageTitle('Usuarios | AcroDevs Restaurant')
 
   return (
-    <div className="mx-auto grid max-w-[1500px] gap-5">
+    <div className="grid gap-5 w-full">
       <AdminPageHeader
         eyebrow="Equipo"
         title="Usuarios"
@@ -2095,10 +2237,10 @@ function AdminUsersPage() {
           ['Cocina', 'Gestion de comandas y estados', ChefHat],
           ['Caja', 'Pedidos, ventas y reportes', ClipboardList],
         ].map(([title, description, Icon]) => (
-          <article key={title} className="rounded-xl border border-slate-200 bg-white p-5 shadow-soft">
-            <Icon className="text-emerald-600" size={28} />
+          <article key={title} className="rounded-xl border border-stone-200 bg-white p-5 shadow-soft">
+            <Icon className="text-orange-600" size={28} />
             <h2 className="mt-4 text-lg font-black">{title}</h2>
-            <p className="mt-2 text-slate-500">{description}</p>
+            <p className="mt-2 text-stone-500">{description}</p>
           </article>
         ))}
       </section>
@@ -2112,7 +2254,7 @@ function AdminReportsPage() {
   const chartData = buildSalesChartData(state.orders)
 
   return (
-    <div className="mx-auto grid max-w-[1500px] gap-5">
+    <div className="grid gap-5 w-full">
       <AdminPageHeader
         eyebrow="Analitica"
         title="Reportes"
@@ -2123,11 +2265,11 @@ function AdminReportsPage() {
           <div className="h-[320px]">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData.sales}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="day" stroke="#64748b" />
-                <YAxis stroke="#64748b" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#e8ddd0" />
+                <XAxis dataKey="day" stroke="#8a7d70" />
+                <YAxis stroke="#8a7d70" />
                 <Tooltip formatter={(value) => currency.format(value)} />
-                <Area type="monotone" dataKey="ventas" stroke="#13b889" fill="#d2f9e8" />
+                <Area type="monotone" dataKey="ventas" stroke="#c2553d" fill="#d2f9e8" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -2137,7 +2279,7 @@ function AdminReportsPage() {
             <MetricLine label="Ventas totales" value={currency.format(state.orders.reduce((sum, order) => sum + order.total, 0))} />
             <MetricLine label="Pedidos" value={state.orders.length} />
             <MetricLine label="Ticket promedio" value={currency.format(state.orders.length ? state.orders.reduce((sum, order) => sum + order.total, 0) / state.orders.length : 0)} />
-            <MetricLine label="Tendencia" value={<span className="inline-flex items-center gap-1 text-emerald-600"><TrendingUp size={16} /> Operativa</span>} />
+            <MetricLine label="Tendencia" value={<span className="inline-flex items-center gap-1 text-orange-600"><TrendingUp size={16} /> Operativa</span>} />
           </div>
         </DashboardPanel>
       </section>
@@ -2249,21 +2391,21 @@ function QrTableCard({ table }) {
   }
 
   return (
-    <article className="grid min-w-0 gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-soft">
+    <article className="grid min-w-0 gap-4 rounded-xl border border-stone-200 bg-white p-4 shadow-soft">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className={`mb-2 inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-black uppercase tracking-[0.12em] ${
             isOccupied
               ? 'bg-rose-50 text-rose-700'
-              : 'bg-emerald-50 text-emerald-700'
+              : 'bg-orange-50 text-orange-700'
           }`}>
-            <span className={`h-2 w-2 rounded-full ${isOccupied ? 'bg-rose-500 animate-pulse' : 'bg-emerald-500'}`} />
+            <span className={`h-2 w-2 rounded-full ${isOccupied ? 'bg-rose-500 animate-pulse' : 'bg-orange-500'}`} />
             {isOccupied ? `Ocupada · ${tableActiveOrders.length} pedido${tableActiveOrders.length > 1 ? 's' : ''}` : 'Libre'}
           </div>
-          <h2 className="text-xl font-black text-slate-950">{table.label}</h2>
+          <h2 className="text-xl font-black text-stone-950">{table.label}</h2>
         </div>
         <a
-          className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 font-black"
+          className="inline-flex h-10 items-center justify-center rounded-lg border border-stone-200 bg-white px-3 font-black"
           href={`/menu/${table.slug}`}
           target="_blank"
           rel="noopener noreferrer"
@@ -2272,7 +2414,7 @@ function QrTableCard({ table }) {
         </a>
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+      <div className="rounded-xl border border-stone-200 bg-stone-50 p-3">
         {qrCode ? (
           <img
             src={qrCode}
@@ -2284,13 +2426,13 @@ function QrTableCard({ table }) {
         )}
       </div>
 
-      <p className="break-all rounded-lg bg-slate-50 p-3 text-sm text-slate-500">
+      <p className="break-all rounded-lg bg-stone-50 p-3 text-sm text-stone-500">
         {state.restaurant.baseUrl}/menu/{table.slug}
       </p>
 
       <div className="grid grid-cols-3 gap-2">
         <a
-          className="grid h-11 place-items-center rounded-lg border border-slate-200 bg-white text-slate-700"
+          className="grid h-11 place-items-center rounded-lg border border-stone-200 bg-white text-stone-700"
           href={`/menu/${table.slug}`}
           target="_blank"
           rel="noopener noreferrer"
@@ -2300,7 +2442,7 @@ function QrTableCard({ table }) {
         </a>
         <button
           type="button"
-          className="grid h-11 place-items-center rounded-lg border border-slate-200 bg-white text-slate-700"
+          className="grid h-11 place-items-center rounded-lg border border-stone-200 bg-white text-stone-700"
           onClick={downloadQr}
           title="Descargar QR"
         >
@@ -2308,7 +2450,7 @@ function QrTableCard({ table }) {
         </button>
         <button
           type="button"
-          className="grid h-11 place-items-center rounded-lg border border-slate-200 bg-white text-slate-700"
+          className="grid h-11 place-items-center rounded-lg border border-stone-200 bg-white text-stone-700"
           title="Compartir QR"
           onClick={() => void navigator.clipboard?.writeText(`${state.restaurant.baseUrl}/menu/${table.slug}`)}
         >
@@ -2321,13 +2463,13 @@ function QrTableCard({ table }) {
 
 function AdminPageHeader({ eyebrow, title, description, action }) {
   return (
-    <section className="flex flex-col justify-between gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-soft sm:flex-row sm:items-center">
+    <section className="flex flex-col justify-between gap-4 rounded-xl border border-stone-200 bg-white p-5 shadow-soft sm:flex-row sm:items-center">
       <div>
-        <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-600">
+        <p className="text-xs font-black uppercase tracking-[0.18em] text-orange-600">
           {eyebrow}
         </p>
-        <h1 className="mt-2 text-3xl font-black text-slate-950 sm:text-4xl">{title}</h1>
-        <p className="mt-2 max-w-2xl text-slate-500">{description}</p>
+        <h1 className="mt-2 text-3xl font-black text-stone-950 sm:text-4xl">{title}</h1>
+        <p className="mt-2 max-w-2xl text-stone-500">{description}</p>
       </div>
       {action ? <div className="shrink-0">{action}</div> : null}
     </section>
@@ -2336,11 +2478,11 @@ function AdminPageHeader({ eyebrow, title, description, action }) {
 
 function DashboardPanel({ title, action, children }) {
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-soft">
+    <section className="rounded-xl border border-stone-200 bg-white p-5 shadow-soft">
       <div className="mb-4 flex items-center justify-between gap-3">
-        <h2 className="text-lg font-black text-slate-950">{title}</h2>
+        <h2 className="text-lg font-black text-stone-950">{title}</h2>
         {action ? (
-          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-500">
+          <span className="rounded-full bg-stone-100 px-3 py-1 text-xs font-black text-stone-500">
             {action}
           </span>
         ) : null}
@@ -2352,22 +2494,22 @@ function DashboardPanel({ title, action, children }) {
 
 function MetricCard({ icon: Icon, label, value, tone }) {
   const tones = {
-    emerald: 'bg-emerald-50 text-emerald-700',
-    blue: 'bg-blue-50 text-blue-700',
+    emerald: 'bg-orange-50 text-orange-700',
+    blue: 'bg-amber-50 text-amber-700',
     amber: 'bg-amber-50 text-amber-700',
-    green: 'bg-green-50 text-green-700',
+    green: 'bg-orange-50 text-orange-700',
   }
 
   return (
     <motion.article
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="rounded-xl border border-slate-200 bg-white p-5 shadow-soft"
+      className="rounded-xl border border-stone-200 bg-white p-5 shadow-soft"
     >
       <div className="flex items-center justify-between gap-4">
         <div>
-          <p className="text-sm font-bold text-slate-500">{label}</p>
-          <strong className="mt-2 block text-2xl font-black text-slate-950">{value}</strong>
+          <p className="text-sm font-bold text-stone-500">{label}</p>
+          <strong className="mt-2 block text-2xl font-black text-stone-950">{value}</strong>
         </div>
         <div className={`grid h-12 w-12 place-items-center rounded-xl ${tones[tone]}`}>
           <Icon size={24} />
@@ -2379,7 +2521,7 @@ function MetricCard({ icon: Icon, label, value, tone }) {
 
 function ProductTableRow({ product, onEdit, onToggle, onDelete }) {
   return (
-    <tr className="border-b border-slate-100 last:border-0">
+    <tr className="border-b border-stone-100 last:border-0">
       <td className="px-4 py-3">
         <div className="flex items-center gap-3">
           <div
@@ -2388,12 +2530,12 @@ function ProductTableRow({ product, onEdit, onToggle, onDelete }) {
           />
           <div>
             <strong>{product.name}</strong>
-            <p className="line-clamp-1 text-sm text-slate-500">{product.description}</p>
+            <p className="line-clamp-1 text-sm text-stone-500">{product.description}</p>
           </div>
         </div>
       </td>
       <td className="px-4 py-3">
-        <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-bold text-slate-600">
+        <span className="rounded-full bg-stone-100 px-3 py-1 text-sm font-bold text-stone-600">
           {product.category}
         </span>
       </td>
@@ -2402,7 +2544,7 @@ function ProductTableRow({ product, onEdit, onToggle, onDelete }) {
         <button
           type="button"
           className={`rounded-full px-3 py-1 text-sm font-black ${
-            product.available ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+            product.available ? 'bg-orange-50 text-orange-700' : 'bg-rose-50 text-rose-700'
           }`}
           onClick={() => void onToggle(product.id)}
         >
@@ -2421,7 +2563,7 @@ function ProductTableRow({ product, onEdit, onToggle, onDelete }) {
 
 function ProductAdminCard({ product, onEdit, onToggle, onDelete }) {
   return (
-    <article className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+    <article className="overflow-hidden rounded-xl border border-stone-200 bg-white">
       <div
         className="h-36 bg-cover bg-center"
         style={{ backgroundImage: `url("${product.image}")` }}
@@ -2429,14 +2571,14 @@ function ProductAdminCard({ product, onEdit, onToggle, onDelete }) {
       <div className="grid gap-3 p-4">
         <div>
           <strong>{product.name}</strong>
-          <p className="text-sm text-slate-500">{product.category}</p>
+          <p className="text-sm text-stone-500">{product.category}</p>
         </div>
         <div className="flex items-center justify-between">
           <span className="font-black">{currency.format(product.price)}</span>
           <button
             type="button"
             className={`rounded-full px-3 py-1 text-sm font-black ${
-              product.available ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+              product.available ? 'bg-orange-50 text-orange-700' : 'bg-rose-50 text-rose-700'
             }`}
             onClick={() => void onToggle(product.id)}
           >
@@ -2467,7 +2609,7 @@ function IconAction({ label, icon: Icon, onClick, danger = false }) {
       className={`grid h-10 w-10 place-items-center rounded-lg border ${
         danger
           ? 'border-rose-100 bg-rose-50 text-rose-700'
-          : 'border-slate-200 bg-white text-slate-700'
+          : 'border-stone-200 bg-white text-stone-700'
       }`}
       onClick={onClick}
       title={label}
@@ -2480,7 +2622,7 @@ function IconAction({ label, icon: Icon, onClick, danger = false }) {
 
 function EmptyAdminState({ text }) {
   return (
-    <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-slate-500">
+    <div className="rounded-xl border border-dashed border-stone-300 bg-stone-50 p-6 text-center text-stone-500">
       {text}
     </div>
   )
@@ -2488,18 +2630,18 @@ function EmptyAdminState({ text }) {
 
 function MetricLine({ label, value }) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 p-3">
-      <span className="text-sm font-bold text-slate-500">{label}</span>
-      <strong className="text-right text-slate-950">{value}</strong>
+    <div className="flex items-center justify-between gap-3 rounded-lg bg-stone-50 p-3">
+      <span className="text-sm font-bold text-stone-500">{label}</span>
+      <strong className="text-right text-stone-950">{value}</strong>
     </div>
   )
 }
 
 function KitchenCounter({ label, value }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-center">
-      <p className="text-xs font-bold text-slate-500">{label}</p>
-      <strong className="text-lg font-black text-slate-950">{value}</strong>
+    <div className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-center">
+      <p className="text-xs font-bold text-stone-500">{label}</p>
+      <strong className="text-lg font-black text-stone-950">{value}</strong>
     </div>
   )
 }
@@ -2539,12 +2681,12 @@ function slugify(value) {
 function getKitchenBorderClass(status) {
   const classes = {
     Pendiente: 'border-amber-300 shadow-amber-100',
-    'En preparación': 'border-blue-300 shadow-blue-100',
-    Listo: 'border-emerald-300 shadow-emerald-100',
-    Entregado: 'border-slate-200',
+    'En preparación': 'border-amber-300 shadow-amber-100',
+    Listo: 'border-orange-300 shadow-orange-100',
+    Entregado: 'border-stone-200',
     Cancelado: 'border-rose-300 shadow-rose-100',
   }
-  return classes[status] ?? 'border-slate-200'
+  return classes[status] ?? 'border-stone-200'
 }
 
 function buildSalesChartData(orders) {
