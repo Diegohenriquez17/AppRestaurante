@@ -65,7 +65,7 @@ const currency = new Intl.NumberFormat('es-CL', {
 function App() {
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/menu/mesa-01" replace />} />
+      <Route path="/" element={<Navigate to="/admin" replace />} />
       <Route path="/menu/:mesaId" element={<MenuPage />} />
       <Route path="/cocina" element={<KitchenPage />} />
       <Route path="/pos" element={<PosPage />} />
@@ -111,7 +111,6 @@ function MenuPage() {
   const [guestCount, setGuestCount] = useState(2)
   const [cartOpen, setCartOpen] = useState(false)
   const [toast, setToast] = useState('')
-  const [feedback, setFeedback] = useState(null)
 
   const categories = ['Todos', ...state.categories.map((item) => item.name)]
   const itemCount = cart.items.reduce((sum, item) => sum + item.quantity, 0)
@@ -158,9 +157,9 @@ function MenuPage() {
   const payableBase = Math.max(0, subtotal - discount)
   const tipAmount = Math.round(payableBase * ((cart.tipPercent ?? 10) / 100))
   const total = payableBase + tipAmount
-  const currentOrder = feedback
-    ? state.orders.find((order) => order.id === feedback.id) ?? feedback
-    : null
+  const activeOrders = state.orders.filter(
+    (order) => order.tableId === mesaId && !['Entregado', 'Cancelado'].includes(order.status),
+  )
 
   const handleAddProduct = (product) => {
     updateCartItem(mesaId, product, 1)
@@ -193,7 +192,6 @@ function MenuPage() {
     setCustomerNote('')
     setCustomerName('')
     setCartOpen(false)
-    setFeedback(order)
   }
 
   return (
@@ -215,7 +213,9 @@ function MenuPage() {
 
       <div className="mx-auto grid max-w-7xl gap-6 px-4 py-5 lg:grid-cols-[minmax(0,1fr)_380px] lg:px-8">
         <section className="grid gap-7">
-          {currentOrder ? <OrderStatus order={currentOrder} /> : null}
+          {activeOrders.map((order) => (
+            <OrderStatus key={order.id} order={order} />
+          ))}
           {promoProducts.length ? (
             <section className="grid gap-3">
               <SectionTitle title="Promociones" subtitle="Combos y ofertas de hoy" />
@@ -258,7 +258,7 @@ function MenuPage() {
         </section>
 
         <aside className="hidden lg:block">
-          <div className="sticky top-32 rounded-2xl border border-slate-200 bg-white p-4 shadow-soft">
+          <div className="sticky top-32 max-h-[calc(100vh-9rem)] overflow-y-auto overscroll-contain rounded-2xl border border-slate-200 bg-white p-4 shadow-soft [scrollbar-width:thin]">
             <CartContent
               mesaId={mesaId}
               cart={cart}
@@ -846,46 +846,91 @@ function CartTotalLine({ label, value }) {
 }
 
 function OrderStatus({ order }) {
-  const steps = ['Pendiente', 'En preparación', 'Listo', 'Entregado']
-  const labels = {
-    Pendiente: 'Pedido recibido',
-    'En preparación': 'En preparación',
-    Listo: 'Listo',
-    Entregado: 'Entregado',
-  }
+  const steps = [
+    { key: 'Pendiente', label: 'Pedido recibido', icon: ClipboardList, description: 'Tu pedido fue enviado a cocina' },
+    { key: 'En preparación', label: 'Preparando', icon: ChefHat, description: 'El chef está preparando tu orden' },
+    { key: 'Listo', label: '¡Listo!', icon: CheckCircle2, description: 'Tu pedido está listo para servir' },
+    { key: 'Entregado', label: 'Entregado', icon: ShoppingBag, description: '¡Buen provecho!' },
+  ]
   const normalizedStatus = order.status === 'En preparaciÃ³n' ? 'En preparación' : order.status
-  const activeIndex = Math.max(0, steps.indexOf(normalizedStatus))
+  const activeIndex = Math.max(0, steps.findIndex((s) => s.key === normalizedStatus))
+  const ActiveIcon = steps[activeIndex].icon
 
   return (
-    <section className="rounded-3xl border border-emerald-100 bg-emerald-50 p-4 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
+    <motion.section
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="overflow-hidden rounded-3xl border-2 border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-emerald-50/80 p-5 shadow-lg shadow-emerald-100/40"
+    >
+      <div className="mb-5 flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-black uppercase tracking-[0.16em] text-emerald-700">
-            Pedido enviado
+            Seguimiento en vivo
           </p>
-          <h2 className="mt-1 text-xl font-black text-slate-950">#{order.number}</h2>
+          <h2 className="mt-1 text-2xl font-black text-slate-950">
+            Pedido #{order.number}
+          </h2>
+          <p className="mt-1 text-sm text-slate-500">
+            {order.tableLabel} · {formatTime(order.createdAt)}
+          </p>
         </div>
-        <CheckCircle2 className="h-8 w-8 text-emerald-600" />
+        <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-emerald-500 text-white shadow-lg shadow-emerald-200">
+          <ActiveIcon size={24} />
+        </div>
       </div>
-      <div className="mt-4 grid grid-cols-4 gap-2">
-        {steps.map((step, index) => (
-          <div key={step} className="grid gap-2">
-            <div
-              className={`h-2 rounded-full ${
-                index <= activeIndex ? 'bg-emerald-500' : 'bg-white'
-              }`}
-            />
-            <span
-              className={`text-[0.68rem] font-black leading-tight ${
-                index <= activeIndex ? 'text-emerald-800' : 'text-slate-400'
-              }`}
-            >
-              {labels[step]}
-            </span>
-          </div>
-        ))}
+
+      <div className="relative mb-5">
+        <div className="h-2.5 rounded-full bg-slate-200">
+          <motion.div
+            className="h-2.5 rounded-full bg-gradient-to-r from-emerald-400 to-emerald-600"
+            initial={{ width: '0%' }}
+            animate={{ width: `${((activeIndex + 1) / steps.length) * 100}%` }}
+            transition={{ duration: 0.8, ease: 'easeOut' }}
+          />
+        </div>
       </div>
-    </section>
+
+      <div className="grid grid-cols-4 gap-1">
+        {steps.map((step, index) => {
+          const Icon = step.icon
+          const isActive = index === activeIndex
+          const isCompleted = index < activeIndex
+
+          return (
+            <div key={step.key} className="flex flex-col items-center gap-2 text-center">
+              <div
+                className={`relative grid h-11 w-11 place-items-center rounded-xl transition-all duration-500 ${
+                  isCompleted
+                    ? 'bg-emerald-500 text-white shadow-md shadow-emerald-200'
+                    : isActive
+                      ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-200 ring-4 ring-emerald-100'
+                      : 'bg-slate-100 text-slate-400'
+                }`}
+              >
+                <Icon size={20} />
+                {isActive ? (
+                  <span className="absolute -right-1 -top-1 h-3.5 w-3.5 animate-pulse rounded-full border-2 border-white bg-emerald-400" />
+                ) : null}
+              </div>
+              <div>
+                <p
+                  className={`text-xs font-black leading-tight ${
+                    isCompleted || isActive ? 'text-emerald-800' : 'text-slate-400'
+                  }`}
+                >
+                  {step.label}
+                </p>
+                {isActive ? (
+                  <p className="mt-0.5 text-[0.65rem] font-semibold leading-tight text-emerald-600">
+                    {step.description}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </motion.section>
   )
 }
 
@@ -905,109 +950,264 @@ function ToastNotification({ text }) {
 function KitchenPage() {
   const { state, updateOrderStatus, remoteMode } = useAppStore()
   usePageTitle(`Cocina | ${state.restaurant.name}`)
-  const orders = [...state.orders].sort(
-    (left, right) => new Date(right.createdAt) - new Date(left.createdAt),
-  )
+  const [tab, setTab] = useState('activa')
+  const [fadingOrders, setFadingOrders] = useState(new Set())
+  const today = new Date().toISOString().slice(0, 10)
+
+  const activeOrders = [...state.orders]
+    .filter((order) =>
+      ['Pendiente', 'En preparación'].includes(order.status) || fadingOrders.has(order.id),
+    )
+    .sort((left, right) => new Date(left.createdAt) - new Date(right.createdAt))
+
+  const todayCompletedOrders = [...state.orders]
+    .filter((order) => {
+      if (fadingOrders.has(order.id)) return false
+      if (!['Listo', 'Entregado', 'Cancelado'].includes(order.status)) return false
+      return new Date(order.createdAt).toISOString().slice(0, 10) === today
+    })
+    .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+
+  const handleMarkReady = (orderId) => {
+    void updateOrderStatus(orderId, 'Listo')
+    setFadingOrders((prev) => new Set([...prev, orderId]))
+    setTimeout(() => {
+      setFadingOrders((prev) => {
+        const next = new Set(prev)
+        next.delete(orderId)
+        return next
+      })
+    }, 1500)
+  }
 
   return (
     <main className="mx-auto grid max-w-[1500px] gap-5 px-4 py-5 sm:px-6 lg:px-8">
       <section className="flex flex-col justify-between gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-soft sm:flex-row sm:items-center">
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-600">
-            KDS
-          </p>
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-600">KDS</p>
           <h1 className="mt-2 text-3xl font-black text-slate-950">Cocina en tiempo real</h1>
         </div>
         <div className="grid grid-cols-2 gap-2 sm:flex">
           <KitchenCounter label={remoteMode ? 'Supabase' : 'Local'} value="Activo" />
-          <KitchenCounter label="Pendientes" value={orders.filter((order) => order.status === 'Pendiente').length} />
-          <KitchenCounter label="Preparando" value={orders.filter((order) => order.status === 'En preparación').length} />
-          <KitchenCounter label="Listos" value={orders.filter((order) => order.status === 'Listo').length} />
+          <KitchenCounter label="Pendientes" value={activeOrders.filter((order) => order.status === 'Pendiente').length} />
+          <KitchenCounter label="Preparando" value={state.orders.filter((order) => order.status === 'En preparación').length} />
+          <KitchenCounter label="Listos" value={state.orders.filter((order) => order.status === 'Listo').length} />
+          <KitchenCounter label="Entregados hoy" value={todayCompletedOrders.filter((order) => order.status === 'Entregado').length} />
         </div>
       </section>
 
-      <section className="grid gap-4">
-        {orders.length ? (
-          orders.map((order) => (
-            <motion.article
-              key={order.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className={`grid gap-4 rounded-xl border bg-white p-4 shadow-soft xl:grid-cols-[210px_minmax(260px,1fr)_minmax(220px,0.8fr)_260px] xl:items-center ${getKitchenBorderClass(order.status)}`}
-            >
-              <div className="grid gap-2">
-                <div>
-                  <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">
-                    Pedido #{order.number}
-                  </p>
-                  <h2 className="text-2xl font-black text-slate-950">{order.tableLabel}</h2>
-                </div>
-                <span className={`status-badge status-${slugify(order.status)}`}>
-                  {order.status}
-                </span>
-              </div>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => setTab('activa')}
+          className={`inline-flex items-center gap-2 rounded-xl px-5 py-3 text-sm font-black transition ${
+            tab === 'activa'
+              ? 'bg-slate-950 text-white shadow-lg shadow-slate-300'
+              : 'border border-slate-200 bg-white text-slate-600 shadow-sm'
+          }`}
+        >
+          <Flame size={18} />
+          Cocina activa
+          {activeOrders.length ? (
+            <span className="rounded-full bg-rose-500 px-2.5 py-0.5 text-xs font-black text-white">
+              {activeOrders.length}
+            </span>
+          ) : null}
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab('historial')}
+          className={`inline-flex items-center gap-2 rounded-xl px-5 py-3 text-sm font-black transition ${
+            tab === 'historial'
+              ? 'bg-slate-950 text-white shadow-lg shadow-slate-300'
+              : 'border border-slate-200 bg-white text-slate-600 shadow-sm'
+          }`}
+        >
+          <ClipboardList size={18} />
+          Pedidos de hoy
+          {todayCompletedOrders.length ? (
+            <span className="rounded-full bg-slate-500 px-2.5 py-0.5 text-xs font-black text-white">
+              {todayCompletedOrders.length}
+            </span>
+          ) : null}
+        </button>
+      </div>
 
-              <div className="grid gap-2">
-                <div className="flex flex-wrap gap-2 text-sm text-slate-500">
-                  <span className="inline-flex items-center gap-1">
-                    <Clock3 size={16} />
-                    {formatTime(order.createdAt)}
+      {tab === 'activa' ? (
+        <section className="grid gap-4">
+          {activeOrders.length ? (
+            activeOrders.map((order) => (
+              <motion.article
+                key={order.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className={`grid gap-4 rounded-xl border bg-white p-4 shadow-soft xl:grid-cols-[210px_minmax(260px,1fr)_minmax(220px,0.8fr)_260px] xl:items-center transition-all duration-700 ${getKitchenBorderClass(order.status)} ${fadingOrders.has(order.id) ? 'scale-95 opacity-40 bg-emerald-50 border-emerald-400' : ''}`}
+              >
+                <div className="grid gap-2">
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">
+                      Pedido #{order.number}
+                    </p>
+                    <h2 className="text-2xl font-black text-slate-950">{order.tableLabel}</h2>
+                  </div>
+                  <span className={`status-badge status-${slugify(order.status)}`}>
+                    {order.status}
                   </span>
-                  <span>{elapsedMinutes(order.createdAt)} min</span>
-                  <span>{currency.format(order.total)}</span>
                 </div>
-                <ul className="grid gap-1 text-slate-800">
-                  {order.items.map((item) => (
-                    <li key={item.id}>
-                      <strong>{item.quantity}x</strong> {item.name}
-                    </li>
-                  ))}
-                </ul>
-              </div>
 
-              <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
+                <div className="grid gap-2">
+                  <div className="flex flex-wrap gap-2 text-sm text-slate-500">
+                    <span className="inline-flex items-center gap-1">
+                      <Clock3 size={16} />
+                      {formatTime(order.createdAt)}
+                    </span>
+                    <span>{elapsedMinutes(order.createdAt)} min</span>
+                    <span>{currency.format(order.total)}</span>
+                  </div>
+                  <ul className="grid gap-1 text-slate-800">
+                    {order.items.map((item) => (
+                      <li key={item.id}>
+                        <strong>{item.quantity}x</strong> {item.name}
+                        {item.notes ? (
+                          <span className="ml-2 rounded bg-amber-50 px-2 py-0.5 text-xs font-bold text-amber-700">
+                            📝 {item.notes}
+                          </span>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
+                  {order.note ? (
+                    <>
+                    <strong>Notas:</strong>
+                    <p>{order.note}</p>
+                    </>
+                  ) : (
+                    <span>Sin notas especiales.</span>
+                  )}
+                </div>
+
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
+                  {order.status === 'Pendiente' ? (
+                    <button
+                      type="button"
+                      className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 font-black text-blue-700"
+                      onClick={() => void updateOrderStatus(order.id, 'En preparación')}
+                    >
+                      Preparar
+                    </button>
+                  ) : null}
+                  {order.status === 'Pendiente' || order.status === 'En preparación' ? (
+                    <button
+                      type="button"
+                      className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 font-black text-emerald-700"
+                      onClick={() => handleMarkReady(order.id)}
+                    >
+                      Listo
+                    </button>
+                  ) : null}
+                  {fadingOrders.has(order.id) ? (
+                    <div className="flex items-center justify-center gap-2 rounded-lg bg-emerald-500 px-4 py-3 font-black text-white">
+                      <CheckCircle2 size={18} />
+                      Moviendo a pedidos de hoy...
+                    </div>
+                  ) : null}
+                </div>
+              </motion.article>
+            ))
+          ) : (
+            <div className="rounded-xl border-2 border-dashed border-emerald-300 bg-emerald-50 p-10 text-center">
+              <CheckCircle2 className="mx-auto h-14 w-14 text-emerald-400" />
+              <strong className="mt-4 block text-xl text-emerald-800">¡Todo al día!</strong>
+              <p className="mt-1 text-emerald-600">No hay pedidos pendientes en cocina.</p>
+            </div>
+          )}
+        </section>
+      ) : (
+        <section className="grid gap-4">
+          {todayCompletedOrders.length ? (
+            todayCompletedOrders.map((order) => (
+              <motion.article
+                key={order.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className={`rounded-xl border bg-white p-4 shadow-soft ${getKitchenBorderClass(order.status)}`}
+              >
+                <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">
+                      Pedido #{order.number}
+                    </p>
+                    <h2 className="text-xl font-black text-slate-950">{order.tableLabel}</h2>
+                    <p className="mt-1 text-sm text-slate-500">{formatTime(order.createdAt)}</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <strong className="text-lg font-black text-slate-950">{currency.format(order.total)}</strong>
+                    <span className={`status-badge status-${slugify(order.status)}`}>
+                      {order.status}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid gap-2 rounded-lg bg-slate-50 p-3">
+                  <p className="text-xs font-black uppercase tracking-[0.12em] text-slate-400">Detalle del pedido</p>
+                  <ul className="grid gap-1 text-sm text-slate-800">
+                    {order.items.map((item) => (
+                      <li key={item.id} className="flex items-start gap-2">
+                        <span><strong>{item.quantity}x</strong> {item.name} — {currency.format(item.price * item.quantity)}</span>
+                        {item.notes ? (
+                          <span className="rounded bg-amber-50 px-2 py-0.5 text-xs font-bold text-amber-700">
+                            📝 {item.notes}
+                          </span>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
                 {order.note ? (
-                  <>
-                  <strong>Notas:</strong>
-                  <p>{order.note}</p>
-                  </>
-                ) : (
-                  <span>Sin notas especiales.</span>
-                )}
-              </div>
+                  <div className="mt-2 rounded-lg bg-blue-50 p-3 text-sm text-blue-800">
+                    <strong>Notas del cliente:</strong> {order.note}
+                  </div>
+                ) : null}
 
-              <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-1">
-                <button
-                  type="button"
-                  className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 font-black text-blue-700"
-                  onClick={() => void updateOrderStatus(order.id, 'En preparación')}
-                >
-                  Preparar
-                </button>
-                <button
-                  type="button"
-                  className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 font-black text-emerald-700"
-                  onClick={() => void updateOrderStatus(order.id, 'Listo')}
-                >
-                  Listo
-                </button>
-                <button
-                  type="button"
-                  className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 font-black text-slate-700"
-                  onClick={() => void updateOrderStatus(order.id, 'Entregado')}
-                >
-                  Entregado
-                </button>
-              </div>
-            </motion.article>
-          ))
-        ) : (
-          <div className="rounded-xl border border-slate-200 bg-white p-8 text-center shadow-soft">
-            <strong>No hay pedidos aun</strong>
-            <p className="text-slate-500">Los pedidos enviados desde el menu apareceran aqui.</p>
-          </div>
-        )}
-      </section>
+                <div className="mt-3 grid grid-cols-3 gap-2 text-sm text-slate-500">
+                  <div className="rounded-lg bg-slate-50 p-2 text-center">
+                    <p className="text-[0.65rem] font-black uppercase text-slate-400">Subtotal</p>
+                    <strong className="text-slate-700">{currency.format(order.subtotal)}</strong>
+                  </div>
+                  <div className="rounded-lg bg-slate-50 p-2 text-center">
+                    <p className="text-[0.65rem] font-black uppercase text-slate-400">Descuento</p>
+                    <strong className="text-slate-700">{currency.format(order.discount)}</strong>
+                  </div>
+                  <div className="rounded-lg bg-slate-50 p-2 text-center">
+                    <p className="text-[0.65rem] font-black uppercase text-slate-400">Propina</p>
+                    <strong className="text-slate-700">{currency.format(order.tipAmount)}</strong>
+                  </div>
+                </div>
+
+                {order.status === 'Listo' ? (
+                  <button
+                    type="button"
+                    className="mt-3 w-full rounded-lg bg-slate-950 px-4 py-3 font-black text-white shadow-lg transition hover:bg-slate-800"
+                    onClick={() => void updateOrderStatus(order.id, 'Entregado')}
+                  >
+                    Marcar entregado ✓
+                  </button>
+                ) : null}
+              </motion.article>
+            ))
+          ) : (
+            <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-10 text-center text-slate-500">
+              <ClipboardList className="mx-auto h-12 w-12 text-slate-300" />
+              <strong className="mt-3 block text-lg text-slate-700">Sin pedidos completados hoy</strong>
+              <p className="mt-1">Los pedidos entregados aparecerán aquí como registro del día.</p>
+            </div>
+          )}
+        </section>
+      )}
     </main>
   )
 }
@@ -1051,7 +1251,7 @@ function AdminLayout() {
     ['Promociones', '/admin/promociones', BadgePercent],
     ['Mesas y QR', '/admin/mesas', QrCode],
     ['Pedidos', '/admin/pedidos', ClipboardList],
-    ['Cocina', '/cocina', ChefHat],
+    ['Cocina', '/cocina', ChefHat, true],
     ['Clientes', '/admin/clientes', Users],
     ['Usuarios', '/admin/usuarios', UserCog],
     ['Configuracion', '/admin/configuracion', Settings],
@@ -1114,11 +1314,29 @@ function AdminLayout() {
         </div>
 
         <nav className="grid gap-1 overflow-y-auto pr-1">
-          {links.map(([label, href, Icon]) => {
+          {links.map(([label, href, Icon, external]) => {
             const active =
               href === '/admin'
                 ? location.pathname === '/admin'
                 : location.pathname.startsWith(href)
+
+            if (external) {
+              return (
+                <a
+                  key={href}
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setSidebarOpen(false)}
+                  className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-bold transition text-slate-300 hover:bg-white/10 hover:text-white`}
+                >
+                  <Icon size={19} className="shrink-0" />
+                  <span>{label}</span>
+                  <span className="ml-auto text-[0.6rem] uppercase tracking-wider text-slate-500">nueva tab</span>
+                </a>
+              )
+            }
+
             return (
               <NavLink
                 key={href}
@@ -2004,6 +2222,11 @@ function QrTableCard({ table }) {
   const { state } = useAppStore()
   const [qrCode, setQrCode] = useState('')
 
+  const tableActiveOrders = state.orders.filter(
+    (order) => order.tableId === table.slug && !['Entregado', 'Cancelado'].includes(order.status),
+  )
+  const isOccupied = tableActiveOrders.length > 0
+
   useEffect(() => {
     let active = true
     QRCode.toDataURL(`${state.restaurant.baseUrl}/menu/${table.slug}`, {
@@ -2029,18 +2252,24 @@ function QrTableCard({ table }) {
     <article className="grid min-w-0 gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-soft">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-black uppercase tracking-[0.12em] text-emerald-700">
-            <span className="h-2 w-2 rounded-full bg-emerald-500" />
-            Libre
+          <div className={`mb-2 inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-black uppercase tracking-[0.12em] ${
+            isOccupied
+              ? 'bg-rose-50 text-rose-700'
+              : 'bg-emerald-50 text-emerald-700'
+          }`}>
+            <span className={`h-2 w-2 rounded-full ${isOccupied ? 'bg-rose-500 animate-pulse' : 'bg-emerald-500'}`} />
+            {isOccupied ? `Ocupada · ${tableActiveOrders.length} pedido${tableActiveOrders.length > 1 ? 's' : ''}` : 'Libre'}
           </div>
           <h2 className="text-xl font-black text-slate-950">{table.label}</h2>
         </div>
-        <Link
+        <a
           className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 font-black"
-          to={`/menu/${table.slug}`}
+          href={`/menu/${table.slug}`}
+          target="_blank"
+          rel="noopener noreferrer"
         >
-          Menu
-        </Link>
+          Menú ↗
+        </a>
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
@@ -2060,13 +2289,15 @@ function QrTableCard({ table }) {
       </p>
 
       <div className="grid grid-cols-3 gap-2">
-        <Link
+        <a
           className="grid h-11 place-items-center rounded-lg border border-slate-200 bg-white text-slate-700"
-          to={`/menu/${table.slug}`}
-          title="Ver menu"
+          href={`/menu/${table.slug}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Ver menu en nueva pestaña"
         >
           <Eye size={18} />
-        </Link>
+        </a>
         <button
           type="button"
           className="grid h-11 place-items-center rounded-lg border border-slate-200 bg-white text-slate-700"

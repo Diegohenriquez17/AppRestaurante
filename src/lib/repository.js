@@ -56,10 +56,13 @@ export async function loadRemoteState() {
     label: item.label,
     slug: item.slug,
   }))
+  const tableIdToSlug = new Map(
+    (tablesRes.data ?? []).map((t) => [t.id, t.slug]),
+  )
   const orders = (ordersRes.data ?? []).map((item) => ({
     id: item.id,
     number: String(item.number).padStart(4, '0'),
-    tableId: item.table_id,
+    tableId: tableIdToSlug.get(item.table_id) || item.table_id,
     tableLabel: item.table_label,
     orderType: item.order_type,
     items: (item.order_items ?? []).map((orderItem) => ({
