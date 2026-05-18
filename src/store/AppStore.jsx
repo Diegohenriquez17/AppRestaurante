@@ -16,6 +16,7 @@ import {
 } from '../lib/repository.js'
 
 const STORAGE_KEY = 'lasthit-demo-state-v1'
+const AUTH_KEY = 'lasthit-auth-user'
 const CHANNEL_NAME = 'lasthit-demo-sync'
 const AppStoreContext = createContext(null)
 
@@ -26,13 +27,34 @@ function cloneDemoState() {
 function loadInitialState() {
   const saved = localStorage.getItem(STORAGE_KEY)
   if (saved) {
-    return JSON.parse(saved)
+    const parsed = JSON.parse(saved)
+    // Ensure new fields exist for backwards compat
+    if (!parsed.staffUsers) parsed.staffUsers = cloneDemoState().staffUsers
+    if (!parsed.reservations) parsed.reservations = []
+    return parsed
   }
   return cloneDemoState()
 }
 
+function generatePin(existingPins) {
+  let pin
+  do {
+    pin = String(Math.floor(1000 + Math.random() * 9000))
+  } while (existingPins.includes(pin))
+  return pin
+}
+
+function loadAuthUser() {
+  const saved = localStorage.getItem(AUTH_KEY)
+  if (saved) {
+    try { return JSON.parse(saved) } catch { return null }
+  }
+  return null
+}
+
 export function AppStoreProvider({ children }) {
   const [state, setState] = useState(loadInitialState)
+  const [currentUser, setCurrentUser] = useState(loadAuthUser)
   const [remoteMode, setRemoteMode] = useState(isSupabaseEnabled())
   const [remoteError, setRemoteError] = useState('')
   const [isHydrating, setIsHydrating] = useState(isSupabaseEnabled())
@@ -50,7 +72,12 @@ export function AppStoreProvider({ children }) {
     loadRemoteState()
       .then((remoteState) => {
         if (!active || !remoteState) return
-        setState((current) => ({ ...remoteState, carts: current.carts }))
+        setState((current) => ({
+          ...remoteState,
+          carts: current.carts,
+          staffUsers: current.staffUsers || cloneDemoState().staffUsers,
+          reservations: current.reservations || [],
+        }))
         setRemoteMode(true)
         setRemoteError('')
       })
@@ -100,9 +127,22 @@ export function AppStoreProvider({ children }) {
   const api = useMemo(
     () => ({
       state,
+      currentUser,
       remoteMode,
       remoteError,
       isHydrating,
+      login(pin) {
+        const users = state.staffUsers || []
+        const user = users.find((u) => u.pin === pin && u.active)
+        if (!user) return null
+        setCurrentUser(user)
+        localStorage.setItem(AUTH_KEY, JSON.stringify(user))
+        return user
+      },
+      logout() {
+        setCurrentUser(null)
+        localStorage.removeItem(AUTH_KEY)
+      },
       getCartForTable(tableSlug) {
         return state.carts[tableSlug] ?? { items: [], note: '', tipPercent: 10 }
       },
@@ -219,6 +259,9 @@ export function AppStoreProvider({ children }) {
           tipAmount: payload.tipAmount,
           total: payload.total,
           status: 'Pendiente',
+          paymentMethod: null,
+          waiterId: payload.waiterId || null,
+          waiterName: payload.waiterName || null,
           createdAt: now,
           whatsAppMessage: buildWhatsAppMessage({
             number: nextNumber,
@@ -232,6 +275,9 @@ export function AppStoreProvider({ children }) {
 
         if (remoteMode) {
           const remoteOrder = await createRemoteOrder(payload, state)
+          remoteOrder.paymentMethod = null
+          remoteOrder.waiterId = payload.waiterId || null
+          remoteOrder.waiterName = payload.waiterName || null
           persist((current) => ({
             ...current,
             orders: [remoteOrder, ...current.orders],
@@ -255,6 +301,14 @@ export function AppStoreProvider({ children }) {
           ...current,
           orders: current.orders.map((order) =>
             order.id === orderId ? { ...order, status } : order,
+          ),
+        }))
+      },
+      setOrderPaymentMethod(orderId, paymentMethod) {
+        persist((current) => ({
+          ...current,
+          orders: current.orders.map((order) =>
+            order.id === orderId ? { ...order, paymentMethod } : order,
           ),
         }))
       },
@@ -363,8 +417,70 @@ export function AppStoreProvider({ children }) {
           restaurant: { ...current.restaurant, ...config },
         }))
       },
+
+      // ── Staff Users ──
+      addStaffUser(name, role) {
+        const existingPins = (state.staffUsers || []).map((u) => u.pin)
+        const pin = generatePin(existingPins)
+        const newUser = {
+          id: crypto.randomUUID(),
+          name,
+          role,
+          pin,
+          active: true,
+          createdAt: new Date().toISOString(),
+        }
+        persist((current) => ({
+          ...current,
+          staffUsers: [...(current.staffUsers || []), newUser],
+        }))
+        return newUser
+      },
+      removeStaffUser(userId) {
+        persist((current) => ({
+          ...current,
+          staffUsers: (current.staffUsers || []).filter((u) => u.id !== userId),
+        }))
+      },
+      toggleStaffUser(userId) {
+        persist((current) => ({
+          ...current,
+          staffUsers: (current.staffUsers || []).map((u) =>
+            u.id === userId ? { ...u, active: !u.active } : u,
+          ),
+        }))
+      },
+
+      // ── Reservations ──
+      addReservation(reservation) {
+        const newReservation = {
+          id: crypto.randomUUID(),
+          ...reservation,
+          status: 'Pendiente',
+          createdAt: new Date().toISOString(),
+        }
+        persist((current) => ({
+          ...current,
+          reservations: [newReservation, ...(current.reservations || [])],
+        }))
+        return newReservation
+      },
+      updateReservationStatus(reservationId, status) {
+        persist((current) => ({
+          ...current,
+          reservations: (current.reservations || []).map((r) =>
+            r.id === reservationId ? { ...r, status } : r,
+          ),
+        }))
+      },
+      removeReservation(reservationId) {
+        persist((current) => ({
+          ...current,
+          reservations: (current.reservations || []).filter((r) => r.id !== reservationId),
+        }))
+      },
     }),
-    [isHydrating, remoteError, remoteMode, state],
+    [currentUser, isHydrating, remoteError, remoteMode, state],
   )
 
   return <AppStoreContext.Provider value={api}>{children}</AppStoreContext.Provider>

@@ -159,4 +159,12 @@ export const demoState = {
   orders: [],
   carts: {},
   orderCounter: 120,
+  staffUsers: [
+    { id: 'staff-1', name: 'Admin Principal', role: 'administrador', pin: '1234', active: true, createdAt: new Date().toISOString() },
+    { id: 'staff-2', name: 'Chef Marco', role: 'cocina', pin: '5678', active: true, createdAt: new Date().toISOString() },
+    { id: 'staff-3', name: 'Cajero Ana', role: 'cajero', pin: '9012', active: true, createdAt: new Date().toISOString() },
+    { id: 'staff-4', name: 'Garzon Pedro', role: 'garzon', pin: '3456', active: true, createdAt: new Date().toISOString() },
+    { id: 'staff-5', name: 'Maria Gonzalez', role: 'garzon', pin: '7890', active: true, createdAt: new Date().toISOString() },
+  ],
+  reservations: [],
 }

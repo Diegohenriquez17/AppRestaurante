@@ -22,27 +22,34 @@ import {
   Check,
   ClipboardList,
   Clock3,
+  CreditCard,
   DollarSign,
   Download,
   Eye,
   Flame,
+  Hash,
   LayoutDashboard,
+  Lock,
+  LogOut,
   Menu,
   MessageSquare,
   Minus,
   Package,
   Pencil,
   Plus,
+  Printer,
   QrCode,
   Search,
   Settings,
   Share2,
   ShoppingBag,
   Tags,
+  Timer,
   Trash2,
   TrendingUp,
   User,
   UserCog,
+  UserPlus,
   Users,
   X,
 } from 'lucide-react'
@@ -54,6 +61,7 @@ import {
   Route,
   Routes,
   useLocation,
+  useNavigate,
   useParams,
 } from 'react-router-dom'
 import { useAppStore } from './store/AppStore.jsx'
@@ -192,30 +200,653 @@ function CustomSelect({
 }
 
 function App() {
+  const { currentUser } = useAppStore()
+
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/admin" replace />} />
+      {/* Public routes */}
+      <Route path="/login" element={<LoginPage />} />
       <Route path="/menu/:mesaId" element={<MenuPage />} />
-      <Route path="/cocina" element={<KitchenPage />} />
-      <Route path="/pos" element={<PosPage />} />
-      <Route path="/admin" element={<AdminLayout />}>
+
+      {/* Protected: Cocina - only cocina + admin */}
+      <Route path="/cocina" element={
+        <RequireAuth roles={['administrador', 'cocina']}>
+          <KitchenPage />
+        </RequireAuth>
+      } />
+
+      {/* Protected: POS */}
+      <Route path="/pos" element={
+        <RequireAuth roles={['administrador', 'cajero']}>
+          <PosPage />
+        </RequireAuth>
+      } />
+
+      {/* Protected: Cajero layout (limited views) */}
+      <Route path="/cajero" element={
+        <RequireAuth roles={['cajero']}>
+          <CajeroLayout />
+        </RequireAuth>
+      }>
+        <Route index element={<AdminOrdersPage />} />
+        <Route path="pedidos" element={<AdminOrdersPage />} />
+        <Route path="reportes" element={<AdminReportsPage />} />
+      </Route>
+
+      {/* Protected: Garzon layout (tables + menu) */}
+      <Route path="/garzon" element={
+        <RequireAuth roles={['garzon']}>
+          <GarzonLayout />
+        </RequireAuth>
+      }>
+        <Route index element={<GarzonTablesPage />} />
+      </Route>
+      <Route path="/garzon/mesa/:mesaId" element={
+        <RequireAuth roles={['garzon']}>
+          <MenuPage isGarzon />
+        </RequireAuth>
+      } />
+
+      {/* Protected: Admin - full access */}
+      <Route path="/admin" element={
+        <RequireAuth roles={['administrador']}>
+          <AdminLayout />
+        </RequireAuth>
+      }>
         <Route index element={<AdminDashboard />} />
         <Route path="productos" element={<AdminProductsPage />} />
         <Route path="categorias" element={<AdminCategoriesPage />} />
         <Route path="promociones" element={<AdminPromotionsPage />} />
         <Route path="mesas" element={<AdminTablesPage />} />
         <Route path="pedidos" element={<AdminOrdersPage />} />
-        <Route path="clientes" element={<AdminCustomersPage />} />
+        <Route path="reservas" element={<AdminReservationsPage />} />
         <Route path="usuarios" element={<AdminUsersPage />} />
         <Route path="configuracion" element={<AdminConfigPage />} />
         <Route path="reportes" element={<AdminReportsPage />} />
       </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
+
+      {/* Default: redirect based on auth state */}
+      <Route path="/" element={<RootRedirect />} />
+      <Route path="*" element={<RootRedirect />} />
     </Routes>
   )
 }
 
-function MenuPage() {
+function RootRedirect() {
+  const { currentUser } = useAppStore()
+  if (!currentUser) return <Navigate to="/login" replace />
+  const redirectMap = {
+    administrador: '/admin',
+    cocina: '/cocina',
+    cajero: '/cajero',
+    garzon: '/garzon',
+  }
+  return <Navigate to={redirectMap[currentUser.role] || '/login'} replace />
+}
+
+function RequireAuth({ roles, children }) {
+  const { currentUser } = useAppStore()
+  const location = useLocation()
+
+  if (!currentUser) {
+    return <Navigate to="/login" state={{ from: location }} replace />
+  }
+
+  if (roles && !roles.includes(currentUser.role)) {
+    // User is authenticated but doesn't have the right role
+    const redirectMap = {
+      administrador: '/admin',
+      cocina: '/cocina',
+      cajero: '/cajero',
+      garzon: '/garzon',
+    }
+    return <Navigate to={redirectMap[currentUser.role] || '/login'} replace />
+  }
+
+  return children
+}
+
+function LoginPage() {
+  const { state, login, currentUser } = useAppStore()
+  const navigate = useNavigate()
+  const [pin, setPin] = useState('')
+  const [error, setError] = useState('')
+  const [shake, setShake] = useState(false)
+  const inputRef = useRef(null)
+
+  useEffect(() => {
+    if (currentUser) {
+      const redirectMap = {
+        administrador: '/admin',
+        cocina: '/cocina',
+        cajero: '/cajero',
+        garzon: '/garzon',
+      }
+      navigate(redirectMap[currentUser.role] || '/admin', { replace: true })
+    }
+  }, [currentUser, navigate])
+
+  useEffect(() => {
+    inputRef.current?.focus()
+  }, [])
+
+  const handlePinChange = (value) => {
+    const digits = value.replace(/\D/g, '').slice(0, 4)
+    setPin(digits)
+    setError('')
+
+    if (digits.length === 4) {
+      const user = login(digits)
+      if (user) {
+        const redirectMap = {
+          administrador: '/admin',
+          cocina: '/cocina',
+          cajero: '/cajero',
+          garzon: '/garzon',
+        }
+        navigate(redirectMap[user.role] || '/admin', { replace: true })
+      } else {
+        setError('PIN incorrecto o usuario inactivo')
+        setShake(true)
+        setTimeout(() => {
+          setShake(false)
+          setPin('')
+          inputRef.current?.focus()
+        }, 600)
+      }
+    }
+  }
+
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    if (pin.length < 4) {
+      setError('Ingresa tu PIN de 4 dígitos')
+      return
+    }
+    handlePinChange(pin)
+  }
+
+  const roleLabels = {
+    administrador: { icon: UserCog, label: 'Administrador', desc: 'Acceso completo', color: 'from-purple-500 to-indigo-600' },
+    cocina: { icon: ChefHat, label: 'Cocina', desc: 'Panel de cocina', color: 'from-amber-500 to-orange-600' },
+    cajero: { icon: CreditCard, label: 'Cajero', desc: 'Pedidos y cobros', color: 'from-blue-500 to-cyan-600' },
+    garzon: { icon: User, label: 'Garzón', desc: 'Atención de mesas', color: 'from-emerald-500 to-teal-600' },
+  }
+
+  return (
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-stone-950 px-4">
+      {/* Animated background */}
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -left-32 -top-32 h-[500px] w-[500px] rounded-full bg-[#c2553d]/20 blur-[120px]" />
+        <div className="absolute -bottom-40 -right-40 h-[600px] w-[600px] rounded-full bg-orange-500/15 blur-[140px]" />
+        <div className="absolute left-1/2 top-1/3 h-[300px] w-[300px] -translate-x-1/2 rounded-full bg-amber-400/10 blur-[100px]" />
+        {/* Grid pattern */}
+        <div
+          className="absolute inset-0 opacity-[0.03]"
+          style={{
+            backgroundImage: 'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)',
+            backgroundSize: '60px 60px',
+          }}
+        />
+      </div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 30, scale: 0.95 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+        className="relative z-10 w-full max-w-[420px]"
+      >
+        {/* Logo */}
+        <div className="mb-8 text-center">
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
+            className="mx-auto mb-5 grid h-20 w-20 place-items-center rounded-2xl bg-gradient-to-br from-[#c2553d] to-[#e8824a] text-3xl font-black text-white shadow-2xl shadow-orange-900/40"
+          >
+            A
+          </motion.div>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
+            <p className="text-xs font-black uppercase tracking-[0.3em] text-[#c2553d]">
+              AcroDevs
+            </p>
+            <h1 className="mt-2 text-3xl font-black text-white">
+              {state.restaurant.name}
+            </h1>
+            <p className="mt-2 text-sm text-stone-400">
+              Ingresa tu PIN para acceder al sistema
+            </p>
+          </motion.div>
+        </div>
+
+        {/* Login card */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
+          className="overflow-hidden rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl"
+        >
+          <div className="p-6 sm:p-8">
+            <form onSubmit={handleSubmit}>
+              <div className="mb-6">
+                <label className="mb-2 block text-xs font-black uppercase tracking-[0.14em] text-stone-400">
+                  PIN de acceso
+                </label>
+                <motion.div animate={shake ? { x: [-12, 12, -8, 8, -4, 4, 0] } : {}} transition={{ duration: 0.4 }}>
+                  <div className="relative">
+                    <Lock className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-stone-500" />
+                    <input
+                      ref={inputRef}
+                      type="password"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      maxLength={4}
+                      value={pin}
+                      onChange={(e) => handlePinChange(e.target.value)}
+                      placeholder="• • • •"
+                      className={`h-16 w-full rounded-2xl border bg-white/5 pl-12 pr-4 text-center text-2xl font-black tracking-[0.5em] text-white outline-none transition placeholder:tracking-[0.3em] placeholder:text-stone-600 ${
+                        error
+                          ? 'border-rose-500 ring-2 ring-rose-500/30'
+                          : 'border-white/10 focus:border-[#c2553d] focus:ring-2 focus:ring-[#c2553d]/30'
+                      }`}
+                    />
+                  </div>
+                </motion.div>
+                {error ? (
+                  <motion.p
+                    initial={{ opacity: 0, y: -5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="mt-3 text-center text-sm font-bold text-rose-400"
+                  >
+                    {error}
+                  </motion.p>
+                ) : null}
+              </div>
+
+              {/* PIN dots indicator */}
+              <div className="mb-6 flex items-center justify-center gap-3">
+                {[0, 1, 2, 3].map((i) => (
+                  <motion.div
+                    key={i}
+                    animate={{
+                      scale: pin.length > i ? 1.3 : 1,
+                      backgroundColor: pin.length > i ? '#c2553d' : 'rgba(255,255,255,0.1)',
+                    }}
+                    className="h-3.5 w-3.5 rounded-full border border-white/10"
+                  />
+                ))}
+              </div>
+
+              <button
+                type="submit"
+                disabled={pin.length < 4}
+                className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#c2553d] to-[#e8824a] text-base font-black text-white shadow-lg shadow-orange-900/30 transition hover:shadow-xl hover:shadow-orange-900/40 disabled:opacity-40 disabled:shadow-none"
+              >
+                <Lock size={18} />
+                Ingresar
+              </button>
+            </form>
+          </div>
+
+          {/* Roles info section */}
+          <div className="border-t border-white/5 bg-white/[0.02] px-6 py-5 sm:px-8">
+            <p className="mb-3 text-xs font-black uppercase tracking-[0.14em] text-stone-500">
+              Roles del sistema
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {Object.entries(roleLabels).map(([role, cfg]) => {
+                const Icon = cfg.icon
+                return (
+                  <div
+                    key={role}
+                    className="flex items-center gap-2 rounded-xl border border-white/5 bg-white/5 px-3 py-2.5"
+                  >
+                    <div className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-gradient-to-br ${cfg.color} text-white`}>
+                      <Icon size={16} />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-white">{cfg.label}</p>
+                      <p className="text-[0.6rem] text-stone-500">{cfg.desc}</p>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Footer */}
+        <p className="mt-6 text-center text-xs text-stone-600">
+          Powered by <span className="font-bold text-[#c2553d]">AcroDevs</span> · Sistema de gestión de restaurantes
+        </p>
+      </motion.div>
+    </div>
+  )
+}
+
+function CajeroLayout() {
+  const { state, currentUser, logout } = useAppStore()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const [menuOpen, setMenuOpen] = useState(false)
+
+  const handleLogout = () => {
+    logout()
+    navigate('/login', { replace: true })
+  }
+
+  const navItems = [
+    ['Pedidos', '/cajero', ClipboardList],
+    ['Reportes', '/cajero/reportes', BarChart3],
+  ]
+
+  const isActive = (href) =>
+    href === '/cajero' ? location.pathname === '/cajero' : location.pathname.startsWith(href)
+
+  return (
+    <div className="min-h-screen bg-[#faf6f0] text-stone-900">
+      <header className="sticky top-0 z-40 border-b border-stone-200/70 bg-white/90 backdrop-blur">
+        <div className="flex w-full items-center gap-4 px-4 py-3 sm:px-6 lg:px-8">
+          <div className="flex shrink-0 items-center gap-3">
+            <div
+              className="grid h-10 w-10 place-items-center rounded-md bg-[#2a221c] text-base text-[#faf6f0]"
+              style={{ fontFamily: 'var(--font-display)', fontWeight: 600 }}
+            >
+              A
+            </div>
+            <div className="leading-tight">
+              <p className="text-[0.6rem] font-semibold uppercase tracking-[0.22em] text-[#c2553d]">
+                Cajero
+              </p>
+              <h2
+                className="mt-0.5 text-base text-stone-900"
+                style={{ fontFamily: 'var(--font-display)', fontWeight: 600, letterSpacing: '-0.01em' }}
+              >
+                {state.restaurant.name}
+              </h2>
+            </div>
+          </div>
+
+          <nav className="hidden flex-1 items-center justify-center gap-1 lg:flex">
+            {navItems.map(([label, href, Icon]) => {
+              const active = isActive(href)
+              return (
+                <NavLink
+                  key={href}
+                  to={href}
+                  end={href === '/cajero'}
+                  className={`relative inline-flex items-center gap-1.5 px-4 py-4 text-sm transition ${
+                    active ? 'font-semibold text-[#9a3f2c]' : 'font-medium text-stone-600 hover:text-stone-900'
+                  }`}
+                >
+                  <Icon size={16} strokeWidth={active ? 2.4 : 2} />
+                  {label}
+                  {active ? <span className="absolute inset-x-2 bottom-0 h-[2px] rounded-full bg-[#c2553d]" /> : null}
+                </NavLink>
+              )
+            })}
+          </nav>
+
+          <div className="ml-auto flex items-center gap-3">
+            <div className="hidden items-center gap-2 rounded-full border border-stone-200 bg-[#fbf8f3] px-3 py-1.5 lg:flex">
+              <CreditCard size={14} className="text-blue-600" />
+              <span className="text-xs font-semibold text-stone-700">{currentUser?.name}</span>
+            </div>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="inline-flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-black text-rose-700 transition hover:bg-rose-100"
+            >
+              <LogOut size={16} />
+              <span className="hidden sm:inline">Salir</span>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <section className="min-w-0 w-full px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <Outlet />
+      </section>
+    </div>
+  )
+}
+
+function GarzonLayout() {
+  const { state, currentUser, logout } = useAppStore()
+  const navigate = useNavigate()
+
+  const handleLogout = () => {
+    logout()
+    navigate('/login', { replace: true })
+  }
+
+  return (
+    <div className="min-h-screen bg-[#faf6f0] text-stone-900">
+      <header className="sticky top-0 z-40 border-b border-stone-200/70 bg-white/90 backdrop-blur">
+        <div className="flex w-full items-center gap-3 px-4 py-3 sm:px-6">
+          <div className="flex shrink-0 items-center gap-3">
+            <div
+              className="grid h-10 w-10 place-items-center rounded-md bg-emerald-600 text-base text-white"
+              style={{ fontFamily: 'var(--font-display)', fontWeight: 600 }}
+            >
+              G
+            </div>
+            <div className="leading-tight">
+              <p className="text-[0.6rem] font-semibold uppercase tracking-[0.22em] text-emerald-600">
+                Garzón
+              </p>
+              <h2
+                className="mt-0.5 text-base text-stone-900"
+                style={{ fontFamily: 'var(--font-display)', fontWeight: 600, letterSpacing: '-0.01em' }}
+              >
+                {state.restaurant.name}
+              </h2>
+            </div>
+          </div>
+
+          <div className="ml-auto flex items-center gap-3">
+            <div className="flex items-center gap-2 rounded-full border border-stone-200 bg-[#fbf8f3] px-3 py-1.5">
+              <User size={14} className="text-emerald-600" />
+              <span className="text-xs font-semibold text-stone-700">{currentUser?.name}</span>
+              <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[0.6rem] font-black text-emerald-700">
+                PIN: {currentUser?.pin}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="inline-flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-black text-rose-700 transition hover:bg-rose-100"
+            >
+              <LogOut size={16} />
+              <span className="hidden sm:inline">Salir</span>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <section className="min-w-0 w-full px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <Outlet />
+      </section>
+    </div>
+  )
+}
+
+function GarzonTablesPage() {
+  const { state, currentUser } = useAppStore()
+  usePageTitle(`Mis Mesas | ${state.restaurant.name}`)
+
+  const today = new Date().toISOString().slice(0, 10)
+  const todayOrders = state.orders.filter(
+    (order) => new Date(order.createdAt).toISOString().slice(0, 10) === today,
+  )
+  const myOrders = todayOrders.filter((order) => order.waiterId === currentUser?.id)
+  const myTotalSales = myOrders.reduce((sum, o) => sum + o.total, 0)
+
+  return (
+    <div className="grid gap-5 w-full overflow-hidden">
+      {/* Garzon header */}
+      <section className="rounded-xl border border-stone-200 bg-white p-5 shadow-soft">
+        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-600">Mi turno</p>
+            <h1 className="mt-2 text-3xl font-black text-stone-950">Hola, {currentUser?.name} 👋</h1>
+            <p className="mt-1 text-sm text-stone-500">Selecciona una mesa para tomar el pedido. Cada pedido queda registrado a tu nombre.</p>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="rounded-xl border border-stone-200 bg-stone-50 p-3 text-center">
+              <p className="text-[0.6rem] font-black uppercase text-stone-400">Pedidos</p>
+              <strong className="mt-1 block text-xl font-black text-stone-950">{myOrders.length}</strong>
+            </div>
+            <div className="rounded-xl border border-stone-200 bg-stone-50 p-3 text-center">
+              <p className="text-[0.6rem] font-black uppercase text-stone-400">Ventas</p>
+              <strong className="mt-1 block text-xl font-black text-stone-950">{currency.format(myTotalSales)}</strong>
+            </div>
+            <div className="rounded-xl border border-stone-200 bg-stone-50 p-3 text-center">
+              <p className="text-[0.6rem] font-black uppercase text-stone-400">Mesas</p>
+              <strong className="mt-1 block text-xl font-black text-stone-950">
+                {[...new Set(myOrders.map((o) => o.tableLabel))].length}
+              </strong>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Tables grid */}
+      <div className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+        {state.tables.map((table) => (
+          <GarzonTableCard key={table.id} table={table} currentUser={currentUser} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function GarzonTableCard({ table, currentUser }) {
+  const { state } = useAppStore()
+  const [qrCode, setQrCode] = useState('')
+  const [elapsed, setElapsed] = useState('')
+
+  const tableActiveOrders = state.orders.filter(
+    (order) => order.tableId === table.slug && !['Entregado', 'Cancelado'].includes(order.status),
+  )
+  const isOccupied = tableActiveOrders.length > 0
+  const isMine = tableActiveOrders.some((o) => o.waiterId === currentUser?.id)
+  const tableWaiter = isOccupied
+    ? tableActiveOrders.find((o) => o.waiterName)?.waiterName
+    : null
+
+  const oldestOrderTime = isOccupied
+    ? tableActiveOrders.reduce((oldest, order) => {
+        const t = new Date(order.createdAt).getTime()
+        return t < oldest ? t : oldest
+      }, Infinity)
+    : null
+
+  useEffect(() => {
+    if (!isOccupied || !oldestOrderTime) {
+      setElapsed('')
+      return
+    }
+    const tick = () => {
+      const diff = Date.now() - oldestOrderTime
+      const hours = Math.floor(diff / 3600000)
+      const minutes = Math.floor((diff % 3600000) / 60000)
+      const seconds = Math.floor((diff % 60000) / 1000)
+      setElapsed(
+        `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`,
+      )
+    }
+    tick()
+    const interval = setInterval(tick, 1000)
+    return () => clearInterval(interval)
+  }, [isOccupied, oldestOrderTime])
+
+  useEffect(() => {
+    let active = true
+    QRCode.toDataURL(`${window.location.origin}/garzon/mesa/${table.slug}`, {
+      margin: 1,
+      width: 280,
+    }).then((value) => {
+      if (active) setQrCode(value)
+    })
+    return () => {
+      active = false
+    }
+  }, [table.slug])
+
+  return (
+    <article className={`grid min-w-0 gap-3 rounded-xl border p-4 shadow-soft ${
+      isMine
+        ? 'border-emerald-300 bg-emerald-50'
+        : isOccupied
+          ? 'border-rose-200 bg-rose-50/50'
+          : 'border-stone-200 bg-white'
+    }`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className={`mb-2 inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-black uppercase tracking-[0.12em] ${
+            isMine
+              ? 'bg-emerald-100 text-emerald-700'
+              : isOccupied
+                ? 'bg-rose-100 text-rose-700'
+                : 'bg-orange-50 text-orange-700'
+          }`}>
+            <span className={`h-2 w-2 rounded-full ${
+              isMine ? 'bg-emerald-500 animate-pulse' : isOccupied ? 'bg-rose-500 animate-pulse' : 'bg-orange-500'
+            }`} />
+            {isMine ? 'Mi mesa' : isOccupied ? `Ocupada (${tableWaiter || 'otro'})` : 'Libre'}
+          </div>
+          <h2 className="text-xl font-black text-stone-950">{table.label}</h2>
+          {tableWaiter ? (
+            <p className="mt-1 text-sm font-bold text-stone-500">
+              <User size={14} className="mr-1 inline" />
+              {tableWaiter}
+            </p>
+          ) : null}
+        </div>
+        <Link
+          to={`/garzon/mesa/${table.slug}`}
+          className="inline-flex h-10 items-center justify-center rounded-lg bg-emerald-600 px-4 font-black text-white shadow-md transition hover:bg-emerald-700"
+        >
+          Atender ↗
+        </Link>
+      </div>
+
+      {isOccupied && elapsed ? (
+        <div className="flex items-center gap-3 rounded-xl border border-rose-200 bg-gradient-to-r from-rose-50 to-orange-50 p-2.5">
+          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-rose-500 text-white shadow-md shadow-rose-200">
+            <Timer size={18} />
+          </div>
+          <div>
+            <p className="text-[0.6rem] font-black uppercase tracking-[0.14em] text-rose-600">Ocupada</p>
+            <p className="text-lg font-black tabular-nums text-stone-950">{elapsed}</p>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="rounded-xl border border-stone-200 bg-stone-50 p-2">
+        {qrCode ? (
+          <img
+            src={qrCode}
+            alt={`QR ${table.label}`}
+            className="mx-auto aspect-square w-full max-w-[180px] rounded-lg bg-white p-1.5"
+          />
+        ) : (
+          <div className="mx-auto aspect-square w-full max-w-[180px] rounded-lg bg-white" />
+        )}
+      </div>
+
+      <Link
+        to={`/garzon/mesa/${table.slug}`}
+        className="grid h-11 place-items-center rounded-lg bg-emerald-600 font-black text-white shadow-md transition hover:bg-emerald-700"
+      >
+        Tomar pedido de {table.label}
+      </Link>
+    </article>
+  )
+}
+
+function MenuPage({ isGarzon }) {
   const {
     state,
     remoteError,
@@ -228,6 +859,7 @@ function MenuPage() {
     setCartNote,
     setCartItemNote,
     setCartTip,
+    currentUser,
   } = useAppStore()
   const { mesaId = 'mesa-01' } = useParams()
   const cart = getCartForTable(mesaId)
@@ -316,6 +948,8 @@ function MenuPage() {
       tipAmount,
       total,
       orderType: 'Comer en el local',
+      waiterId: isGarzon && currentUser ? currentUser.id : undefined,
+      waiterName: isGarzon && currentUser ? currentUser.name : undefined,
     })
     clearCart(mesaId)
     setCustomerNote('')
@@ -328,6 +962,21 @@ function MenuPage() {
       {isHydrating ? <SyncBanner text="Conectando con Supabase..." /> : null}
       {remoteError ? (
         <SyncBanner text={`Supabase no disponible: ${remoteError}`} warning />
+      ) : null}
+
+      {isGarzon && currentUser ? (
+        <div className="flex items-center justify-between gap-3 bg-emerald-600 px-4 py-2 text-white">
+          <div className="flex items-center gap-2">
+            <User size={16} />
+            <span className="text-sm font-black">Garzón: {currentUser.name}</span>
+            <span className="rounded bg-emerald-800 px-2 py-0.5 text-[0.6rem] font-black">
+              Pedidos de esta mesa se registran a tu nombre
+            </span>
+          </div>
+          <Link to="/garzon" className="inline-flex items-center gap-1 rounded-lg bg-white/20 px-3 py-1.5 text-xs font-black transition hover:bg-white/30">
+            ← Volver a mesas
+          </Link>
+        </div>
       ) : null}
 
       <MenuHeader restaurant={state.restaurant} mesaId={mesaId} />
@@ -1077,8 +1726,9 @@ function ToastNotification({ text }) {
 }
 
 function KitchenPage() {
-  const { state, updateOrderStatus, remoteMode } = useAppStore()
+  const { state, updateOrderStatus, remoteMode, currentUser, logout } = useAppStore()
   usePageTitle(`Cocina | ${state.restaurant.name}`)
+  const navigate = useNavigate()
   const [tab, setTab] = useState('activa')
   const [fadingOrders, setFadingOrders] = useState(new Set())
   const today = new Date().toISOString().slice(0, 10)
@@ -1109,8 +1759,85 @@ function KitchenPage() {
     }, 1500)
   }
 
+  const printComanda = (order) => {
+    const itemsHtml = order.items.map((item) =>
+      `<tr>
+        <td style="padding:4px 0;font-size:15px;font-weight:700">${item.quantity}x</td>
+        <td style="padding:4px 8px;font-size:15px;font-weight:700">${item.name}</td>
+      </tr>
+      ${item.notes ? `<tr><td></td><td style="padding:0 8px 6px;font-size:13px;color:#555;font-style:italic">📝 ${item.notes}</td></tr>` : ''}`
+    ).join('')
+
+    const html = `<!DOCTYPE html>
+<html><head><title>Comanda #${order.number}</title>
+<style>
+  @page { size: 80mm auto; margin: 4mm; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: 'Courier New', monospace; width: 72mm; padding: 2mm; }
+  .header { text-align:center; border-bottom: 2px dashed #000; padding-bottom: 8px; margin-bottom: 8px; }
+  .header h1 { font-size: 22px; font-weight: 900; }
+  .header p { font-size: 13px; margin-top: 4px; }
+  .meta { margin-bottom: 8px; font-size: 13px; }
+  .meta div { display:flex; justify-content:space-between; padding: 2px 0; }
+  .items { width:100%; border-collapse:collapse; border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 6px 0; }
+  .notes { margin-top: 8px; padding: 6px; background: #f5f5f5; font-size: 12px; border-radius: 4px; }
+  .footer { text-align:center; margin-top: 10px; font-size: 11px; color: #666; border-top: 1px dashed #000; padding-top: 8px; }
+  .total { text-align:right; font-size: 16px; font-weight: 900; margin-top: 6px; }
+</style></head><body>
+  <div class="header">
+    <h1>🔥 COMANDA</h1>
+    <p>Pedido #${order.number}</p>
+  </div>
+  <div class="meta">
+    <div><span><strong>${order.tableLabel}</strong></span><span>${new Date(order.createdAt).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}</span></div>
+    <div><span>Estado: ${order.status}</span></div>
+    ${order.waiterName ? `<div><span>Garzón: ${order.waiterName}</span></div>` : ''}
+  </div>
+  <table class="items">${itemsHtml}</table>
+  ${order.note ? `<div class="notes"><strong>Notas:</strong><br/>${order.note}</div>` : ''}
+  <div class="total">Total: ${new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(order.total)}</div>
+  <div class="footer">
+    <p>${new Date().toLocaleDateString('es-CL')} · ${state.restaurant.name}</p>
+    <p style="margin-top:4px;font-size:10px">---- COLGAR EN COCINA ----</p>
+  </div>
+  <script>window.onload=function(){window.print();}<\/script>
+</body></html>`
+    const printWindow = window.open('', '_blank', 'width=350,height=600')
+    if (printWindow) {
+      printWindow.document.write(html)
+      printWindow.document.close()
+    }
+  }
+
   return (
     <main className="grid gap-5 w-full px-4 py-5 sm:px-6 lg:px-8">
+      {/* Kitchen top bar */}
+      <div className="flex items-center justify-between rounded-xl border border-stone-200 bg-white p-3 shadow-soft">
+        <div className="flex items-center gap-3">
+          <div className="grid h-10 w-10 place-items-center rounded-md bg-[#2a221c] text-base text-[#faf6f0]" style={{ fontFamily: 'var(--font-display)', fontWeight: 600 }}>
+            A
+          </div>
+          <div>
+            <p className="text-[0.6rem] font-semibold uppercase tracking-[0.22em] text-[#c2553d]">Cocina</p>
+            <h2 className="text-sm font-black text-stone-900">{state.restaurant.name}</h2>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="hidden items-center gap-2 rounded-full border border-stone-200 bg-[#fbf8f3] px-3 py-1.5 sm:flex">
+            <ChefHat size={14} className="text-amber-600" />
+            <span className="text-xs font-semibold text-stone-700">{currentUser?.name || 'Cocina'}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => { logout(); navigate('/login', { replace: true }) }}
+            className="inline-flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-black text-rose-700 transition hover:bg-rose-100"
+          >
+            <LogOut size={16} />
+            <span className="hidden sm:inline">Salir</span>
+          </button>
+        </div>
+      </div>
+
       <section className="flex flex-col justify-between gap-4 rounded-xl border border-stone-200 bg-white p-5 shadow-soft sm:flex-row sm:items-center">
         <div>
           <p className="text-xs font-black uppercase tracking-[0.18em] text-orange-600">KDS</p>
@@ -1219,6 +1946,14 @@ function KitchenPage() {
                 </div>
 
                 <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
+                  <button
+                    type="button"
+                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-stone-200 bg-white px-4 py-3 font-black text-stone-700 transition hover:bg-stone-50"
+                    onClick={() => printComanda(order)}
+                  >
+                    <Printer size={18} />
+                    Imprimir comanda
+                  </button>
                   {order.status === 'Pendiente' ? (
                     <button
                       type="button"
@@ -1370,9 +2105,15 @@ function PosPage() {
 }
 
 function AdminLayout() {
-  const { state, remoteMode } = useAppStore()
+  const { state, remoteMode, currentUser, logout } = useAppStore()
   const location = useLocation()
+  const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
+
+  const handleLogout = () => {
+    logout()
+    navigate('/login', { replace: true })
+  }
 
   const navItems = [
     ['Dashboard', '/admin', LayoutDashboard],
@@ -1382,7 +2123,7 @@ function AdminLayout() {
     ['Productos', '/admin/productos', Package],
     ['Categorías', '/admin/categorias', Tags],
     ['Promociones', '/admin/promociones', BadgePercent],
-    ['Clientes', '/admin/clientes', Users],
+    ['Reservas', '/admin/reservas', CalendarDays],
     ['Usuarios', '/admin/usuarios', UserCog],
     ['Reportes', '/admin/reportes', BarChart3],
     ['Configuración', '/admin/configuracion', Settings],
@@ -1394,18 +2135,18 @@ function AdminLayout() {
   const renderDesktopLink = ([label, href, Icon, external]) => {
     const active = isActive(href)
     const baseClass =
-      'relative inline-flex items-center gap-1.5 whitespace-nowrap px-3 py-4 text-[0.88rem] transition'
+      'relative inline-flex items-center gap-1 whitespace-nowrap px-2 py-4 text-[0.8rem] transition'
     const stateClass = active
       ? 'text-[#9a3f2c] font-semibold'
       : 'text-stone-600 font-medium hover:text-stone-900'
 
     const content = (
       <>
-        <Icon size={15} strokeWidth={active ? 2.4 : 2} />
+        <Icon size={14} strokeWidth={active ? 2.4 : 2} />
         <span>{label}</span>
-        {external ? <Share2 size={11} className="opacity-50" /> : null}
+        {external ? <Share2 size={10} className="opacity-50" /> : null}
         {active ? (
-          <span className="absolute inset-x-2 bottom-0 h-[2px] rounded-full bg-[#c2553d]" />
+          <span className="absolute inset-x-1 bottom-0 h-[2px] rounded-full bg-[#c2553d]" />
         ) : null}
       </>
     )
@@ -1471,20 +2212,20 @@ function AdminLayout() {
   return (
     <div className="min-h-screen bg-[#faf6f0] text-stone-900">
       <header className="sticky top-0 z-40 border-b border-stone-200/70 bg-white/90 backdrop-blur">
-        <div className="flex w-full items-center gap-4 px-4 py-3 sm:px-6 lg:px-8 lg:py-0">
-          <Link to="/admin" className="flex shrink-0 items-center gap-3">
+        <div className="flex w-full items-center gap-2 px-3 py-3 sm:px-4 lg:px-5 lg:py-0">
+          <Link to="/admin" className="flex shrink-0 items-center gap-2">
             <div
-              className="grid h-10 w-10 place-items-center rounded-md bg-[#2a221c] text-base text-[#faf6f0]"
+              className="grid h-9 w-9 place-items-center rounded-md bg-[#2a221c] text-sm text-[#faf6f0]"
               style={{ fontFamily: 'var(--font-display)', fontWeight: 600 }}
             >
               A
             </div>
-            <div className="leading-tight">
-              <p className="text-[0.6rem] font-semibold uppercase tracking-[0.22em] text-[#c2553d]">
+            <div className="hidden leading-tight min-[1100px]:block">
+              <p className="text-[0.55rem] font-semibold uppercase tracking-[0.22em] text-[#c2553d]">
                 AcroDevs
               </p>
               <h2
-                className="mt-0.5 text-base text-stone-900"
+                className="mt-0.5 text-sm text-stone-900"
                 style={{ fontFamily: 'var(--font-display)', fontWeight: 600, letterSpacing: '-0.01em' }}
               >
                 {state.restaurant.name}
@@ -1492,18 +2233,29 @@ function AdminLayout() {
             </div>
           </Link>
 
-          <nav className="hidden flex-1 items-center justify-center gap-0.5 overflow-x-auto lg:flex">
+          <nav className="hidden flex-1 items-center justify-center gap-0 lg:flex">
             {navItems.map(renderDesktopLink)}
           </nav>
 
-          <div className="ml-auto hidden items-center gap-2 rounded-full border border-stone-200 bg-[#fbf8f3] pl-3 pr-3.5 py-1.5 lg:flex">
-            <span className="relative grid h-2 w-2 place-items-center">
-              <span className="absolute inset-0 animate-ping rounded-full bg-[#c2553d] opacity-40" />
-              <span className="relative h-2 w-2 rounded-full bg-[#c2553d]" />
-            </span>
-            <span className="text-xs font-semibold text-stone-700">
-              {remoteMode ? 'Conectado' : 'Local'}
-            </span>
+          <div className="ml-auto hidden shrink-0 items-center gap-2 lg:flex">
+            <div className="flex items-center gap-1.5 rounded-full border border-stone-200 bg-[#fbf8f3] px-2.5 py-1">
+              <span className="relative grid h-2 w-2 place-items-center">
+                <span className="absolute inset-0 animate-ping rounded-full bg-[#c2553d] opacity-40" />
+                <span className="relative h-2 w-2 rounded-full bg-[#c2553d]" />
+              </span>
+              <span className="max-w-[100px] truncate text-xs font-semibold text-stone-700">
+                {currentUser?.name || 'Admin'}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-black text-rose-700 transition hover:bg-rose-100"
+              title="Cerrar sesión"
+            >
+              <LogOut size={14} />
+              Salir
+            </button>
           </div>
 
           <button
@@ -2141,15 +2893,19 @@ function AdminTablesPage() {
 }
 
 function AdminOrdersPage() {
-  const { state, updateOrderStatus } = useAppStore()
+  const { state, updateOrderStatus, setOrderPaymentMethod } = useAppStore()
   usePageTitle(`Pedidos | ${state.restaurant.name}`)
+  const today = new Date().toISOString().slice(0, 10)
+  const todayOrders = state.orders.filter(
+    (order) => new Date(order.createdAt).toISOString().slice(0, 10) === today,
+  )
 
   return (
     <div className="grid gap-5 w-full overflow-hidden">
       <AdminPageHeader
         eyebrow="Pedidos"
         title="Seguimiento manual"
-        description="Revisa pedidos, mesa, detalle y cambia el estado operativo."
+        description="Revisa pedidos, mesa, detalle, método de pago y cambia el estado operativo."
       />
 
       <section className="grid gap-4">
@@ -2157,7 +2913,7 @@ function AdminOrdersPage() {
             state.orders.map((order) => (
               <article
                 key={order.id}
-                className="grid min-w-0 gap-4 rounded-xl border border-stone-200 bg-white p-4 shadow-soft lg:grid-cols-[180px_minmax(0,1fr)_240px] lg:items-center"
+                className="grid min-w-0 gap-4 rounded-xl border border-stone-200 bg-white p-4 shadow-soft xl:grid-cols-[180px_minmax(0,1fr)_200px_240px] xl:items-center"
               >
                 <div>
                   <p className="text-xs font-black uppercase tracking-[0.14em] text-stone-400">
@@ -2165,6 +2921,11 @@ function AdminOrdersPage() {
                   </p>
                   <h2 className="text-xl font-black text-stone-950">{order.tableLabel}</h2>
                   <p className="text-sm text-stone-500">{formatTime(order.createdAt)}</p>
+                  {order.waiterName ? (
+                    <p className="mt-1 inline-flex items-center gap-1 rounded-full bg-stone-100 px-2 py-0.5 text-xs font-bold text-stone-600">
+                      <User size={12} /> {order.waiterName}
+                    </p>
+                  ) : null}
                 </div>
 
                 <div className="min-w-0">
@@ -2175,6 +2936,28 @@ function AdminOrdersPage() {
                     <p className="mt-2 rounded-lg bg-stone-50 p-2 text-sm text-stone-500">
                       {order.note}
                     </p>
+                  ) : null}
+                  <p className="mt-2 text-sm font-black text-stone-700">{currency.format(order.total)}</p>
+                </div>
+
+                <div className="grid gap-2">
+                  <p className="text-xs font-black uppercase tracking-[0.12em] text-stone-400">Pago</p>
+                  <CustomSelect
+                    value={order.paymentMethod || ''}
+                    onChange={(val) => setOrderPaymentMethod(order.id, val)}
+                    options={[
+                      { value: 'Efectivo', label: '💵 Efectivo' },
+                      { value: 'Débito', label: '💳 Débito' },
+                      { value: 'Crédito', label: '💳 Crédito' },
+                      { value: 'Transferencia', label: '🏦 Transferencia' },
+                    ]}
+                    placeholder="Sin pago"
+                  />
+                  {order.paymentMethod ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700">
+                      <CreditCard size={14} />
+                      {order.paymentMethod}
+                    </span>
                   ) : null}
                 </div>
 
@@ -2201,48 +2984,424 @@ function AdminOrdersPage() {
   )
 }
 
-function AdminCustomersPage() {
-  usePageTitle('Clientes | AcroDevs Restaurant')
+function AdminReservationsPage() {
+  const { state, addReservation, updateReservationStatus, removeReservation } = useAppStore()
+  usePageTitle(`Reservas | ${state.restaurant.name}`)
+  const [form, setForm] = useState({
+    customerName: '',
+    guestCount: 2,
+    reservationDate: new Date().toISOString().slice(0, 10),
+    reservationTime: '19:00',
+    tableLabel: state.tables[0]?.label || 'Mesa 01',
+    tableId: state.tables[0]?.id || '',
+    notes: '',
+  })
+
+  const handleSubmit = (event) => {
+    event.preventDefault()
+    addReservation(form)
+    setForm({
+      customerName: '',
+      guestCount: 2,
+      reservationDate: new Date().toISOString().slice(0, 10),
+      reservationTime: '19:00',
+      tableLabel: state.tables[0]?.label || 'Mesa 01',
+      tableId: state.tables[0]?.id || '',
+      notes: '',
+    })
+  }
+
+  const reservations = state.reservations || []
+  const statusColors = {
+    Pendiente: 'bg-amber-50 text-amber-700',
+    Confirmada: 'bg-blue-50 text-blue-700',
+    Completada: 'bg-emerald-50 text-emerald-700',
+    Cancelada: 'bg-rose-50 text-rose-700',
+  }
+
   return (
-    <div className="generic-page">
-      <section className="section-header">
-        <div>
-          <p className="eyebrow">Clientes</p>
-          <h1>Reservado para siguiente etapa</h1>
+    <div className="grid gap-5 w-full overflow-hidden">
+      <AdminPageHeader
+        eyebrow="Reservas"
+        title="Reserva de mesas"
+        description="Gestiona las reservas del restaurante. Fecha, hora, mesa y número de personas."
+      />
+
+      <section className="grid gap-5 xl:grid-cols-[380px_minmax(0,1fr)]">
+        <form className="rounded-xl border border-stone-200 bg-white p-5 shadow-soft" onSubmit={handleSubmit}>
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-orange-600">Nueva</p>
+              <h2 className="text-xl font-black text-stone-950">Crear reserva</h2>
+            </div>
+            <CalendarDays className="text-orange-600" size={24} />
+          </div>
+          <div className="grid gap-3">
+            <label className="field">
+              <span>Nombre del cliente</span>
+              <input
+                value={form.customerName}
+                onChange={(e) => setForm({ ...form, customerName: e.target.value })}
+                placeholder="Juan Perez"
+                required
+              />
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="field">
+                <span>Fecha</span>
+                <input
+                  type="date"
+                  value={form.reservationDate}
+                  onChange={(e) => setForm({ ...form, reservationDate: e.target.value })}
+                  required
+                />
+              </label>
+              <label className="field">
+                <span>Hora</span>
+                <input
+                  type="time"
+                  value={form.reservationTime}
+                  onChange={(e) => setForm({ ...form, reservationTime: e.target.value })}
+                  required
+                />
+              </label>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="field">
+                <span>Personas</span>
+                <input
+                  type="number"
+                  min="1"
+                  value={form.guestCount}
+                  onChange={(e) => setForm({ ...form, guestCount: Number(e.target.value) })}
+                  required
+                />
+              </label>
+              <label className="field">
+                <span>Mesa</span>
+                <CustomSelect
+                  value={form.tableLabel}
+                  onChange={(val) => {
+                    const t = state.tables.find((tb) => tb.label === val)
+                    setForm({ ...form, tableLabel: val, tableId: t?.id || '' })
+                  }}
+                  options={state.tables.map((t) => t.label)}
+                  placeholder="Mesa"
+                />
+              </label>
+            </div>
+            <label className="field">
+              <span>Notas</span>
+              <textarea
+                rows="2"
+                value={form.notes}
+                onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                placeholder="Cumpleaños, alergias, etc."
+              />
+            </label>
+            <button type="submit" className="primary-button">
+              Reservar mesa
+            </button>
+          </div>
+        </form>
+
+        <div className="min-w-0 rounded-xl border border-stone-200 bg-white p-5 shadow-soft">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-black text-stone-950">Reservas activas</h2>
+              <p className="text-sm text-stone-500">{reservations.length} reservas registradas</p>
+            </div>
+          </div>
+          <div className="grid gap-3">
+            {reservations.length ? (
+              reservations.map((res) => (
+                <article key={res.id} className="flex flex-col gap-3 rounded-xl border border-stone-200 bg-stone-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="grid gap-1">
+                    <div className="flex items-center gap-2">
+                      <strong className="text-stone-950">{res.customerName}</strong>
+                      <span className={`rounded-full px-2.5 py-0.5 text-xs font-black ${statusColors[res.status] || 'bg-stone-100 text-stone-600'}`}>
+                        {res.status}
+                      </span>
+                    </div>
+                    <p className="text-sm text-stone-500">
+                      📅 {res.reservationDate} · 🕐 {res.reservationTime} · 👥 {res.guestCount} personas
+                    </p>
+                    <p className="text-sm font-bold text-stone-600">{res.tableLabel}</p>
+                    {res.notes ? <p className="text-sm text-stone-400 italic">{res.notes}</p> : null}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CustomSelect
+                      value={res.status}
+                      onChange={(val) => updateReservationStatus(res.id, val)}
+                      options={['Pendiente', 'Confirmada', 'Completada', 'Cancelada']}
+                      className="w-40"
+                    />
+                    <button
+                      type="button"
+                      className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-rose-100 bg-rose-50 text-rose-700"
+                      onClick={() => removeReservation(res.id)}
+                      title="Eliminar reserva"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </article>
+              ))
+            ) : (
+              <EmptyAdminState text="No hay reservas registradas. Crea una desde el formulario." />
+            )}
+          </div>
         </div>
       </section>
-      <div className="panel-card">
-        <p>
-          En esta version dejamos la estructura lista. La siguiente iteracion puede guardar
-          historial de clientes, frecuencia de consumo y preferencias.
-        </p>
-      </div>
     </div>
   )
 }
 
 function AdminUsersPage() {
-  usePageTitle('Usuarios | AcroDevs Restaurant')
+  const { state, addStaffUser, removeStaffUser, toggleStaffUser } = useAppStore()
+  usePageTitle(`Usuarios | ${state.restaurant.name}`)
+  const [form, setForm] = useState({ name: '', role: 'garzon' })
+  const [filterRole, setFilterRole] = useState('todos')
+  const staffUsers = state.staffUsers || []
+  const today = new Date().toISOString().slice(0, 10)
+
+  const roleConfig = {
+    administrador: { label: 'Administrador', icon: UserCog, color: 'bg-purple-50 text-purple-700', description: 'Acceso completo al sistema' },
+    cocina: { label: 'Cocina', icon: ChefHat, color: 'bg-amber-50 text-amber-700', description: 'Gestión de comandas y estados' },
+    cajero: { label: 'Cajero', icon: CreditCard, color: 'bg-blue-50 text-blue-700', description: 'Pedidos, cobros y reportes' },
+    garzon: { label: 'Garzón', icon: User, color: 'bg-emerald-50 text-emerald-700', description: 'Atención de mesas y pedidos' },
+  }
+
+  const handleSubmit = (event) => {
+    event.preventDefault()
+    if (!form.name.trim()) return
+    addStaffUser(form.name.trim(), form.role)
+    setForm({ name: '', role: form.role })
+  }
+
+  const filteredUsers = filterRole === 'todos'
+    ? staffUsers
+    : staffUsers.filter((u) => u.role === filterRole)
+
+  // Calculate daily stats per user
+  const getUserDayStats = (userId) => {
+    const userOrders = state.orders.filter(
+      (o) => o.waiterId === userId && new Date(o.createdAt).toISOString().slice(0, 10) === today,
+    )
+    return {
+      orderCount: userOrders.length,
+      totalSales: userOrders.reduce((sum, o) => sum + o.total, 0),
+      tables: [...new Set(userOrders.map((o) => o.tableLabel))],
+    }
+  }
+
+  const roleCounts = {
+    administrador: staffUsers.filter((u) => u.role === 'administrador').length,
+    cocina: staffUsers.filter((u) => u.role === 'cocina').length,
+    cajero: staffUsers.filter((u) => u.role === 'cajero').length,
+    garzon: staffUsers.filter((u) => u.role === 'garzon').length,
+  }
 
   return (
     <div className="grid gap-5 w-full">
       <AdminPageHeader
         eyebrow="Equipo"
         title="Usuarios"
-        description="Gestion de roles para administradores, cocina y operadores del restaurante."
+        description="Gestiona roles de administradores, cocina, cajeros y garzones. Los garzones reciben un PIN aleatorio de acceso."
       />
-      <section className="grid gap-4 md:grid-cols-3">
-        {[
-          ['Administrador', 'Acceso completo al sistema', UserCog],
-          ['Cocina', 'Gestion de comandas y estados', ChefHat],
-          ['Caja', 'Pedidos, ventas y reportes', ClipboardList],
-        ].map(([title, description, Icon]) => (
-          <article key={title} className="rounded-xl border border-stone-200 bg-white p-5 shadow-soft">
-            <Icon className="text-orange-600" size={28} />
-            <h2 className="mt-4 text-lg font-black">{title}</h2>
-            <p className="mt-2 text-stone-500">{description}</p>
-          </article>
-        ))}
+
+      {/* Role summary cards */}
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {Object.entries(roleConfig).map(([role, cfg]) => {
+          const Icon = cfg.icon
+          return (
+            <motion.article
+              key={role}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-xl border border-stone-200 bg-white p-5 shadow-soft"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-bold text-stone-500">{cfg.label}</p>
+                  <strong className="mt-1 block text-2xl font-black text-stone-950">{roleCounts[role]}</strong>
+                </div>
+                <div className={`grid h-12 w-12 place-items-center rounded-xl ${cfg.color}`}>
+                  <Icon size={24} />
+                </div>
+              </div>
+              <p className="mt-2 text-xs text-stone-400">{cfg.description}</p>
+            </motion.article>
+          )
+        })}
+      </section>
+
+      <section className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
+        {/* Create user form */}
+        <form className="rounded-xl border border-stone-200 bg-white p-5 shadow-soft" onSubmit={handleSubmit}>
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-orange-600">Nuevo</p>
+              <h2 className="text-xl font-black text-stone-950">Crear usuario</h2>
+            </div>
+            <UserPlus className="text-orange-600" size={24} />
+          </div>
+          <div className="grid gap-3">
+            <label className="field">
+              <span>Nombre completo</span>
+              <input
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                placeholder="Ej: Carlos Lopez"
+                required
+              />
+            </label>
+            <label className="field">
+              <span>Rol</span>
+              <CustomSelect
+                value={form.role}
+                onChange={(val) => setForm({ ...form, role: val })}
+                options={[
+                  { value: 'administrador', label: '👑 Administrador' },
+                  { value: 'cocina', label: '👨‍🍳 Cocina' },
+                  { value: 'cajero', label: '💰 Cajero' },
+                  { value: 'garzon', label: '🍽️ Garzón' },
+                ]}
+              />
+            </label>
+            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-700">
+              <strong>PIN auto-generado:</strong> Al crear un usuario se genera un PIN aleatorio de 4 dígitos como login.
+              {form.role === 'garzon' ? ' El garzón queda asociado a las mesas que atiende.' : ''}
+              {form.role === 'cocina' ? ' Solo podrá acceder al panel de cocina.' : ''}
+              {form.role === 'cajero' ? ' Solo podrá acceder a pedidos y reportes.' : ''}
+              {form.role === 'administrador' ? ' Tendrá acceso completo al sistema.' : ''}
+            </div>
+            <button type="submit" className="primary-button">
+              <span className="inline-flex items-center gap-2">
+                <UserPlus size={18} />
+                Crear usuario
+              </span>
+            </button>
+          </div>
+        </form>
+
+        {/* Users list */}
+        <div className="min-w-0 rounded-xl border border-stone-200 bg-white shadow-soft">
+          <div className="flex flex-col gap-3 border-b border-stone-200 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-xl font-black text-stone-950">Equipo registrado</h2>
+              <p className="text-sm text-stone-500">{staffUsers.length} usuarios</p>
+            </div>
+            <div className="flex gap-2 overflow-x-auto">
+              {['todos', 'administrador', 'cocina', 'cajero', 'garzon'].map((role) => (
+                <button
+                  key={role}
+                  type="button"
+                  onClick={() => setFilterRole(role)}
+                  className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-black capitalize transition ${
+                    filterRole === role
+                      ? 'bg-stone-950 text-white'
+                      : 'border border-stone-200 bg-white text-stone-500'
+                  }`}
+                >
+                  {role === 'todos' ? 'Todos' : roleConfig[role]?.label || role}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid gap-3 p-4">
+            {filteredUsers.length ? (
+              filteredUsers.map((user) => {
+                const cfg = roleConfig[user.role] || roleConfig.garzon
+                const Icon = cfg.icon
+                const stats = getUserDayStats(user.id)
+                return (
+                  <article key={user.id} className="rounded-xl border border-stone-200 bg-stone-50 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl ${cfg.color}`}>
+                          <Icon size={22} />
+                        </div>
+                        <div>
+                          <strong className="text-stone-950">{user.name}</strong>
+                          <div className="mt-1 flex flex-wrap items-center gap-2">
+                            <span className={`rounded-full px-2.5 py-0.5 text-xs font-black ${cfg.color}`}>
+                              {cfg.label}
+                            </span>
+                            <span className="inline-flex items-center gap-1 rounded-full bg-stone-200 px-2.5 py-0.5 text-xs font-bold text-stone-600">
+                              <Hash size={12} /> PIN: {user.pin}
+                            </span>
+                            <span className={`rounded-full px-2 py-0.5 text-xs font-black ${user.active ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+                              {user.active ? 'Activo' : 'Inactivo'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex gap-1">
+                        <button
+                          type="button"
+                          className={`grid h-9 w-9 place-items-center rounded-lg border text-sm ${user.active ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}
+                          onClick={() => toggleStaffUser(user.id)}
+                          title={user.active ? 'Desactivar' : 'Activar'}
+                        >
+                          {user.active ? <X size={16} /> : <Check size={16} />}
+                        </button>
+                        <button
+                          type="button"
+                          className="grid h-9 w-9 place-items-center rounded-lg border border-rose-100 bg-rose-50 text-rose-700"
+                          onClick={() => removeStaffUser(user.id)}
+                          title="Eliminar"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Day stats */}
+                    <div className="mt-3 grid grid-cols-3 gap-2">
+                      <div className="rounded-lg bg-white p-2 text-center">
+                        <p className="text-[0.6rem] font-black uppercase text-stone-400">Pedidos hoy</p>
+                        <strong className="text-sm text-stone-700">{stats.orderCount}</strong>
+                      </div>
+                      <div className="rounded-lg bg-white p-2 text-center">
+                        <p className="text-[0.6rem] font-black uppercase text-stone-400">Ventas hoy</p>
+                        <strong className="text-sm text-stone-700">{currency.format(stats.totalSales)}</strong>
+                      </div>
+                      <div className="rounded-lg bg-white p-2 text-center">
+                        <p className="text-[0.6rem] font-black uppercase text-stone-400">Mesas</p>
+                        <strong className="text-sm text-stone-700">{stats.tables.length ? stats.tables.join(', ') : '—'}</strong>
+                      </div>
+                    </div>
+
+                    {/* Login link */}
+                    <div className="mt-3 flex items-center gap-2 rounded-lg border border-blue-100 bg-blue-50 p-2.5">
+                      <Lock size={14} className="shrink-0 text-blue-600" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[0.6rem] font-black uppercase tracking-[0.1em] text-blue-600">Link de acceso</p>
+                        <p className="truncate text-xs font-mono text-blue-800">
+                          {window.location.origin}/login → PIN: {user.pin}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        className="shrink-0 rounded-md border border-blue-200 bg-white px-2 py-1 text-[0.65rem] font-black text-blue-700 transition hover:bg-blue-100"
+                        onClick={() => {
+                          void navigator.clipboard?.writeText(`${window.location.origin}/login — PIN: ${user.pin} (${cfg.label}: ${user.name})`)
+                        }}
+                        title="Copiar link + PIN"
+                      >
+                        Copiar
+                      </button>
+                    </div>
+                  </article>
+                )
+              })
+            ) : (
+              <EmptyAdminState text="No hay usuarios con este filtro." />
+            )}
+          </div>
+        </div>
       </section>
     </div>
   )
@@ -2252,6 +3411,14 @@ function AdminReportsPage() {
   const { state } = useAppStore()
   usePageTitle(`Reportes | ${state.restaurant.name}`)
   const chartData = buildSalesChartData(state.orders)
+  const staffUsers = state.staffUsers || []
+
+  const roleConfig = {
+    administrador: { label: 'Administrador', color: 'bg-purple-50 text-purple-700', route: '/admin' },
+    cocina: { label: 'Cocina', color: 'bg-amber-50 text-amber-700', route: '/cocina' },
+    cajero: { label: 'Cajero', color: 'bg-blue-50 text-blue-700', route: '/cajero' },
+    garzon: { label: 'Garzón', color: 'bg-emerald-50 text-emerald-700', route: '/garzon' },
+  }
 
   return (
     <div className="grid gap-5 w-full">
@@ -2282,6 +3449,64 @@ function AdminReportsPage() {
             <MetricLine label="Tendencia" value={<span className="inline-flex items-center gap-1 text-orange-600"><TrendingUp size={16} /> Operativa</span>} />
           </div>
         </DashboardPanel>
+      </section>
+
+      {/* Staff credentials section */}
+      <section className="rounded-xl border border-stone-200 bg-white p-5 shadow-soft">
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Seguridad</p>
+            <h2 className="text-xl font-black text-stone-950">Credenciales de acceso</h2>
+            <p className="mt-1 text-sm text-stone-500">PINs de login y rutas de acceso de cada usuario del sistema.</p>
+          </div>
+          <Lock className="text-blue-600" size={24} />
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-stone-200">
+                <th className="px-3 py-3 text-xs font-black uppercase tracking-[0.1em] text-stone-400">Usuario</th>
+                <th className="px-3 py-3 text-xs font-black uppercase tracking-[0.1em] text-stone-400">Rol</th>
+                <th className="px-3 py-3 text-xs font-black uppercase tracking-[0.1em] text-stone-400">PIN</th>
+                <th className="px-3 py-3 text-xs font-black uppercase tracking-[0.1em] text-stone-400">Ruta de acceso</th>
+                <th className="px-3 py-3 text-xs font-black uppercase tracking-[0.1em] text-stone-400">Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {staffUsers.map((user) => {
+                const cfg = roleConfig[user.role] || roleConfig.garzon
+                return (
+                  <tr key={user.id} className="border-b border-stone-100 transition hover:bg-stone-50">
+                    <td className="px-3 py-3 font-bold text-stone-900">{user.name}</td>
+                    <td className="px-3 py-3">
+                      <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-black ${cfg.color}`}>
+                        {cfg.label}
+                      </span>
+                    </td>
+                    <td className="px-3 py-3">
+                      <code className="rounded-md bg-stone-100 px-2.5 py-1 font-mono text-sm font-black text-stone-800">
+                        {user.pin}
+                      </code>
+                    </td>
+                    <td className="px-3 py-3 font-mono text-xs text-stone-500">
+                      {window.location.origin}{cfg.route}
+                    </td>
+                    <td className="px-3 py-3">
+                      <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-black ${user.active ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+                        {user.active ? 'Activo' : 'Inactivo'}
+                      </span>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm text-blue-700">
+          <strong>Login:</strong> Todos los usuarios acceden desde <code className="rounded bg-blue-100 px-1.5 py-0.5 font-mono text-xs">{window.location.origin}/login</code> ingresando su PIN de 4 dígitos.
+        </div>
       </section>
     </div>
   )
@@ -2363,11 +3588,44 @@ function AdminConfigPage() {
 function QrTableCard({ table }) {
   const { state } = useAppStore()
   const [qrCode, setQrCode] = useState('')
+  const [elapsed, setElapsed] = useState('')
 
   const tableActiveOrders = state.orders.filter(
     (order) => order.tableId === table.slug && !['Entregado', 'Cancelado'].includes(order.status),
   )
   const isOccupied = tableActiveOrders.length > 0
+
+  // Find the oldest active order to calculate occupancy time
+  const oldestOrderTime = isOccupied
+    ? tableActiveOrders.reduce((oldest, order) => {
+        const t = new Date(order.createdAt).getTime()
+        return t < oldest ? t : oldest
+      }, Infinity)
+    : null
+
+  // Find waiter assigned to this table
+  const tableWaiter = isOccupied
+    ? tableActiveOrders.find((o) => o.waiterName)?.waiterName
+    : null
+
+  useEffect(() => {
+    if (!isOccupied || !oldestOrderTime) {
+      setElapsed('')
+      return
+    }
+    const tick = () => {
+      const diff = Date.now() - oldestOrderTime
+      const hours = Math.floor(diff / 3600000)
+      const minutes = Math.floor((diff % 3600000) / 60000)
+      const seconds = Math.floor((diff % 60000) / 1000)
+      setElapsed(
+        `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`,
+      )
+    }
+    tick()
+    const interval = setInterval(tick, 1000)
+    return () => clearInterval(interval)
+  }, [isOccupied, oldestOrderTime])
 
   useEffect(() => {
     let active = true
@@ -2403,6 +3661,12 @@ function QrTableCard({ table }) {
             {isOccupied ? `Ocupada · ${tableActiveOrders.length} pedido${tableActiveOrders.length > 1 ? 's' : ''}` : 'Libre'}
           </div>
           <h2 className="text-xl font-black text-stone-950">{table.label}</h2>
+          {tableWaiter ? (
+            <p className="mt-1 text-sm font-bold text-stone-500">
+              <User size={14} className="mr-1 inline" />
+              {tableWaiter}
+            </p>
+          ) : null}
         </div>
         <a
           className="inline-flex h-10 items-center justify-center rounded-lg border border-stone-200 bg-white px-3 font-black"
@@ -2413,6 +3677,20 @@ function QrTableCard({ table }) {
           Menú ↗
         </a>
       </div>
+
+      {isOccupied && elapsed ? (
+        <div className="flex items-center gap-3 rounded-xl border border-rose-200 bg-gradient-to-r from-rose-50 to-orange-50 p-3">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-rose-500 text-white shadow-md shadow-rose-200">
+            <Timer size={20} />
+          </div>
+          <div>
+            <p className="text-[0.65rem] font-black uppercase tracking-[0.16em] text-rose-600">
+              Tiempo ocupada
+            </p>
+            <p className="text-xl font-black tabular-nums text-stone-950">{elapsed}</p>
+          </div>
+        </div>
+      ) : null}
 
       <div className="rounded-xl border border-stone-200 bg-stone-50 p-3">
         {qrCode ? (
