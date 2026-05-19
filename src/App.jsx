@@ -13,6 +13,7 @@ import {
   YAxis,
 } from 'recharts'
 import {
+  Activity,
   BadgePercent,
   BarChart3,
   CalendarDays,
@@ -28,8 +29,10 @@ import {
   Eye,
   Flame,
   Hash,
+  History,
   LayoutDashboard,
   Lock,
+  LogIn,
   LogOut,
   Menu,
   MessageSquare,
@@ -3158,10 +3161,13 @@ function AdminReservationsPage() {
 }
 
 function AdminUsersPage() {
-  const { state, addStaffUser, removeStaffUser, toggleStaffUser } = useAppStore()
+  const { state, sessions, addStaffUser, removeStaffUser, toggleStaffUser, getUserSessions } = useAppStore()
   usePageTitle(`Usuarios | ${state.restaurant.name}`)
   const [form, setForm] = useState({ name: '', role: 'garzon' })
   const [filterRole, setFilterRole] = useState('todos')
+  const [activeTab, setActiveTab] = useState('equipo')
+  const [expandedUser, setExpandedUser] = useState(null)
+  const [expandedSession, setExpandedSession] = useState(null)
   const staffUsers = state.staffUsers || []
   const today = new Date().toISOString().slice(0, 10)
 
@@ -3202,6 +3208,22 @@ function AdminUsersPage() {
     garzon: staffUsers.filter((u) => u.role === 'garzon').length,
   }
 
+  const formatSessionTime = (iso) => {
+    if (!iso) return '—'
+    return new Date(iso).toLocaleString('es-CL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+  }
+
+  const getSessionDuration = (loginAt, logoutAt) => {
+    if (!loginAt) return '—'
+    const start = new Date(loginAt).getTime()
+    const end = logoutAt ? new Date(logoutAt).getTime() : Date.now()
+    const diff = end - start
+    const hours = Math.floor(diff / 3600000)
+    const minutes = Math.floor((diff % 3600000) / 60000)
+    if (hours > 0) return `${hours}h ${minutes}m`
+    return `${minutes}m`
+  }
+
   return (
     <div className="grid gap-5 w-full">
       <AdminPageHeader
@@ -3236,6 +3258,39 @@ function AdminUsersPage() {
         })}
       </section>
 
+      {/* Tab navigation */}
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => setActiveTab('equipo')}
+          className={`inline-flex items-center gap-2 rounded-xl px-5 py-3 text-sm font-black transition ${
+            activeTab === 'equipo'
+              ? 'bg-stone-950 text-white shadow-lg shadow-stone-300'
+              : 'border border-stone-200 bg-white text-stone-600 shadow-sm'
+          }`}
+        >
+          <Users size={18} />
+          Equipo
+          <span className="rounded-full bg-stone-500/20 px-2.5 py-0.5 text-xs">{staffUsers.length}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('actividad')}
+          className={`inline-flex items-center gap-2 rounded-xl px-5 py-3 text-sm font-black transition ${
+            activeTab === 'actividad'
+              ? 'bg-stone-950 text-white shadow-lg shadow-stone-300'
+              : 'border border-stone-200 bg-white text-stone-600 shadow-sm'
+          }`}
+        >
+          <Activity size={18} />
+          Actividad
+          {sessions.length ? (
+            <span className="rounded-full bg-stone-500/20 px-2.5 py-0.5 text-xs">{sessions.length}</span>
+          ) : null}
+        </button>
+      </div>
+
+      {activeTab === 'equipo' ? (
       <section className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
         {/* Create user form */}
         <form className="rounded-xl border border-stone-200 bg-white p-5 shadow-soft" onSubmit={handleSubmit}>
@@ -3403,6 +3458,184 @@ function AdminUsersPage() {
           </div>
         </div>
       </section>
+      ) : (
+      /* Actividad tab */
+      <section className="grid gap-5">
+        <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-soft">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-600">Registro</p>
+              <h2 className="text-xl font-black text-stone-950">Historial de sesiones</h2>
+              <p className="mt-1 text-sm text-stone-500">Cada inicio y cierre de sesión queda registrado con las mesas atendidas y pedidos creados.</p>
+            </div>
+            <History className="text-blue-600" size={24} />
+          </div>
+
+          {/* Per-user activity */}
+          <div className="grid gap-4">
+            {staffUsers.filter((u) => u.role === 'garzon' || getUserSessions(u.id).length > 0).length ? (
+              staffUsers
+                .filter((u) => u.role === 'garzon' || getUserSessions(u.id).length > 0)
+                .map((user) => {
+                  const cfg = roleConfig[user.role] || roleConfig.garzon
+                  const Icon = cfg.icon
+                  const userSessions = getUserSessions(user.id)
+                  const isExpanded = expandedUser === user.id
+                  const activeSess = userSessions.find((s) => !s.logoutAt)
+                  const allUserOrders = state.orders.filter((o) => o.waiterId === user.id)
+                  const allTables = [...new Set(allUserOrders.map((o) => o.tableLabel))]
+                  const totalSales = allUserOrders.reduce((sum, o) => sum + o.total, 0)
+
+                  return (
+                    <article key={user.id} className="rounded-xl border border-stone-200 bg-stone-50 overflow-hidden">
+                      <button
+                        type="button"
+                        className="flex w-full items-center justify-between gap-3 p-4 text-left transition hover:bg-stone-100"
+                        onClick={() => setExpandedUser(isExpanded ? null : user.id)}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl ${cfg.color}`}>
+                            <Icon size={22} />
+                          </div>
+                          <div>
+                            <strong className="text-stone-950">{user.name}</strong>
+                            <div className="mt-1 flex flex-wrap items-center gap-2">
+                              <span className={`rounded-full px-2.5 py-0.5 text-xs font-black ${cfg.color}`}>
+                                {cfg.label}
+                              </span>
+                              {activeSess ? (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-black text-emerald-700">
+                                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                                  En línea
+                                </span>
+                              ) : (
+                                <span className="rounded-full bg-stone-200 px-2.5 py-0.5 text-xs font-bold text-stone-500">
+                                  Desconectado
+                                </span>
+                              )}
+                              <span className="text-xs text-stone-400">{userSessions.length} sesiones</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <div className="hidden text-right sm:block">
+                            <p className="text-xs text-stone-400">{allTables.length} mesas · {allUserOrders.length} pedidos</p>
+                            <p className="text-sm font-black text-stone-700">{currency.format(totalSales)}</p>
+                          </div>
+                          <ChevronDown size={18} className={`text-stone-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                        </div>
+                      </button>
+
+                      {isExpanded ? (
+                        <div className="border-t border-stone-200 bg-white p-4">
+                          {/* Summary stats */}
+                          <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                            <div className="rounded-lg bg-stone-50 p-3 text-center">
+                              <p className="text-[0.6rem] font-black uppercase text-stone-400">Total sesiones</p>
+                              <strong className="text-lg text-stone-950">{userSessions.length}</strong>
+                            </div>
+                            <div className="rounded-lg bg-stone-50 p-3 text-center">
+                              <p className="text-[0.6rem] font-black uppercase text-stone-400">Pedidos total</p>
+                              <strong className="text-lg text-stone-950">{allUserOrders.length}</strong>
+                            </div>
+                            <div className="rounded-lg bg-stone-50 p-3 text-center">
+                              <p className="text-[0.6rem] font-black uppercase text-stone-400">Mesas atendidas</p>
+                              <strong className="text-lg text-stone-950">{allTables.length}</strong>
+                            </div>
+                            <div className="rounded-lg bg-stone-50 p-3 text-center">
+                              <p className="text-[0.6rem] font-black uppercase text-stone-400">Ventas total</p>
+                              <strong className="text-lg text-stone-950">{currency.format(totalSales)}</strong>
+                            </div>
+                          </div>
+
+                          {/* Session list */}
+                          <p className="mb-2 text-xs font-black uppercase tracking-[0.12em] text-stone-400">Sesiones recientes</p>
+                          <div className="grid gap-2">
+                            {userSessions.length ? userSessions.slice(0, 20).map((sess) => (
+                              <div key={sess.id} className="rounded-lg border border-stone-200 bg-stone-50 overflow-hidden">
+                                <button
+                                  type="button"
+                                  className="flex w-full items-center justify-between gap-3 p-3 text-left transition hover:bg-stone-100"
+                                  onClick={() => setExpandedSession(expandedSession === sess.id ? null : sess.id)}
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <div className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${sess.logoutAt ? 'bg-stone-200 text-stone-500' : 'bg-emerald-100 text-emerald-700'}`}>
+                                      {sess.logoutAt ? <LogOut size={16} /> : <LogIn size={16} />}
+                                    </div>
+                                    <div>
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-sm font-bold text-stone-700">
+                                          {formatSessionTime(sess.loginAt)}
+                                        </span>
+                                        <span className="text-xs text-stone-400">→</span>
+                                        <span className="text-sm font-bold text-stone-700">
+                                          {sess.logoutAt ? formatSessionTime(sess.logoutAt) : 'En curso'}
+                                        </span>
+                                      </div>
+                                      <div className="mt-0.5 flex items-center gap-2 text-xs text-stone-400">
+                                        <span className="inline-flex items-center gap-1"><Timer size={12} /> {getSessionDuration(sess.loginAt, sess.logoutAt)}</span>
+                                        {sess.tablesServed?.length ? (
+                                          <span>· {sess.tablesServed.length} mesas</span>
+                                        ) : null}
+                                        {sess.ordersCreated?.length ? (
+                                          <span>· {sess.ordersCreated.length} pedidos</span>
+                                        ) : null}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <ChevronDown size={14} className={`text-stone-400 transition-transform ${expandedSession === sess.id ? 'rotate-180' : ''}`} />
+                                </button>
+
+                                {expandedSession === sess.id ? (
+                                  <div className="border-t border-stone-200 bg-white p-3">
+                                    <div className="grid gap-3 sm:grid-cols-2">
+                                      <div>
+                                        <p className="mb-1 text-[0.6rem] font-black uppercase text-stone-400">Mesas atendidas</p>
+                                        {sess.tablesServed?.length ? (
+                                          <div className="flex flex-wrap gap-1">
+                                            {sess.tablesServed.map((t) => (
+                                              <span key={t} className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-black text-emerald-700">{t}</span>
+                                            ))}
+                                          </div>
+                                        ) : (
+                                          <p className="text-xs text-stone-400">Sin mesas registradas</p>
+                                        )}
+                                      </div>
+                                      <div>
+                                        <p className="mb-1 text-[0.6rem] font-black uppercase text-stone-400">Pedidos creados</p>
+                                        {sess.ordersCreated?.length ? (
+                                          <div className="grid gap-1">
+                                            {sess.ordersCreated.map((o) => (
+                                              <div key={o.id} className="flex items-center justify-between rounded-lg bg-stone-50 px-2 py-1 text-xs">
+                                                <span className="font-bold text-stone-700">#{o.number} · {o.tableLabel}</span>
+                                                <span className="font-black text-stone-950">{currency.format(o.total)}</span>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        ) : (
+                                          <p className="text-xs text-stone-400">Sin pedidos en esta sesión</p>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                ) : null}
+                              </div>
+                            )) : (
+                              <p className="text-sm text-stone-400">Este usuario aún no tiene sesiones registradas. Se registrarán al iniciar sesión.</p>
+                            )}
+                          </div>
+                        </div>
+                      ) : null}
+                    </article>
+                  )
+                })
+            ) : (
+              <EmptyAdminState text="No hay actividad de sesiones registrada. Los garzones y staff generarán registros al iniciar y cerrar sesión." />
+            )}
+          </div>
+        </div>
+      </section>
+      )}
     </div>
   )
 }
@@ -3661,12 +3894,6 @@ function QrTableCard({ table }) {
             {isOccupied ? `Ocupada · ${tableActiveOrders.length} pedido${tableActiveOrders.length > 1 ? 's' : ''}` : 'Libre'}
           </div>
           <h2 className="text-xl font-black text-stone-950">{table.label}</h2>
-          {tableWaiter ? (
-            <p className="mt-1 text-sm font-bold text-stone-500">
-              <User size={14} className="mr-1 inline" />
-              {tableWaiter}
-            </p>
-          ) : null}
         </div>
         <a
           className="inline-flex h-10 items-center justify-center rounded-lg border border-stone-200 bg-white px-3 font-black"
@@ -3677,6 +3904,33 @@ function QrTableCard({ table }) {
           Menú ↗
         </a>
       </div>
+
+      {/* Waiter badge - prominent */}
+      {tableWaiter ? (
+        <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-teal-50 p-3">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-emerald-500 text-white shadow-md shadow-emerald-200">
+            <User size={20} />
+          </div>
+          <div>
+            <p className="text-[0.65rem] font-black uppercase tracking-[0.16em] text-emerald-600">
+              Mesero atendiendo
+            </p>
+            <p className="text-base font-black text-stone-950">{tableWaiter}</p>
+          </div>
+        </div>
+      ) : isOccupied ? (
+        <div className="flex items-center gap-3 rounded-xl border border-stone-200 bg-stone-50 p-3">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-stone-300 text-white">
+            <User size={20} />
+          </div>
+          <div>
+            <p className="text-[0.65rem] font-black uppercase tracking-[0.16em] text-stone-400">
+              Mesero
+            </p>
+            <p className="text-sm font-bold text-stone-500">Sin asignar (pedido del cliente)</p>
+          </div>
+        </div>
+      ) : null}
 
       {isOccupied && elapsed ? (
         <div className="flex items-center gap-3 rounded-xl border border-rose-200 bg-gradient-to-r from-rose-50 to-orange-50 p-3">

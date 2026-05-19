@@ -17,6 +17,7 @@ import {
 
 const STORAGE_KEY = 'lasthit-demo-state-v1'
 const AUTH_KEY = 'lasthit-auth-user'
+const SESSIONS_KEY = 'lasthit-sessions-v1'
 const CHANNEL_NAME = 'lasthit-demo-sync'
 const AppStoreContext = createContext(null)
 
@@ -52,9 +53,18 @@ function loadAuthUser() {
   return null
 }
 
+function loadSessions() {
+  const saved = localStorage.getItem(SESSIONS_KEY)
+  if (saved) {
+    try { return JSON.parse(saved) } catch { return [] }
+  }
+  return []
+}
+
 export function AppStoreProvider({ children }) {
   const [state, setState] = useState(loadInitialState)
   const [currentUser, setCurrentUser] = useState(loadAuthUser)
+  const [sessions, setSessions] = useState(loadSessions)
   const [remoteMode, setRemoteMode] = useState(isSupabaseEnabled())
   const [remoteError, setRemoteError] = useState('')
   const [isHydrating, setIsHydrating] = useState(isSupabaseEnabled())
@@ -62,6 +72,10 @@ export function AppStoreProvider({ children }) {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
   }, [state])
+
+  useEffect(() => {
+    localStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions))
+  }, [sessions])
 
   useEffect(() => {
     if (!isSupabaseEnabled()) {
@@ -128,6 +142,7 @@ export function AppStoreProvider({ children }) {
     () => ({
       state,
       currentUser,
+      sessions,
       remoteMode,
       remoteError,
       isHydrating,
@@ -137,11 +152,59 @@ export function AppStoreProvider({ children }) {
         if (!user) return null
         setCurrentUser(user)
         localStorage.setItem(AUTH_KEY, JSON.stringify(user))
+        // Record session start
+        const newSession = {
+          id: crypto.randomUUID(),
+          userId: user.id,
+          userName: user.name,
+          userRole: user.role,
+          loginAt: new Date().toISOString(),
+          logoutAt: null,
+          tablesServed: [],
+          ordersCreated: [],
+        }
+        setSessions((prev) => [newSession, ...prev])
         return user
       },
       logout() {
+        // Close the active session
+        if (currentUser) {
+          setSessions((prev) => {
+            const idx = prev.findIndex(
+              (s) => s.userId === currentUser.id && s.logoutAt === null,
+            )
+            if (idx >= 0) {
+              const updated = [...prev]
+              // Collect tables & orders from this session period
+              const session = updated[idx]
+              const sessionOrders = state.orders.filter(
+                (o) =>
+                  o.waiterId === currentUser.id &&
+                  new Date(o.createdAt) >= new Date(session.loginAt),
+              )
+              updated[idx] = {
+                ...session,
+                logoutAt: new Date().toISOString(),
+                tablesServed: [...new Set(sessionOrders.map((o) => o.tableLabel))],
+                ordersCreated: sessionOrders.map((o) => ({
+                  id: o.id,
+                  number: o.number,
+                  tableLabel: o.tableLabel,
+                  total: o.total,
+                  status: o.status,
+                  createdAt: o.createdAt,
+                })),
+              }
+              return updated
+            }
+            return prev
+          })
+        }
         setCurrentUser(null)
         localStorage.removeItem(AUTH_KEY)
+      },
+      getUserSessions(userId) {
+        return sessions.filter((s) => s.userId === userId)
       },
       getCartForTable(tableSlug) {
         return state.carts[tableSlug] ?? { items: [], note: '', tipPercent: 10 }
@@ -480,7 +543,7 @@ export function AppStoreProvider({ children }) {
         }))
       },
     }),
-    [currentUser, isHydrating, remoteError, remoteMode, state],
+    [currentUser, sessions, isHydrating, remoteError, remoteMode, state],
   )
 
   return <AppStoreContext.Provider value={api}>{children}</AppStoreContext.Provider>
