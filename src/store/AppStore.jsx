@@ -8,11 +8,18 @@ import {
   deleteRemoteProduct,
   isSupabaseEnabled,
   loadRemoteState,
+  loadOrganizations,
+  saveRemoteOrganization,
+  deleteRemoteOrganization,
+  saveRemoteStaffUser,
+  deleteRemoteStaffUser,
+  toggleRemoteStaffUser,
   normalizeTableSlug,
   saveRemoteProduct,
   toggleRemoteProductAvailability,
   updateRemoteOrderStatus,
   updateRemoteRestaurantConfig,
+  loginWithEmailAndPassword,
 } from '../lib/repository.js'
 
 const STORAGE_KEY = 'lasthit-demo-state-v1'
@@ -29,7 +36,6 @@ function loadInitialState() {
   const saved = localStorage.getItem(STORAGE_KEY)
   if (saved) {
     const parsed = JSON.parse(saved)
-    // Ensure new fields exist for backwards compat
     if (!parsed.staffUsers) parsed.staffUsers = cloneDemoState().staffUsers
     if (!parsed.reservations) parsed.reservations = []
     return parsed
@@ -65,39 +71,99 @@ export function AppStoreProvider({ children }) {
   const [state, setState] = useState(loadInitialState)
   const [currentUser, setCurrentUser] = useState(loadAuthUser)
   const [sessions, setSessions] = useState(loadSessions)
+  const [organizations, setOrganizations] = useState([])
+  const [currentOrganizationId, setCurrentOrganizationId] = useState(() => {
+    return localStorage.getItem('lasthit-current-org-id') || ''
+  })
+  const [impersonatedOrgId, setImpersonatedOrgId] = useState(() => {
+    return localStorage.getItem('lasthit-impersonated-org-id') || ''
+  })
+
   const [remoteMode, setRemoteMode] = useState(isSupabaseEnabled())
   const [remoteError, setRemoteError] = useState('')
   const [isHydrating, setIsHydrating] = useState(isSupabaseEnabled())
 
+  // Persist state to localStorage
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
   }, [state])
 
+  // Persist sessions to localStorage
   useEffect(() => {
     localStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions))
   }, [sessions])
 
+  // Load organizations on startup
   useEffect(() => {
     if (!isSupabaseEnabled()) {
+      const localOrgs = [
+        { id: 'org-guaton', name: 'Restaurante Guaton XII', slug: 'guaton-xii', plan: 'Venta Única', status: 'Activo', rut: '76.999.888-k', mrr: 45000 },
+        { id: 'org-dios', name: 'Restaurante El Dios', slug: 'el-dios', plan: 'Básico', status: 'Activo', rut: '77.111.222-3', mrr: 25000 },
+        { id: 'org-jefe', name: 'Empresa de Jefe', slug: 'empresa-jefe', plan: 'Venta Única', status: 'Activo', rut: '76.123.456-7', mrr: 84980 },
+        { id: 'org-ncxo', name: 'Ncxo+', slug: 'ncxo-plus', plan: 'Básico', status: 'Activo', rut: '', mrr: 0 },
+        { id: 'org-prueba', name: 'Prueba de cambio', slug: 'prueba-de-cambio', plan: 'Empresa', status: 'Activo', rut: '76.123.456-7', mrr: 0 }
+      ]
+      setOrganizations(localOrgs)
+      if (!currentOrganizationId) {
+        setCurrentOrganizationId('org-guaton')
+        localStorage.setItem('lasthit-current-org-id', 'org-guaton')
+      }
       return
     }
 
+    loadOrganizations()
+      .then((orgs) => {
+        setOrganizations(orgs)
+        if (orgs.length > 0) {
+          const savedOrgId = localStorage.getItem('lasthit-current-org-id')
+          const exists = orgs.some(o => o.id === savedOrgId)
+          if (exists) {
+            setCurrentOrganizationId(savedOrgId)
+          } else {
+            setCurrentOrganizationId('')
+            localStorage.removeItem('lasthit-current-org-id')
+          }
+        }
+      })
+      .catch(console.error)
+  }, [])
+
+  // Load tenant-specific state
+  useEffect(() => {
+    if (!currentOrganizationId) return
+
+    localStorage.setItem('lasthit-current-org-id', currentOrganizationId)
+
+    if (!isSupabaseEnabled()) {
+      const org = organizations.find(o => o.id === currentOrganizationId)
+      if (org) {
+        setState(current => ({
+          ...current,
+          restaurant: {
+            ...current.restaurant,
+            name: org.name,
+            primaryColor: org.slug === 'el-dios' ? '#10b981' : '#c2553d'
+          }
+        }))
+      }
+      setIsHydrating(false)
+      return
+    }
+
+    setIsHydrating(true)
     let active = true
-    loadRemoteState()
+    loadRemoteState(currentOrganizationId)
       .then((remoteState) => {
         if (!active || !remoteState) return
         setState((current) => ({
           ...remoteState,
-          carts: current.carts,
-          staffUsers: current.staffUsers || cloneDemoState().staffUsers,
+          carts: current.carts || {},
           reservations: current.reservations || [],
         }))
-        setRemoteMode(true)
         setRemoteError('')
       })
       .catch((error) => {
         if (!active) return
-        setRemoteMode(false)
         setRemoteError(error.message)
       })
       .finally(() => {
@@ -107,8 +173,9 @@ export function AppStoreProvider({ children }) {
     return () => {
       active = false
     }
-  }, [])
+  }, [currentOrganizationId, organizations])
 
+  // Sync state between browser tabs
   useEffect(() => {
     const channel = new BroadcastChannel(CHANNEL_NAME)
     channel.onmessage = (event) => {
@@ -143,15 +210,75 @@ export function AppStoreProvider({ children }) {
       state,
       currentUser,
       sessions,
+      organizations,
+      currentOrganizationId,
+      impersonatedOrgId,
       remoteMode,
       remoteError,
       isHydrating,
-      login(pin) {
+      async login(pinOrEmail, password) {
+        // 1. Superadmin check
+        if (pinOrEmail?.trim().toLowerCase() === 'diegohenriquez176@gmail.com') {
+          if (password !== 'diego2412') {
+            throw new Error('Contraseña incorrecta para Superadmin')
+          }
+          const superadminUser = {
+            id: 'super-admin-user',
+            name: 'Diegol Admin',
+            role: 'superadmin',
+            email: 'diegohenriquez176@gmail.com',
+            active: true
+          }
+          setCurrentUser(superadminUser)
+          localStorage.setItem(AUTH_KEY, JSON.stringify(superadminUser))
+          return superadminUser
+        }
+
+        // 2. Email-based Restaurant Admin check
+        if (pinOrEmail?.includes('@')) {
+          if (remoteMode) {
+            const data = await loginWithEmailAndPassword(pinOrEmail, password)
+            if (!data) {
+              throw new Error('Credenciales incorrectas o usuario inactivo')
+            }
+            const loggedUser = {
+              id: data.id,
+              name: data.name,
+              role: data.role,
+              pin: data.pin,
+              email: data.email,
+              active: data.active,
+              organizationId: data.organization_id,
+            }
+            setCurrentUser(loggedUser)
+            localStorage.setItem(AUTH_KEY, JSON.stringify(loggedUser))
+            
+            // Switch to the logged user's organization!
+            setCurrentOrganizationId(data.organization_id)
+            localStorage.setItem('lasthit-current-org-id', data.organization_id)
+            return loggedUser
+          } else {
+            // Local mode fallback
+            const localUser = (state.staffUsers || []).find(
+              (u) => u.email?.trim().toLowerCase() === pinOrEmail.trim().toLowerCase() && u.password === password && u.active
+            )
+            if (!localUser) {
+              throw new Error('Credenciales incorrectas o usuario inactivo')
+            }
+            setCurrentUser(localUser)
+            localStorage.setItem(AUTH_KEY, JSON.stringify(localUser))
+            return localUser
+          }
+        }
+
+        // 3. PIN-based Staff login (as original)
         const users = state.staffUsers || []
-        const user = users.find((u) => u.pin === pin && u.active)
+        const user = users.find((u) => u.pin === pinOrEmail && u.active)
         if (!user) return null
+
         setCurrentUser(user)
         localStorage.setItem(AUTH_KEY, JSON.stringify(user))
+
         // Record session start
         const newSession = {
           id: crypto.randomUUID(),
@@ -166,16 +293,74 @@ export function AppStoreProvider({ children }) {
         setSessions((prev) => [newSession, ...prev])
         return user
       },
+      async registerRestaurant(restaurantName, adminName, adminEmail, adminPassword) {
+        const slug = restaurantName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+        const orgPayload = {
+          name: restaurantName,
+          slug,
+          plan: 'Básico',
+          status: 'Activo',
+          rut: '',
+          mrr: 0
+        }
+        
+        let newOrg
+        if (remoteMode) {
+          newOrg = await saveRemoteOrganization(orgPayload)
+        } else {
+          newOrg = { ...orgPayload, id: crypto.randomUUID(), created_at: new Date().toISOString() }
+        }
+
+        // Add to state
+        setOrganizations((prev) => [...prev, newOrg])
+
+        // Create default restaurant settings
+        const settingsPayload = {
+          singleton: false,
+          name: restaurantName,
+          whatsapp: '',
+          base_url: window.location.origin,
+          primary_color: '#0d9488',
+        }
+        if (remoteMode) {
+          await updateRemoteRestaurantConfig(settingsPayload, newOrg.id)
+        }
+
+        // Create admin user in staff_users
+        const pin = Math.floor(1000 + Math.random() * 9000).toString()
+        const staffPayload = {
+          id: crypto.randomUUID(),
+          name: adminName,
+          role: 'administrador',
+          pin,
+          active: true,
+          email: adminEmail.trim().toLowerCase(),
+          password: adminPassword,
+          createdAt: new Date().toISOString()
+        }
+
+        if (remoteMode) {
+          await saveRemoteStaffUser(staffPayload, newOrg.id)
+          // reload organizations
+          const orgs = await loadOrganizations()
+          setOrganizations(orgs)
+        } else {
+          persist((current) => ({
+            ...current,
+            staffUsers: [...(current.staffUsers || []), staffPayload]
+          }))
+        }
+        
+        return { organization: newOrg, staff: staffPayload }
+      },
       logout() {
-        // Close the active session
-        if (currentUser) {
+        if (currentUser && currentUser.role !== 'superadmin') {
           setSessions((prev) => {
             const idx = prev.findIndex(
               (s) => s.userId === currentUser.id && s.logoutAt === null,
             )
             if (idx >= 0) {
               const updated = [...prev]
-              // Collect tables & orders from this session period
               const session = updated[idx]
               const sessionOrders = state.orders.filter(
                 (o) =>
@@ -202,6 +387,60 @@ export function AppStoreProvider({ children }) {
         }
         setCurrentUser(null)
         localStorage.removeItem(AUTH_KEY)
+
+        // Clear impersonation if logging out
+        if (impersonatedOrgId) {
+          localStorage.removeItem('lasthit-impersonated-org-id')
+          setImpersonatedOrgId('')
+          // Reset to default org
+          const mainOrg = organizations.find(o => o.slug === 'guaton-xii') || organizations[0]
+          if (mainOrg) {
+            setCurrentOrganizationId(mainOrg.id)
+            localStorage.setItem('lasthit-current-org-id', mainOrg.id)
+          }
+        }
+      },
+      switchOrganization(orgId) {
+        setCurrentOrganizationId(orgId)
+      },
+      impersonateTenant(tenantId) {
+        if (tenantId) {
+          setImpersonatedOrgId(tenantId)
+          localStorage.setItem('lasthit-impersonated-org-id', tenantId)
+          setCurrentOrganizationId(tenantId)
+        } else {
+          setImpersonatedOrgId('')
+          localStorage.removeItem('lasthit-impersonated-org-id')
+          const savedOrgId = localStorage.getItem('lasthit-current-org-id')
+          if (savedOrgId) {
+            setCurrentOrganizationId(savedOrgId)
+          } else if (organizations.length > 0) {
+            const mainOrgId = organizations.find(o => o.slug === 'guaton-xii')?.id || organizations[0].id
+            setCurrentOrganizationId(mainOrgId)
+          }
+        }
+      },
+      async saveOrganization(org) {
+        let savedOrg = org
+        if (remoteMode) {
+          savedOrg = await saveRemoteOrganization(org)
+        } else {
+          savedOrg = { ...org, id: org.id || crypto.randomUUID(), created_at: new Date().toISOString() }
+        }
+        setOrganizations((prev) => {
+          const exists = prev.some((o) => o.id === savedOrg.id)
+          if (exists) {
+            return prev.map((o) => (o.id === savedOrg.id ? savedOrg : o))
+          }
+          return [...prev, savedOrg]
+        })
+        return savedOrg
+      },
+      async removeOrganization(orgId) {
+        if (remoteMode) {
+          await deleteRemoteOrganization(orgId)
+        }
+        setOrganizations((prev) => prev.filter((o) => o.id !== orgId))
       },
       getUserSessions(userId) {
         return sessions.filter((s) => s.userId === userId)
@@ -337,7 +576,7 @@ export function AppStoreProvider({ children }) {
         }
 
         if (remoteMode) {
-          const remoteOrder = await createRemoteOrder(payload, state)
+          const remoteOrder = await createRemoteOrder(payload, state, currentOrganizationId)
           remoteOrder.paymentMethod = null
           remoteOrder.waiterId = payload.waiterId || null
           remoteOrder.waiterName = payload.waiterName || null
@@ -378,7 +617,7 @@ export function AppStoreProvider({ children }) {
       async saveProduct(product) {
         let remoteProduct = null
         if (remoteMode) {
-          remoteProduct = await saveRemoteProduct(product, state)
+          remoteProduct = await saveRemoteProduct(product, state, currentOrganizationId)
         }
         persist((current) => {
           const normalized = {
@@ -391,7 +630,7 @@ export function AppStoreProvider({ children }) {
                   category: remoteProduct.category_name,
                   image:
                     remoteProduct.image_url ||
-                    buildProductImage(remoteProduct.name, current.restaurant.primaryColor),
+                    buildProductImage(remoteProduct.name, current.restaurant.primaryColor || '#c2553d'),
                   available: remoteProduct.available,
                   featured: remoteProduct.featured,
                   vegetarian: remoteProduct.vegetarian,
@@ -402,7 +641,7 @@ export function AppStoreProvider({ children }) {
             image:
               remoteProduct?.image_url ||
               product.image ||
-              buildProductImage(product.name, current.restaurant.primaryColor),
+              buildProductImage(product.name, current.restaurant.primaryColor || '#c2553d'),
           }
           const exists = current.products.some((item) => item.id === normalized.id)
           return {
@@ -439,7 +678,7 @@ export function AppStoreProvider({ children }) {
       async addCategory(name) {
         let remoteCategory = null
         if (remoteMode) {
-          remoteCategory = await addRemoteCategory(name)
+          remoteCategory = await addRemoteCategory(name, currentOrganizationId)
         }
         persist((current) => ({
           ...current,
@@ -457,7 +696,7 @@ export function AppStoreProvider({ children }) {
       async addTable(label) {
         let remoteTable = null
         if (remoteMode) {
-          remoteTable = await addRemoteTable(label)
+          remoteTable = await addRemoteTable(label, currentOrganizationId)
         }
         persist((current) => ({
           ...current,
@@ -473,7 +712,7 @@ export function AppStoreProvider({ children }) {
       },
       async updateRestaurantConfig(config) {
         if (remoteMode) {
-          await updateRemoteRestaurantConfig(config)
+          await updateRemoteRestaurantConfig(config, currentOrganizationId)
         }
         persist((current) => ({
           ...current,
@@ -482,7 +721,7 @@ export function AppStoreProvider({ children }) {
       },
 
       // ── Staff Users ──
-      addStaffUser(name, role) {
+      async addStaffUser(name, role) {
         const existingPins = (state.staffUsers || []).map((u) => u.pin)
         const pin = generatePin(existingPins)
         const newUser = {
@@ -493,23 +732,47 @@ export function AppStoreProvider({ children }) {
           active: true,
           createdAt: new Date().toISOString(),
         }
+        if (remoteMode) {
+          const remoteUser = await saveRemoteStaffUser(newUser, currentOrganizationId)
+          persist((current) => ({
+            ...current,
+            staffUsers: [...(current.staffUsers || []), {
+              id: remoteUser.id,
+              name: remoteUser.name,
+              role: remoteUser.role,
+              pin: remoteUser.pin,
+              active: remoteUser.active,
+              createdAt: remoteUser.created_at,
+            }],
+          }))
+          return remoteUser
+        }
         persist((current) => ({
           ...current,
           staffUsers: [...(current.staffUsers || []), newUser],
         }))
         return newUser
       },
-      removeStaffUser(userId) {
+      async removeStaffUser(userId) {
+        if (remoteMode) {
+          await deleteRemoteStaffUser(userId)
+        }
         persist((current) => ({
           ...current,
           staffUsers: (current.staffUsers || []).filter((u) => u.id !== userId),
         }))
       },
-      toggleStaffUser(userId) {
+      async toggleStaffUser(userId) {
+        const u = (state.staffUsers || []).find((x) => x.id === userId)
+        if (!u) return
+        const nextActive = !u.active
+        if (remoteMode) {
+          await toggleRemoteStaffUser(userId, nextActive)
+        }
         persist((current) => ({
           ...current,
-          staffUsers: (current.staffUsers || []).map((u) =>
-            u.id === userId ? { ...u, active: !u.active } : u,
+          staffUsers: (current.staffUsers || []).map((user) =>
+            user.id === userId ? { ...user, active: nextActive } : user,
           ),
         }))
       },
@@ -543,7 +806,7 @@ export function AppStoreProvider({ children }) {
         }))
       },
     }),
-    [currentUser, sessions, isHydrating, remoteError, remoteMode, state],
+    [currentUser, sessions, organizations, currentOrganizationId, impersonatedOrgId, isHydrating, remoteError, remoteMode, state],
   )
 
   return <AppStoreContext.Provider value={api}>{children}</AppStoreContext.Provider>

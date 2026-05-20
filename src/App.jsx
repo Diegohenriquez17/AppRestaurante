@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useMemo } from 'react'
 import QRCode from 'qrcode'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   Area,
   AreaChart,
@@ -11,6 +11,9 @@ import {
   Tooltip,
   XAxis,
   YAxis,
+  Cell,
+  Pie,
+  PieChart,
 } from 'recharts'
 import {
   Activity,
@@ -27,6 +30,7 @@ import {
   DollarSign,
   Download,
   Eye,
+  EyeOff,
   Flame,
   Hash,
   History,
@@ -55,6 +59,13 @@ import {
   UserPlus,
   Users,
   X,
+  Building,
+  Shield,
+  Globe,
+  Sparkles,
+  Coins,
+  Laptop,
+  Smartphone,
 } from 'lucide-react'
 import {
   Link,
@@ -203,75 +214,108 @@ function CustomSelect({
 }
 
 function App() {
-  const { currentUser } = useAppStore()
+  const { impersonatedOrgId, impersonateTenant, state } = useAppStore()
+  const navigate = useNavigate()
 
   return (
-    <Routes>
-      {/* Public routes */}
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/menu/:mesaId" element={<MenuPage />} />
+    <div className="flex flex-col min-h-screen">
+      {impersonatedOrgId && (
+        <div className="bg-[#10b981] text-white px-4 py-2.5 flex items-center justify-between text-xs font-bold shadow-md z-[999] select-none border-b border-emerald-500">
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+            </span>
+            <span>MODO SOPORTE ACTIVO: Visualizando datos de "{state?.restaurant?.name || 'Restaurante'}"</span>
+          </div>
+          <button
+            onClick={() => {
+              impersonateTenant(null)
+              navigate('/superadmin')
+            }}
+            className="bg-white/20 hover:bg-white/30 text-white px-3 py-1 rounded-full transition border border-white/20 text-[0.7rem] uppercase tracking-wider"
+          >
+            Volver a Superadmin
+          </button>
+        </div>
+      )}
+      <div className="flex-1">
+        <Routes>
+          {/* Public routes */}
+          <Route path="/login" element={<LoginPage initialMode="email" />} />
+          <Route path="/pin" element={<LoginPage initialMode="pin" />} />
+          <Route path="/menu/:mesaId" element={<MenuPage />} />
 
-      {/* Protected: Cocina - only cocina + admin */}
-      <Route path="/cocina" element={
-        <RequireAuth roles={['administrador', 'cocina']}>
-          <KitchenPage />
-        </RequireAuth>
-      } />
+          {/* Protected: Cocina */}
+          <Route path="/cocina" element={
+            <RequireAuth roles={['administrador', 'cocina']}>
+              <KitchenPage />
+            </RequireAuth>
+          } />
 
-      {/* Protected: POS */}
-      <Route path="/pos" element={
-        <RequireAuth roles={['administrador', 'cajero']}>
-          <PosPage />
-        </RequireAuth>
-      } />
+          {/* Protected: POS */}
+          <Route path="/pos" element={
+            <RequireAuth roles={['administrador', 'cajero']}>
+              <PosPage />
+            </RequireAuth>
+          } />
 
-      {/* Protected: Cajero layout (limited views) */}
-      <Route path="/cajero" element={
-        <RequireAuth roles={['cajero']}>
-          <CajeroLayout />
-        </RequireAuth>
-      }>
-        <Route index element={<AdminOrdersPage />} />
-        <Route path="pedidos" element={<AdminOrdersPage />} />
-        <Route path="reportes" element={<AdminReportsPage />} />
-      </Route>
+          {/* Protected: Cajero layout */}
+          <Route path="/cajero" element={
+            <RequireAuth roles={['cajero']}>
+              <CajeroLayout />
+            </RequireAuth>
+          }>
+            <Route index element={<AdminOrdersPage />} />
+            <Route path="pedidos" element={<AdminOrdersPage />} />
+            <Route path="reportes" element={<AdminReportsPage />} />
+          </Route>
 
-      {/* Protected: Garzon layout (tables + menu) */}
-      <Route path="/garzon" element={
-        <RequireAuth roles={['garzon']}>
-          <GarzonLayout />
-        </RequireAuth>
-      }>
-        <Route index element={<GarzonTablesPage />} />
-      </Route>
-      <Route path="/garzon/mesa/:mesaId" element={
-        <RequireAuth roles={['garzon']}>
-          <MenuPage isGarzon />
-        </RequireAuth>
-      } />
+          {/* Protected: Garzon layout */}
+          <Route path="/garzon" element={
+            <RequireAuth roles={['garzon']}>
+              <GarzonLayout />
+            </RequireAuth>
+          }>
+            <Route index element={<GarzonTablesPage />} />
+          </Route>
+          <Route path="/garzon/mesa/:mesaId" element={
+            <RequireAuth roles={['garzon']}>
+              <MenuPage isGarzon />
+            </RequireAuth>
+          } />
 
-      {/* Protected: Admin - full access */}
-      <Route path="/admin" element={
-        <RequireAuth roles={['administrador']}>
-          <AdminLayout />
-        </RequireAuth>
-      }>
-        <Route index element={<AdminDashboard />} />
-        <Route path="productos" element={<AdminProductsPage />} />
-        <Route path="categorias" element={<AdminCategoriesPage />} />
-        <Route path="promociones" element={<AdminPromotionsPage />} />
-        <Route path="mesas" element={<AdminTablesPage />} />
-        <Route path="pedidos" element={<AdminOrdersPage />} />
-        <Route path="reservas" element={<AdminReservationsPage />} />
-        <Route path="usuarios" element={<AdminUsersPage />} />
-        <Route path="configuracion" element={<AdminConfigPage />} />
-        <Route path="reportes" element={<AdminReportsPage />} />
-      </Route>
+          {/* Protected: Admin */}
+          <Route path="/admin" element={
+            <RequireAuth roles={['administrador']}>
+              <AdminLayout />
+            </RequireAuth>
+          }>
+            <Route index element={<AdminDashboard />} />
+            <Route path="productos" element={<AdminProductsPage />} />
+            <Route path="categorias" element={<AdminCategoriesPage />} />
+            <Route path="promociones" element={<AdminPromotionsPage />} />
+            <Route path="mesas" element={<AdminTablesPage />} />
+            <Route path="pedidos" element={<AdminOrdersPage />} />
+            <Route path="reservas" element={<AdminReservationsPage />} />
+            <Route path="usuarios" element={<AdminUsersPage />} />
+            <Route path="configuracion" element={<AdminConfigPage />} />
+            <Route path="reportes" element={<AdminReportsPage />} />
+          </Route>
 
-      {/* Default: redirect based on auth state */}
-      <Route path="/" element={<RootRedirect />} />
-      <Route path="*" element={<RootRedirect />} />
-    </Routes>
+          {/* Protected: Superadmin */}
+          <Route path="/superadmin" element={
+            <RequireAuth roles={['superadmin']}>
+              <SuperadminDashboard />
+            </RequireAuth>
+          } />
+
+          {/* Default redirects */}
+          <Route path="/" element={<RootRedirect />} />
+          <Route path="*" element={<RootRedirect />} />
+        </Routes>
+      </div>
+    </div>
   )
 }
 
@@ -279,6 +323,7 @@ function RootRedirect() {
   const { currentUser } = useAppStore()
   if (!currentUser) return <Navigate to="/login" replace />
   const redirectMap = {
+    superadmin: '/superadmin',
     administrador: '/admin',
     cocina: '/cocina',
     cajero: '/cajero',
@@ -296,8 +341,8 @@ function RequireAuth({ roles, children }) {
   }
 
   if (roles && !roles.includes(currentUser.role)) {
-    // User is authenticated but doesn't have the right role
     const redirectMap = {
+      superadmin: '/superadmin',
       administrador: '/admin',
       cocina: '/cocina',
       cajero: '/cajero',
@@ -309,17 +354,86 @@ function RequireAuth({ roles, children }) {
   return children
 }
 
-function LoginPage() {
-  const { state, login, currentUser } = useAppStore()
+function NexoLogo({ className = "h-20 w-20 text-white" }) {
+  return (
+    <svg className={className} viewBox="0 0 100 100" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="50,15 85,35 85,75 50,95 15,75 15,35" fill="none" className="stroke-current" />
+      <line x1="50" y1="15" x2="50" y2="95" className="stroke-current opacity-30" />
+      <line x1="15" y1="35" x2="50" y2="55" className="stroke-current opacity-30" />
+      <line x1="85" y1="35" x2="50" y2="55" className="stroke-current opacity-30" />
+      <path d="M30,65 L45,50 L60,58 L75,38" className="stroke-teal-200" strokeWidth="3" />
+      <circle cx="75" cy="38" r="3" fill="currentColor" />
+      <polyline points="68,38 75,38 75,45" className="stroke-teal-200" strokeWidth="3" />
+    </svg>
+  )
+}
+
+function LoginPage({ initialMode = 'email' }) {
+  const { state, login, currentUser, organizations, switchOrganization, currentOrganizationId, registerRestaurant } = useAppStore()
   const navigate = useNavigate()
+  const [loginMode, setLoginMode] = useState(initialMode) // 'email' | 'pin'
   const [pin, setPin] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [shake, setShake] = useState(false)
   const inputRef = useRef(null)
 
+  const [orgSlugInput, setOrgSlugInput] = useState('')
+  const [orgSearchError, setOrgSearchError] = useState('')
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const orgParam = params.get('org') || params.get('sucursal')
+    if (orgParam && organizations.length > 0) {
+      const cleanParam = orgParam.trim().toLowerCase()
+      const found = organizations.find(
+        (o) =>
+          o.slug?.trim().toLowerCase() === cleanParam ||
+          o.name?.trim().toLowerCase() === cleanParam
+      )
+      if (found) {
+        switchOrganization(found.id)
+      }
+    }
+  }, [organizations, switchOrganization])
+
+  const handleVerifyOrg = () => {
+    if (!orgSlugInput.trim()) {
+      setOrgSearchError('Por favor ingresa el nombre o código de tu sucursal.')
+      return
+    }
+    const cleanInput = orgSlugInput.trim().toLowerCase()
+    const found = organizations
+      .filter((o) => o.slug !== 'empresa-jefe' && o.slug !== 'ncxo-plus' && o.slug !== 'prueba-de-cambio')
+      .find(
+        (o) =>
+          o.slug?.trim().toLowerCase() === cleanInput ||
+          o.name?.trim().toLowerCase() === cleanInput
+      )
+    if (found) {
+      switchOrganization(found.id)
+      setOrgSearchError('')
+    } else {
+      setOrgSearchError('No se encontró ninguna sucursal con ese nombre o código.')
+    }
+  }
+
+  // Registration modal state
+  const [showRegisterModal, setShowRegisterModal] = useState(false)
+  const [regCompanyName, setRegCompanyName] = useState('')
+  const [regAdminName, setRegAdminName] = useState('')
+  const [regEmail, setRegEmail] = useState('')
+  const [regPassword, setRegPassword] = useState('')
+  const [regError, setRegError] = useState('')
+  const [regSuccess, setRegSuccess] = useState(false)
+  const [regLoading, setRegLoading] = useState(false)
+
   useEffect(() => {
     if (currentUser) {
       const redirectMap = {
+        superadmin: '/superadmin',
         administrador: '/admin',
         cocina: '/cocina',
         cajero: '/cajero',
@@ -329,200 +443,1351 @@ function LoginPage() {
     }
   }, [currentUser, navigate])
 
-  useEffect(() => {
-    inputRef.current?.focus()
-  }, [])
-
-  const handlePinChange = (value) => {
+  const handlePinChange = async (value) => {
     const digits = value.replace(/\D/g, '').slice(0, 4)
     setPin(digits)
     setError('')
 
     if (digits.length === 4) {
-      const user = login(digits)
-      if (user) {
-        const redirectMap = {
-          administrador: '/admin',
-          cocina: '/cocina',
-          cajero: '/cajero',
-          garzon: '/garzon',
+      try {
+        const user = await login(digits)
+        if (user) {
+          const redirectMap = {
+            administrador: '/admin',
+            cocina: '/cocina',
+            cajero: '/cajero',
+            garzon: '/garzon',
+          }
+          navigate(redirectMap[user.role] || '/admin', { replace: true })
+        } else {
+          setError('PIN incorrecto o usuario inactivo')
+          setShake(true)
+          setTimeout(() => {
+            setShake(false)
+            setPin('')
+          }, 600)
         }
-        navigate(redirectMap[user.role] || '/admin', { replace: true })
-      } else {
-        setError('PIN incorrecto o usuario inactivo')
+      } catch (err) {
+        setError(err.message || 'Error al iniciar sesión')
         setShake(true)
         setTimeout(() => {
           setShake(false)
           setPin('')
-          inputRef.current?.focus()
         }, 600)
       }
     }
   }
 
-  const handleSubmit = (e) => {
+  const handleEmailSubmit = async (e) => {
     e.preventDefault()
-    if (pin.length < 4) {
-      setError('Ingresa tu PIN de 4 dígitos')
+    setError('')
+    if (!email) {
+      setError('Ingresa tu correo electrónico')
       return
     }
-    handlePinChange(pin)
+    if (!password) {
+      setError('Ingresa tu contraseña')
+      return
+    }
+
+    try {
+      const user = await login(email, password)
+      if (user) {
+        if (user.role === 'superadmin') {
+          navigate('/superadmin', { replace: true })
+        } else {
+          navigate('/admin', { replace: true })
+        }
+      } else {
+        setError('Credenciales incorrectas o usuario inactivo')
+        setShake(true)
+        setTimeout(() => setShake(false), 600)
+      }
+    } catch (err) {
+      setError(err.message || 'Error al iniciar sesión')
+      setShake(true)
+      setTimeout(() => setShake(false), 600)
+    }
   }
 
-  const roleLabels = {
-    administrador: { icon: UserCog, label: 'Administrador', desc: 'Acceso completo', color: 'from-purple-500 to-indigo-600' },
-    cocina: { icon: ChefHat, label: 'Cocina', desc: 'Panel de cocina', color: 'from-amber-500 to-orange-600' },
-    cajero: { icon: CreditCard, label: 'Cajero', desc: 'Pedidos y cobros', color: 'from-blue-500 to-cyan-600' },
-    garzon: { icon: User, label: 'Garzón', desc: 'Atención de mesas', color: 'from-emerald-500 to-teal-600' },
+  const handleRegisterSubmit = async (e) => {
+    e.preventDefault()
+    setRegError('')
+    if (!regCompanyName || !regAdminName || !regEmail || !regPassword) {
+      setRegError('Completa todos los campos')
+      return
+    }
+    setRegLoading(true)
+    try {
+      await registerRestaurant(regCompanyName, regAdminName, regEmail, regPassword)
+      setRegSuccess(true)
+      setTimeout(() => {
+        setShowRegisterModal(false)
+        setRegSuccess(false)
+        setRegCompanyName('')
+        setRegAdminName('')
+        setRegEmail('')
+        setRegPassword('')
+        setEmail(regEmail)
+      }, 2500)
+    } catch (err) {
+      setRegError(err.message || 'Error al registrar la empresa')
+    } finally {
+      setRegLoading(false)
+    }
+  }
+
+  // Filter organizations to exclude internal management orgs
+  const eligibleOrgs = organizations.filter(
+    (o) => o.slug !== 'empresa-jefe' && o.slug !== 'ncxo-plus' && o.slug !== 'prueba-de-cambio'
+  )
+
+  const activeOrg = organizations.find((o) => o.id === currentOrganizationId)
+
+  return (
+    <div className="flex min-h-screen bg-slate-50 font-sans">
+      {/* LEFT PANEL: Branding (Teal Gradient / Nexo style) */}
+      <div className="relative hidden w-1/2 flex-col justify-between bg-teal-800 p-12 text-white lg:flex overflow-hidden">
+        {/* Background wave decorative pattern */}
+        <div className="absolute inset-0 opacity-[0.08] pointer-events-none">
+          <svg className="h-full w-full" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                <path d="M 40 0 L 0 0 0 40" fill="none" stroke="currentColor" strokeWidth="1" />
+              </pattern>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#grid)" />
+          </svg>
+        </div>
+        <div className="absolute -right-32 -bottom-32 h-[450px] w-[450px] rounded-full bg-teal-600/30 blur-[100px]" />
+        
+        {/* Top brand indicator */}
+        <div className="z-10 flex items-center gap-2">
+          <span className="text-sm font-bold tracking-[0.2em] uppercase opacity-75">AcroDevs Systems</span>
+        </div>
+
+        {/* Center graphics matching nexo.acrodevs.cl */}
+        <div className="z-10 my-auto flex flex-col items-center text-center">
+          <motion.div
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ duration: 0.5 }}
+            className="mb-8"
+          >
+            <NexoLogo className="h-28 w-28 text-teal-200 drop-shadow-xl animate-pulse" />
+          </motion.div>
+
+          <h2 className="text-4xl font-extrabold tracking-tight text-white drop-shadow-md">
+            Empresa de Jefe
+          </h2>
+          <p className="mt-3 text-lg font-medium text-teal-100 opacity-90">
+            Sistema Inteligente de Gestión
+          </p>
+
+          <div className="mt-8 flex items-center gap-1.5 rounded-full border border-teal-400/30 bg-teal-900/30 px-4 py-1.5 text-sm font-bold text-teal-200">
+            <CheckCircle2 size={16} className="text-teal-300" />
+            <span>Empresa verificada ✓</span>
+          </div>
+        </div>
+
+        {/* Footer legal */}
+        <div className="z-10 flex justify-between text-xs text-teal-200/60">
+          <span>AcroDevs · Sistema de Ventas</span>
+          <div className="flex gap-4">
+            <a href="#" className="hover:underline">Términos</a>
+            <a href="#" className="hover:underline">Privacidad</a>
+            <a href="#" className="hover:underline">Contacto</a>
+          </div>
+        </div>
+      </div>
+
+      {/* RIGHT PANEL: Authentication Form */}
+      <div className="flex w-full flex-col justify-between bg-white px-6 py-12 lg:w-1/2 md:px-16 lg:px-24">
+        {/* Responsive Header for Mobile/Tablet */}
+        <div className="flex justify-between items-center lg:hidden">
+          <div className="flex items-center gap-2 text-teal-700">
+            <NexoLogo className="h-10 w-10 text-teal-600" />
+            <span className="font-extrabold text-lg">Empresa de Jefe</span>
+          </div>
+          <span className="text-xs bg-teal-50 border border-teal-200 px-2 py-0.5 rounded text-teal-700 font-bold">✓ Verificado</span>
+        </div>
+
+        <div className="my-auto mx-auto w-full max-w-md">
+          {/* Lock/Security Icon Badge */}
+          <div className="mb-6 flex justify-center lg:justify-start">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-teal-50 text-teal-600 border border-teal-100">
+              <Lock size={20} />
+            </div>
+          </div>
+
+          {/* Heading */}
+          <div className="text-center lg:text-left">
+            <h1 className="text-2xl font-black text-slate-800">
+              {loginMode === 'email' ? 'Administración' : 'Personal de Local'}
+            </h1>
+            <p className="mt-1.5 text-sm text-slate-500 font-semibold">
+              {loginMode === 'email' 
+                ? 'Ingresa las credenciales de tu empresa' 
+                : 'Selecciona tu sucursal e ingresa tu PIN de acceso'}
+            </p>
+          </div>
+
+          {/* Error Message Alert */}
+          {error && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mt-4 rounded-lg bg-rose-50 border border-rose-100 p-3 text-xs font-bold text-rose-600 text-center"
+            >
+              {error}
+            </motion.div>
+          )}
+
+          {/* Email / Password Form */}
+          {loginMode === 'email' ? (
+            <form onSubmit={handleEmailSubmit} className="mt-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                  Correo electrónico
+                </label>
+                <div className="relative">
+                  <User className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => { setEmail(e.target.value); setError(''); }}
+                    placeholder="ejemplo@empresa.com"
+                    className="h-12 w-full rounded-lg border border-slate-200 bg-slate-50/50 pl-11 pr-4 text-sm font-semibold text-slate-800 outline-none transition focus:border-teal-500 focus:bg-white focus:ring-1 focus:ring-teal-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <div className="flex justify-between items-center mb-1.5">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">
+                    Contraseña
+                  </label>
+                  <button type="button" className="text-xs font-bold text-teal-600 hover:underline">
+                    ¿Olvidaste tu contraseña?
+                  </button>
+                </div>
+                <div className="relative">
+                  <Lock className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => { setPassword(e.target.value); setError(''); }}
+                    placeholder="••••••••"
+                    className="h-12 w-full rounded-lg border border-slate-200 bg-slate-50/50 pl-11 pr-12 text-sm font-semibold text-slate-800 outline-none transition focus:border-teal-500 focus:bg-white focus:ring-1 focus:ring-teal-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition"
+                  >
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+
+              <motion.button
+                whileTap={{ scale: 0.98 }}
+                type="submit"
+                className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-[#0d9488] hover:bg-[#0f766e] text-sm font-bold text-white shadow-md shadow-teal-700/10 transition"
+              >
+                <span>Iniciar Sesión</span>
+              </motion.button>
+            </form>
+          ) : (
+            /* PIN Staff Login Form */
+            <form onSubmit={(e) => e.preventDefault()} className="mt-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                  Sucursal / Restaurante
+                </label>
+                {activeOrg ? (
+                  <div className="flex h-12 w-full items-center justify-between rounded-lg border border-teal-200 bg-teal-50/50 px-4 text-sm font-semibold text-teal-800">
+                    <div className="flex items-center gap-2">
+                      <Building className="h-4 w-4 text-teal-600" />
+                      <span>{activeOrg.name}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        switchOrganization('')
+                        setOrgSlugInput('')
+                        setOrgSearchError('')
+                        setPin('')
+                      }}
+                      className="text-xs font-bold text-teal-600 hover:text-teal-800 hover:underline transition"
+                    >
+                      Cambiar
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="relative">
+                      <Building className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Escribe el nombre o código de tu sucursal"
+                        value={orgSlugInput}
+                        onChange={(e) => {
+                          setOrgSlugInput(e.target.value)
+                          setOrgSearchError('')
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            handleVerifyOrg()
+                          }
+                        }}
+                        className="h-12 w-full rounded-lg border border-slate-200 bg-slate-50/50 pl-11 pr-4 text-sm font-semibold text-slate-800 outline-none transition focus:border-teal-500 focus:bg-white focus:ring-1 focus:ring-teal-500 placeholder:text-slate-400"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleVerifyOrg}
+                      className="h-10 w-full rounded-lg bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 shadow"
+                    >
+                      Verificar Sucursal
+                    </button>
+                    {orgSearchError && (
+                      <p className="text-xs text-red-500 font-semibold">{orgSearchError}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {activeOrg && (
+                <>
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                      PIN de acceso (4 dígitos)
+                    </label>
+                    <motion.div animate={shake ? { x: [-10, 10, -6, 6, -3, 3, 0] } : {}} transition={{ duration: 0.4 }}>
+                      <div className="relative">
+                        <Lock className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                        <input
+                          ref={inputRef}
+                          type="password"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                          maxLength={4}
+                          value={pin}
+                          onChange={(e) => handlePinChange(e.target.value)}
+                          placeholder="••••"
+                          className="h-12 w-full rounded-lg border border-slate-200 bg-slate-50/50 pl-11 text-center text-xl font-bold tracking-[0.5em] text-slate-800 outline-none transition focus:border-teal-500 focus:bg-white focus:ring-1 focus:ring-teal-500 placeholder:tracking-[0.2em] placeholder:text-slate-300"
+                        />
+                      </div>
+                    </motion.div>
+                  </div>
+
+                  <div className="flex items-center justify-center gap-3 py-2">
+                    {[0, 1, 2, 3].map((i) => (
+                      <div
+                        key={i}
+                        className={`h-2.5 w-2.5 rounded-full border transition-all ${
+                          pin.length > i ? 'bg-teal-600 border-teal-600 scale-110' : 'border-slate-300 bg-slate-100'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
+            </form>
+          )}
+
+          {/* Links and Mode Switchers */}
+          <div className="mt-8 flex flex-col items-center space-y-3 text-center">
+            {loginMode === 'email' && (
+              <button
+                type="button"
+                onClick={() => setShowRegisterModal(true)}
+                className="text-xs font-extrabold text-teal-600 hover:text-teal-700 hover:underline transition"
+              >
+                Registrar nueva empresa
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Footer brand info */}
+        <div className="mt-12 text-center text-xs text-slate-400 font-medium">
+          Desarrollado por <span className="font-extrabold text-teal-600">AcroDevs</span> · Todos los derechos reservados
+        </div>
+      </div>
+
+      {/* REGISTER RESTAURANT MODAL */}
+      <AnimatePresence>
+        {showRegisterModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="relative w-full max-w-md overflow-hidden rounded-2xl bg-white p-6 shadow-2xl border border-slate-100"
+            >
+              {/* Close Button */}
+              <button
+                onClick={() => setShowRegisterModal(false)}
+                className="absolute right-4 top-4 text-slate-400 hover:text-slate-600 transition"
+              >
+                <X size={18} />
+              </button>
+
+              <div className="mb-4">
+                <h3 className="text-lg font-black text-slate-800">Registrar Nueva Empresa</h3>
+                <p className="text-xs text-slate-500 font-semibold mt-0.5">
+                  Crea tu local en el sistema e ingresa las credenciales administrativas.
+                </p>
+              </div>
+
+              {regError && (
+                <div className="mb-4 rounded-lg bg-rose-50 border border-rose-100 p-3 text-xs font-bold text-rose-600">
+                  {regError}
+                </div>
+              )}
+
+              {regSuccess && (
+                <div className="mb-4 rounded-lg bg-emerald-50 border border-emerald-100 p-3 text-xs font-bold text-emerald-700 text-center">
+                  🎉 ¡Empresa registrada con éxito! Puedes iniciar sesión ahora.
+                </div>
+              )}
+
+              <form onSubmit={handleRegisterSubmit} className="space-y-3.5">
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                    Nombre del Restaurante / Empresa
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={regCompanyName}
+                    onChange={(e) => setRegCompanyName(e.target.value)}
+                    placeholder="Ej. Restaurante Guaton XII"
+                    className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-semibold outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 text-slate-800"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                    Nombre del Administrador
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={regAdminName}
+                    onChange={(e) => setRegAdminName(e.target.value)}
+                    placeholder="Ej. Diego Henríquez"
+                    className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-semibold outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 text-slate-800"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                    Correo electrónico del Administrador
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={regEmail}
+                    onChange={(e) => setRegEmail(e.target.value)}
+                    placeholder="ejemplo@correo.com"
+                    className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-semibold outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 text-slate-800"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                    Contraseña del Administrador
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    value={regPassword}
+                    onChange={(e) => setRegPassword(e.target.value)}
+                    placeholder="Mínimo 6 caracteres"
+                    minLength={6}
+                    className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-semibold outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 text-slate-800"
+                  />
+                </div>
+
+                <div className="mt-6 flex justify-end gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowRegisterModal(false)}
+                    className="h-10 rounded-lg px-4 text-sm font-bold text-slate-500 hover:bg-slate-50 transition"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={regLoading || regSuccess}
+                    className="h-10 rounded-lg bg-teal-600 hover:bg-teal-700 disabled:bg-teal-400 text-white px-5 text-sm font-bold shadow transition flex items-center justify-center"
+                  >
+                    {regLoading ? 'Registrando...' : 'Registrar Empresa'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+function ShieldCheck({ size = 16, className = '' }) {
+  return <Shield size={size} className={className} />
+}
+
+function SuperadminDashboard() {
+  const { state, organizations, saveOrganization, removeOrganization, impersonateTenant, logout, currentOrganizationId } = useAppStore()
+  const navigate = useNavigate()
+  const [activeTab, setActiveTab] = useState('resumen')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [selectedOrg, setSelectedOrg] = useState(null)
+
+  // Form states
+  const [formName, setFormName] = useState('')
+  const [formSlug, setFormSlug] = useState('')
+  const [formPlan, setFormPlan] = useState('Básico')
+  const [formStatus, setFormStatus] = useState('Activo')
+  const [formRut, setFormRut] = useState('')
+  const [formMrr, setFormMrr] = useState(0)
+
+  const handleStartEdit = (org) => {
+    setSelectedOrg(org)
+    setFormName(org.name)
+    setFormSlug(org.slug)
+    setFormPlan(org.plan)
+    setFormStatus(org.status)
+    setFormRut(org.rut || '')
+    setFormMrr(org.mrr || 0)
+    setShowEditModal(true)
+  }
+
+  const handleSaveEdit = async (e) => {
+    e.preventDefault()
+    if (!formName || !formSlug) return
+    await saveOrganization({
+      id: selectedOrg.id,
+      name: formName,
+      slug: formSlug,
+      plan: formPlan,
+      status: formStatus,
+      rut: formRut,
+      mrr: Number(formMrr),
+    })
+    setShowEditModal(false)
+    setSelectedOrg(null)
+  }
+
+  const handleCreateOrg = async (e) => {
+    e.preventDefault()
+    if (!formName || !formSlug) return
+    await saveOrganization({
+      name: formName,
+      slug: formSlug,
+      plan: formPlan,
+      status: formStatus,
+      rut: formRut,
+      mrr: Number(formMrr),
+    })
+    setShowAddModal(false)
+    setFormName('')
+    setFormSlug('')
+    setFormPlan('Básico')
+    setFormStatus('Activo')
+    setFormRut('')
+    setFormMrr(0)
+  }
+
+  const handleDeleteOrg = async (id) => {
+    if (confirm('¿Estás seguro de eliminar esta empresa del sistema? Todo su contenido será eliminado permanentemente.')) {
+      await removeOrganization(id)
+    }
+  }
+
+  const handleImpersonate = (org) => {
+    impersonateTenant(org.id)
+    navigate('/admin')
+  }
+
+  const activeOrgs = organizations.filter((o) => o.status === 'Activo')
+  const totalMrr = organizations.reduce((acc, curr) => acc + (curr.mrr || 0), 0)
+  const planDistribution = {
+    Básico: organizations.filter(o => o.plan === 'Básico').length,
+    Empresa: organizations.filter(o => o.plan === 'Empresa').length,
+    'Venta Única': organizations.filter(o => o.plan === 'Venta Única').length,
+  }
+
+  const filteredOrgs = organizations.filter(
+    (o) =>
+      o.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      o.slug.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (o.rut && o.rut.includes(searchQuery)),
+  )
+
+  // Auto-select first tenant if none is selected on mount
+  useEffect(() => {
+    if (!currentOrganizationId && organizations.length > 0) {
+      const firstOrg = organizations.find((o) => o.slug !== 'empresa-jefe' && o.slug !== 'ncxo-plus' && o.slug !== 'prueba-de-cambio')
+      if (firstOrg) {
+        impersonateTenant(firstOrg.id)
+      }
+    }
+  }, [organizations, currentOrganizationId, impersonateTenant])
+
+  // Restaurant details from the state loaded (currentOrganizationId)
+  const income = state.orders.reduce((sum, order) => sum + order.total, 0)
+  const activeOrders = state.orders.filter((order) =>
+    ['Pendiente', 'En preparación', 'Listo'].includes(order.status)
+  ).length
+  const pendingOrders = state.orders.filter((order) => order.status === 'Pendiente').length
+  const readyOrders = state.orders.filter((order) => order.status === 'Listo').length
+  
+  const chartData = buildSalesChartData(state.orders)
+  const topProducts = getTopProducts(state.orders).slice(0, 5)
+  const recentActivity = state.orders.slice(0, 6)
+  const lowStockProducts = (state.products || []).filter(p => p.stock !== undefined && p.stock <= (p.minStock || 5))
+
+  const categorySales = useMemo(() => {
+    const map = new Map()
+    state.orders.forEach(o => {
+      o.items.forEach(item => {
+        const prod = state.products.find(p => p.name === item.name || p.id === item.id)
+        const cat = prod?.category || 'General'
+        const currentVal = map.get(cat) || 0
+        map.set(cat, currentVal + (item.price * item.quantity))
+      })
+    })
+    return Array.from(map.entries()).map(([name, value]) => ({ name, value }))
+  }, [state.orders, state.products])
+
+  const formattedDate = () => {
+    const options = { weekday: 'long', day: 'numeric', month: 'long' }
+    return new Date().toLocaleDateString('es-CL', options)
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-stone-950 px-4">
-      {/* Animated background */}
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -left-32 -top-32 h-[500px] w-[500px] rounded-full bg-[#c2553d]/20 blur-[120px]" />
-        <div className="absolute -bottom-40 -right-40 h-[600px] w-[600px] rounded-full bg-orange-500/15 blur-[140px]" />
-        <div className="absolute left-1/2 top-1/3 h-[300px] w-[300px] -translate-x-1/2 rounded-full bg-amber-400/10 blur-[100px]" />
-        {/* Grid pattern */}
-        <div
-          className="absolute inset-0 opacity-[0.03]"
-          style={{
-            backgroundImage: 'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)',
-            backgroundSize: '60px 60px',
-          }}
-        />
-      </div>
-
-      <motion.div
-        initial={{ opacity: 0, y: 30, scale: 0.95 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-        className="relative z-10 w-full max-w-[420px]"
-      >
-        {/* Logo */}
-        <div className="mb-8 text-center">
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
-            className="mx-auto mb-5 grid h-20 w-20 place-items-center rounded-2xl bg-gradient-to-br from-[#c2553d] to-[#e8824a] text-3xl font-black text-white shadow-2xl shadow-orange-900/40"
-          >
-            A
-          </motion.div>
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
-            <p className="text-xs font-black uppercase tracking-[0.3em] text-[#c2553d]">
-              AcroDevs
+    <div className="min-h-screen bg-[#f8fafc] text-slate-800 antialiased font-sans">
+      <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/80 backdrop-blur px-6 py-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white font-black text-xl shadow shadow-indigo-600/35">
+            S
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-black text-slate-900 tracking-tight">SaaS Portal</h1>
+              <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 text-[0.65rem] font-bold px-2 py-0.5 rounded-full border border-emerald-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                En vivo
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 font-medium capitalize mt-0.5">
+              {formattedDate()} · <span className="text-indigo-600 font-semibold">Empresa de Jefe</span>
             </p>
-            <h1 className="mt-2 text-3xl font-black text-white">
-              {state.restaurant.name}
-            </h1>
-            <p className="mt-2 text-sm text-stone-400">
-              Ingresa tu PIN para acceder al sistema
-            </p>
-          </motion.div>
+          </div>
         </div>
 
-        {/* Login card */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-          className="overflow-hidden rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl"
-        >
-          <div className="p-6 sm:p-8">
-            <form onSubmit={handleSubmit}>
-              <div className="mb-6">
-                <label className="mb-2 block text-xs font-black uppercase tracking-[0.14em] text-stone-400">
-                  PIN de acceso
-                </label>
-                <motion.div animate={shake ? { x: [-12, 12, -8, 8, -4, 4, 0] } : {}} transition={{ duration: 0.4 }}>
-                  <div className="relative">
-                    <Lock className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-stone-500" />
-                    <input
-                      ref={inputRef}
-                      type="password"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      maxLength={4}
-                      value={pin}
-                      onChange={(e) => handlePinChange(e.target.value)}
-                      placeholder="• • • •"
-                      className={`h-16 w-full rounded-2xl border bg-white/5 pl-12 pr-4 text-center text-2xl font-black tracking-[0.5em] text-white outline-none transition placeholder:tracking-[0.3em] placeholder:text-stone-600 ${
-                        error
-                          ? 'border-rose-500 ring-2 ring-rose-500/30'
-                          : 'border-white/10 focus:border-[#c2553d] focus:ring-2 focus:ring-[#c2553d]/30'
-                      }`}
-                    />
+        <div className="flex items-center gap-4">
+          <div className="relative">
+            <Building className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+            <select
+              value={currentOrganizationId}
+              onChange={(e) => impersonateTenant(e.target.value)}
+              className="appearance-none bg-slate-50 border border-slate-200 rounded-lg py-1.5 pl-8 pr-8 text-xs font-semibold text-slate-700 outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+            >
+              <option value="">Todas las Sucursales</option>
+              {organizations.map(o => (
+                <option key={o.id} value={o.id}>{o.name}</option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button className="relative grid h-9 w-9 place-items-center rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600">
+              <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-rose-500 border border-white" />
+              <Activity size={16} />
+            </button>
+            <div className="flex items-center gap-2 border-l border-slate-200 pl-3">
+              <div className="grid h-9 w-9 place-items-center rounded-full bg-indigo-600 text-white font-bold text-sm shadow">
+                D
+              </div>
+              <div className="hidden text-left sm:block">
+                <p className="text-xs font-bold text-slate-900 leading-none">Diegol Admin</p>
+                <p className="text-[0.65rem] font-medium text-slate-400 mt-1">Superadmin</p>
+              </div>
+              <button
+                onClick={() => { logout(); navigate('/login'); }}
+                className="ml-2 text-xs font-bold text-rose-600 hover:text-rose-700 hover:underline"
+              >
+                Cerrar Sesión
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div className="max-w-7xl mx-auto px-6 py-8">
+        <div className="flex border-b border-slate-200 gap-6 mb-8 overflow-x-auto pb-px">
+          {[
+            ['resumen', 'Resumen'],
+            ['empresas', 'Empresas'],
+            ['finanzas', 'Finanzas'],
+            ['pagos', 'Pagos MP'],
+            ['tickets', 'Tickets'],
+            ['invitaciones', 'Invitaciones'],
+            ['legales', 'Legales'],
+            ['sistemas', 'Sistemas en Venta'],
+          ].map(([id, label]) => {
+            const active = activeTab === id
+            return (
+              <button
+                key={id}
+                onClick={() => setActiveTab(id)}
+                className={`relative pb-3 text-sm font-semibold transition ${
+                  active ? 'text-indigo-600' : 'text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                {label}
+                {active && (
+                  <span className="absolute inset-x-0 bottom-0 h-[2px] rounded-full bg-indigo-600" />
+                )}
+              </button>
+            )
+          })}
+        </div>
+
+        {activeTab === 'resumen' && (
+          <div className="space-y-6 animate-fadeIn">
+            {/* KPI Cards at top right */}
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 shadow-sm">
+                <DollarSign className="h-4 w-4 text-teal-600" />
+                <div>
+                  <p className="text-[0.62rem] text-slate-400 uppercase leading-none">VENTAS DE HOY</p>
+                  <p className="text-xs font-black text-slate-800 mt-1">{currency.format(income)}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 shadow-sm">
+                <ClipboardList className="h-4 w-4 text-indigo-500" />
+                <div>
+                  <p className="text-[0.62rem] text-slate-400 uppercase leading-none">TRANSACCIONES</p>
+                  <p className="text-xs font-black text-slate-800 mt-1">{state.orders.length}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 shadow-sm">
+                <Users className="h-4 w-4 text-blue-500" />
+                <div>
+                  <p className="text-[0.62rem] text-slate-400 uppercase leading-none">CLIENTES TOTALES</p>
+                  <p className="text-xs font-black text-slate-800 mt-1">{Math.max(0, state.orders.filter(o => o.customerName).length)}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 shadow-sm">
+                <Clock3 className="h-4 w-4 text-amber-500" />
+                <div>
+                  <p className="text-[0.62rem] text-slate-400 uppercase leading-none">CITAS DE HOY</p>
+                  <p className="text-xs font-black text-slate-800 mt-1">{pendingOrders}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Main content grid */}
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+              {/* Left column (8 cols) */}
+              <div className="lg:col-span-8 space-y-6">
+                {/* Ventas de la Semana Chart */}
+                <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+                  <div className="mb-4">
+                    <h3 className="text-sm font-black text-slate-900">Ventas de la Semana</h3>
+                    <p className="text-[0.7rem] font-bold text-teal-600 uppercase mt-0.5">Comparación con meta diaria</p>
                   </div>
-                </motion.div>
-                {error ? (
-                  <motion.p
-                    initial={{ opacity: 0, y: -5 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="mt-3 text-center text-sm font-bold text-rose-400"
-                  >
-                    {error}
-                  </motion.p>
-                ) : null}
+                  <div className="h-[200px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={chartData.sales}>
+                        <defs>
+                          <linearGradient id="salesWeeklyGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#0d9488" stopOpacity={0.2} />
+                            <stop offset="95%" stopColor="#0d9488" stopOpacity={0.01} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                        <XAxis dataKey="day" stroke="#94a3b8" fontSize={9} fontWeight="bold" />
+                        <YAxis stroke="#94a3b8" fontSize={9} fontWeight="bold" />
+                        <Tooltip formatter={(value) => currency.format(value)} />
+                        <Area
+                          type="monotone"
+                          dataKey="ventas"
+                          stroke="#0d9488"
+                          strokeWidth={2}
+                          fill="url(#salesWeeklyGradient)"
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Ingresos vs Gastos Chart */}
+                <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+                  <div className="mb-4">
+                    <h3 className="text-sm font-black text-slate-900">Ingresos vs Gastos</h3>
+                    <p className="text-[0.7rem] font-bold text-teal-600 uppercase mt-0.5">Últimos 3 meses</p>
+                  </div>
+                  <div className="h-[200px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={[
+                        { mes: 'Marzo', Ingresos: income * 0.8, Gastos: income * 0.5 },
+                        { mes: 'Abril', Ingresos: income * 0.95, Gastos: income * 0.6 },
+                        { mes: 'Mayo', Ingresos: income, Gastos: income * 0.55 },
+                      ]}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                        <XAxis dataKey="mes" stroke="#94a3b8" fontSize={9} fontWeight="bold" />
+                        <YAxis stroke="#94a3b8" fontSize={9} fontWeight="bold" />
+                        <Tooltip formatter={(value) => currency.format(value)} />
+                        <Bar dataKey="Ingresos" fill="#0d9488" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="Gastos" fill="#f43f5e" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Ventas Recientes */}
+                <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+                  <div className="mb-4">
+                    <h3 className="text-sm font-black text-slate-900">Ventas Recientes</h3>
+                    <p className="text-[0.7rem] font-bold text-teal-600 uppercase mt-0.5">Últimas transacciones realizadas</p>
+                  </div>
+                  <div className="overflow-y-auto space-y-2 pr-1 max-h-[220px]">
+                    {state.orders.length > 0 ? (
+                      state.orders.slice(0, 5).map(o => (
+                        <div key={o.id} className="flex items-center justify-between p-2.5 rounded-lg bg-slate-50 border border-slate-100 hover:bg-slate-100/50 transition">
+                          <div>
+                            <span className="text-xs font-bold text-slate-800">Pedido #{o.number}</span>
+                            <p className="text-[10px] text-slate-400">{o.tableLabel} · {formatTime(o.createdAt)}</p>
+                          </div>
+                          <span className="text-xs font-extrabold text-slate-800">
+                            {currency.format(o.total)}
+                          </span>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="flex flex-col items-center justify-center text-center p-4">
+                        <span className="text-xs font-bold text-slate-400">No hay ventas registradas aún</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
 
-              {/* PIN dots indicator */}
-              <div className="mb-6 flex items-center justify-center gap-3">
-                {[0, 1, 2, 3].map((i) => (
-                  <motion.div
-                    key={i}
-                    animate={{
-                      scale: pin.length > i ? 1.3 : 1,
-                      backgroundColor: pin.length > i ? '#c2553d' : 'rgba(255,255,255,0.1)',
+              {/* Right column (4 cols) */}
+              <div className="lg:col-span-4 space-y-6">
+                {/* Ingresos por Categoría */}
+                <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+                  <div className="mb-4">
+                    <h3 className="text-sm font-black text-slate-900">Ingresos por Categoría</h3>
+                    <p className="text-[0.7rem] font-bold text-teal-600 uppercase mt-0.5">Distribución actual</p>
+                  </div>
+                  <div className="flex flex-col items-center justify-center gap-4 min-h-[200px]">
+                    {categorySales.length > 0 ? (
+                      <>
+                        <div className="w-full h-[120px]">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie
+                                data={categorySales}
+                                innerRadius={35}
+                                outerRadius={50}
+                                paddingAngle={3}
+                                dataKey="value"
+                              >
+                                {categorySales.map((entry, index) => (
+                                  <Cell key={`cell-${index}`} fill={['#0d9488', '#6366f1', '#f59e0b', '#ec4899', '#3b82f6'][index % 5]} />
+                                ))}
+                              </Pie>
+                              <Tooltip formatter={(value) => currency.format(value)} />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        </div>
+                        <div className="w-full space-y-1.5 max-h-[120px] overflow-y-auto pr-1">
+                          {categorySales.map((entry, index) => (
+                            <div key={entry.name} className="flex items-center justify-between text-[11px]">
+                              <div className="flex items-center gap-1.5 truncate">
+                                <span className="h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: ['#0d9488', '#6366f1', '#f59e0b', '#ec4899', '#3b82f6'][index % 5] }} />
+                                <span className="font-semibold text-slate-600 truncate">{entry.name}</span>
+                              </div>
+                              <span className="font-bold text-slate-900">{currency.format(entry.value)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center gap-4 py-4 w-full">
+                        <div className="relative flex h-24 w-24 items-center justify-center rounded-full border-8 border-slate-100 bg-slate-50">
+                          <span className="text-[9px] font-bold text-slate-400 uppercase">Sin datos</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="h-2 w-2 rounded-full bg-slate-300" />
+                          <span className="text-[10px] font-bold text-slate-400">Sin datos</span>
+                          <span className="text-[10px] font-bold text-slate-400 ml-4">0%</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Alertas de Stock */}
+                <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+                  <div className="mb-4">
+                    <h3 className="text-sm font-black text-slate-900">Alertas de Stock</h3>
+                    <p className="text-[0.7rem] font-bold text-teal-600 uppercase mt-0.5">Productos por debajo del mínimo</p>
+                  </div>
+                  <div className="overflow-y-auto space-y-2 pr-1 max-h-[200px]">
+                    {lowStockProducts.length > 0 ? (
+                      lowStockProducts.map(p => (
+                        <div key={p.id} className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-100">
+                          <div className="truncate">
+                            <span className="text-xs font-bold text-slate-800 block truncate">{p.name}</span>
+                            <p className="text-[9px] text-slate-400">Mínimo: {p.minStock || 5}</p>
+                          </div>
+                          <span className="text-[10px] font-extrabold text-rose-600 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded-full flex-shrink-0">
+                            Stock: {p.stock}
+                          </span>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="flex flex-col items-center justify-center text-center py-6">
+                        <CheckCircle2 className="h-7 w-7 text-emerald-500 mb-1.5" />
+                        <span className="text-xs font-bold text-slate-400">Todos los productos tienen stock suficiente</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Citas de Hoy */}
+                <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+                  <div className="mb-4">
+                    <h3 className="text-sm font-black text-slate-900">Citas de Hoy</h3>
+                    <p className="text-[0.7rem] font-bold text-teal-600 uppercase mt-0.5">Agenda del día / Pedidos activos</p>
+                  </div>
+                  <div className="overflow-y-auto space-y-2 pr-1 max-h-[200px]">
+                    {state.orders.filter(o => ['Pendiente', 'En preparación'].includes(o.status)).length > 0 ? (
+                      state.orders.filter(o => ['Pendiente', 'En preparación'].includes(o.status)).slice(0, 5).map(o => (
+                        <div key={o.id} className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-100">
+                          <div className="truncate">
+                            <span className="text-xs font-bold text-slate-800 block truncate font-black">Pedido #{o.number} ({o.tableLabel})</span>
+                            <p className="text-[9px] text-slate-450 text-slate-400 truncate">{o.items.map(i => `${i.quantity}x ${i.name}`).join(', ')}</p>
+                          </div>
+                          <span className="text-[9px] font-bold uppercase px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-100 flex-shrink-0">
+                            {o.status}
+                          </span>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="flex flex-col items-center justify-center text-center py-6">
+                        <span className="text-xs font-bold text-slate-400">No hay citas programadas para hoy</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'empresas' && (
+          <div className="space-y-6 animate-fadeIn">
+            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Buscar por nombre, slug, RUT..."
+                  className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 pl-10 pr-4 text-sm font-semibold outline-none focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2.5 rounded-lg transition shadow"
+              >
+                <Plus size={14} />
+                Agregar Nueva Empresa
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {filteredOrgs.map((org) => (
+                <div key={org.id} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:shadow-md transition relative flex flex-col justify-between h-48">
+                  <div>
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-xl bg-indigo-50 text-indigo-700 font-bold grid place-items-center uppercase">
+                          {org.name.slice(0, 1)}
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-slate-900 text-sm">{org.name}</h3>
+                          <p className="text-[0.68rem] text-slate-400">slug: {org.slug}</p>
+                        </div>
+                      </div>
+                      <span className={`px-2 py-0.5 rounded-full text-[0.62rem] font-bold uppercase ${
+                        org.plan === 'Venta Única' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+                        org.plan === 'Empresa' ? 'bg-purple-50 text-purple-700 border border-purple-200' :
+                        'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                      }`}>
+                        {org.plan}
+                      </span>
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-2 gap-2 text-[0.7rem] text-slate-500 border-t border-slate-100 pt-3">
+                      <div>RUT: <span className="font-bold text-slate-700">{org.rut || '—'}</span></div>
+                      <div>MRR: <span className="font-bold text-slate-700">{currency.format(org.mrr || 0)}</span></div>
+                      <div>Estado: <span className="font-bold text-emerald-600">{org.status}</span></div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between border-t border-slate-100 pt-3 mt-3">
+                    <button
+                      onClick={() => handleImpersonate(org)}
+                      className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[0.68rem] font-bold px-3 py-1.5 rounded-lg transition border border-indigo-200 flex items-center gap-1"
+                    >
+                      <LogIn size={12} />
+                      Simular Entrada
+                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => handleStartEdit(org)}
+                        className="text-slate-400 hover:text-indigo-600 p-1.5 hover:bg-slate-50 rounded"
+                      >
+                        <Pencil size={13} />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteOrg(org.id)}
+                        className="text-slate-400 hover:text-rose-600 p-1.5 hover:bg-slate-50 rounded"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'finanzas' && (
+          <div className="bg-white border border-slate-200 rounded-xl p-8 text-center max-w-xl mx-auto shadow-sm animate-fadeIn">
+            <Coins size={48} className="mx-auto text-indigo-500 mb-4" />
+            <h2 className="text-lg font-bold text-slate-900">Resumen y Proyecciones Financieras</h2>
+            <p className="text-slate-500 text-xs mt-2 leading-relaxed">
+              Realiza el seguimiento del MRR (Ingreso Mensual Recurrente), flujo de caja de suscripciones y transacciones de pasarela. Los gráficos de rendimiento y distribución se habilitarán en la siguiente versión productiva.
+            </p>
+            <div className="grid grid-cols-2 gap-4 mt-6">
+              <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl">
+                <p className="text-[0.62rem] font-bold text-slate-400">ESTIMADO ANUAL</p>
+                <p className="text-base font-black text-slate-800 mt-1">{currency.format(totalMrr * 12)}</p>
+              </div>
+              <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl">
+                <p className="text-[0.62rem] font-bold text-slate-400">COBRO PROMEDIO</p>
+                <p className="text-base font-black text-slate-800 mt-1">{currency.format(organizations.length ? Math.round(totalMrr / organizations.length) : 0)}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'sistemas' && (
+          <div className="space-y-6 animate-fadeIn">
+            <div className="text-center max-w-xl mx-auto mb-8">
+              <Sparkles size={32} className="mx-auto text-indigo-500 mb-3" />
+              <h2 className="text-lg font-black text-slate-900">Catálogo de Sistemas y Productos SaaS</h2>
+              <p className="text-xs text-slate-500 mt-1">
+                Explora el ecosistema de aplicaciones que vendemos y gestionamos de forma centralizada.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+              <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col justify-between hover:shadow-md transition">
+                <div>
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="grid h-12 w-12 place-items-center rounded-2xl bg-indigo-50 text-indigo-600">
+                      <ShoppingBag size={24} />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-black text-slate-900">Nexo+</h3>
+                      <p className="text-[0.65rem] font-semibold text-indigo-600">Administración Comercial & Ventas</p>
+                    </div>
+                  </div>
+                  <p className="text-xs text-slate-500 leading-relaxed mb-4">
+                    Gestión integral de ventas, control de inventario en tiempo real, facturación electrónica para comercios locales e independientes. Optimiza bodegas y cajas rápidas en segundos.
+                  </p>
+                  <div className="flex flex-wrap gap-1.5 mb-6">
+                    {['Boleta Electrónica', 'Control Stock', 'Reportes Ventas'].map(b => (
+                      <span key={b} className="bg-slate-50 text-slate-600 text-[0.62rem] font-bold px-2 py-0.5 rounded border border-slate-200">{b}</span>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex items-center justify-between border-t border-slate-100 pt-4">
+                  <div>
+                    <p className="text-[0.62rem] font-bold text-slate-400">PLAN BASE</p>
+                    <p className="text-base font-black text-slate-800">$19.990 <span className="text-[0.62rem] text-slate-400 font-medium">/ mes</span></p>
+                  </div>
+                  <button className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow transition">
+                    Entrar al Sistema
+                  </button>
+                </div>
+              </div>
+
+              <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col justify-between hover:shadow-md transition">
+                <div>
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="grid h-12 w-12 place-items-center rounded-2xl bg-emerald-50 text-emerald-600">
+                      <ChefHat size={24} />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-black text-slate-900">AppRestaurante</h3>
+                      <p className="text-[0.65rem] font-semibold text-emerald-600">Gestión Gastronómica Integral</p>
+                    </div>
+                  </div>
+                  <p className="text-xs text-slate-500 leading-relaxed mb-4">
+                    Control absoluto de mesas, comandas digitales para garzones, visualización interactiva de pedidos mediante códigos QR en mesa, analíticas y panel KDS para agilizar la cocina.
+                  </p>
+                  <div className="flex flex-wrap gap-1.5 mb-6">
+                    {['Comandas QR', 'Mesas Interactivas', 'Panel KDS Cocina'].map(b => (
+                      <span key={b} className="bg-slate-50 text-slate-600 text-[0.62rem] font-bold px-2 py-0.5 rounded border border-slate-200">{b}</span>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex items-center justify-between border-t border-slate-100 pt-4">
+                  <div>
+                    <p className="text-[0.62rem] font-bold text-slate-400">PLAN BASE</p>
+                    <p className="text-base font-black text-slate-800">$34.990 <span className="text-[0.62rem] text-slate-400 font-medium">/ mes</span></p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const defaultRest = organizations.find(o => o.slug === 'guaton-xii') || organizations[0]
+                      if (defaultRest) handleImpersonate(defaultRest)
                     }}
-                    className="h-3.5 w-3.5 rounded-full border border-white/10"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow transition"
+                  >
+                    Entrar al Sistema
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {(activeTab === 'tickets' || activeTab === 'invitaciones' || activeTab === 'legales') && (
+          <div className="bg-white border border-slate-200 rounded-xl p-8 text-center max-w-xl mx-auto shadow-sm animate-fadeIn">
+            <Building size={36} className="mx-auto text-slate-400 mb-3" />
+            <h3 className="text-sm font-bold text-slate-800 capitalize">Sección de {activeTab}</h3>
+            <p className="text-xs text-slate-400 mt-2 leading-relaxed">
+              Este apartado está reservado para la administración avanzada del portal. Puedes gestionar los tickets de soporte, las invitaciones de registro para nuevos restaurantes y la documentación legal en las próximas actualizaciones.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+              <h3 className="text-base font-bold text-slate-900">Registrar Nueva Empresa</h3>
+              <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-600">
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleCreateOrg} className="space-y-4 text-xs font-medium text-slate-700">
+              <div>
+                <label className="block text-slate-500 mb-1">Nombre Comercial</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Restaurante Ejemplo"
+                  value={formName}
+                  onChange={(e) => {
+                    setFormName(e.target.value)
+                    setFormSlug(e.target.value.toLowerCase().replaceAll(' ', '-').replace(/[^\w-]/g, ''))
+                  }}
+                  className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-slate-50 outline-none focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-xs font-semibold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-500 mb-1">Identificador Slug (URL)</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="restaurante-ejemplo"
+                  value={formSlug}
+                  onChange={(e) => setFormSlug(e.target.value)}
+                  className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-slate-50 outline-none focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-xs font-semibold"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-slate-500 mb-1">RUT Empresa</label>
+                  <input
+                    type="text"
+                    placeholder="76.123.456-7"
+                    value={formRut}
+                    onChange={(e) => setFormRut(e.target.value)}
+                    className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-slate-50 outline-none focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-xs font-semibold"
                   />
-                ))}
+                </div>
+                <div>
+                  <label className="block text-slate-500 mb-1">MRR Mensual (CLP)</label>
+                  <input
+                    type="number"
+                    placeholder="25000"
+                    value={formMrr}
+                    onChange={(e) => setFormMrr(e.target.value)}
+                    className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-slate-50 outline-none focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-xs font-semibold"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-slate-500 mb-1">Plan Contratado</label>
+                  <select
+                    value={formPlan}
+                    onChange={(e) => setFormPlan(e.target.value)}
+                    className="w-full h-10 px-2 rounded-lg border border-slate-200 bg-slate-50 outline-none focus:bg-white focus:border-indigo-500 text-xs font-semibold"
+                  >
+                    <option value="Básico">Básico</option>
+                    <option value="Empresa">Empresa</option>
+                    <option value="Venta Única">Venta Única</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-slate-500 mb-1">Estado de Cuenta</label>
+                  <select
+                    value={formStatus}
+                    onChange={(e) => setFormStatus(e.target.value)}
+                    className="w-full h-10 px-2 rounded-lg border border-slate-200 bg-slate-50 outline-none focus:bg-white focus:border-indigo-500 text-xs font-semibold"
+                  >
+                    <option value="Activo">Activo</option>
+                    <option value="Inactivo">Inactivo</option>
+                  </select>
+                </div>
               </div>
 
               <button
                 type="submit"
-                disabled={pin.length < 4}
-                className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#c2553d] to-[#e8824a] text-base font-black text-white shadow-lg shadow-orange-900/30 transition hover:shadow-xl hover:shadow-orange-900/40 disabled:opacity-40 disabled:shadow-none"
+                className="w-full h-10 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition mt-4 shadow"
               >
-                <Lock size={18} />
-                Ingresar
+                Crear Registro
               </button>
             </form>
-          </div>
+          </motion.div>
+        </div>
+      )}
 
-          {/* Roles info section */}
-          <div className="border-t border-white/5 bg-white/[0.02] px-6 py-5 sm:px-8">
-            <p className="mb-3 text-xs font-black uppercase tracking-[0.14em] text-stone-500">
-              Roles del sistema
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              {Object.entries(roleLabels).map(([role, cfg]) => {
-                const Icon = cfg.icon
-                return (
-                  <div
-                    key={role}
-                    className="flex items-center gap-2 rounded-xl border border-white/5 bg-white/5 px-3 py-2.5"
-                  >
-                    <div className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-gradient-to-br ${cfg.color} text-white`}>
-                      <Icon size={16} />
-                    </div>
-                    <div>
-                      <p className="text-xs font-bold text-white">{cfg.label}</p>
-                      <p className="text-[0.6rem] text-stone-500">{cfg.desc}</p>
-                    </div>
-                  </div>
-                )
-              })}
+      {showEditModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+              <h3 className="text-base font-bold text-slate-900">Editar Empresa</h3>
+              <button onClick={() => setShowEditModal(false)} className="text-slate-400 hover:text-slate-600">
+                <X size={18} />
+              </button>
             </div>
-          </div>
-        </motion.div>
+            <form onSubmit={handleSaveEdit} className="space-y-4 text-xs font-medium text-slate-700">
+              <div>
+                <label className="block text-slate-500 mb-1">Nombre Comercial</label>
+                <input
+                  type="text"
+                  required
+                  value={formName}
+                  onChange={(e) => setFormName(e.target.value)}
+                  className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-slate-50 outline-none focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-xs font-semibold"
+                />
+              </div>
 
-        {/* Footer */}
-        <p className="mt-6 text-center text-xs text-stone-600">
-          Powered by <span className="font-bold text-[#c2553d]">AcroDevs</span> · Sistema de gestión de restaurantes
-        </p>
-      </motion.div>
+              <div>
+                <label className="block text-slate-500 mb-1">Identificador Slug (URL)</label>
+                <input
+                  type="text"
+                  required
+                  value={formSlug}
+                  onChange={(e) => setFormSlug(e.target.value)}
+                  className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-slate-50 outline-none focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-xs font-semibold"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-slate-500 mb-1">RUT Empresa</label>
+                  <input
+                    type="text"
+                    value={formRut}
+                    onChange={(e) => setFormRut(e.target.value)}
+                    className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-slate-50 outline-none focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-xs font-semibold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-500 mb-1">MRR Mensual (CLP)</label>
+                  <input
+                    type="number"
+                    value={formMrr}
+                    onChange={(e) => setFormMrr(e.target.value)}
+                    className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-slate-50 outline-none focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-xs font-semibold"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-slate-500 mb-1">Plan Contratado</label>
+                  <select
+                    value={formPlan}
+                    onChange={(e) => setFormPlan(e.target.value)}
+                    className="w-full h-10 px-2 rounded-lg border border-slate-200 bg-slate-50 outline-none focus:bg-white focus:border-indigo-500 text-xs font-semibold"
+                  >
+                    <option value="Básico">Básico</option>
+                    <option value="Empresa">Empresa</option>
+                    <option value="Venta Única">Venta Única</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-slate-500 mb-1">Estado de Cuenta</label>
+                  <select
+                    value={formStatus}
+                    onChange={(e) => setFormStatus(e.target.value)}
+                    className="w-full h-10 px-2 rounded-lg border border-slate-200 bg-slate-50 outline-none focus:bg-white focus:border-indigo-500 text-xs font-semibold"
+                  >
+                    <option value="Activo">Activo</option>
+                    <option value="Inactivo">Inactivo</option>
+                  </select>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full h-10 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition mt-4 shadow"
+              >
+                Guardar Cambios
+              </button>
+            </form>
+          </motion.div>
+        </div>
+      )}
     </div>
   )
 }
