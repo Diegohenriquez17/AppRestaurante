@@ -22,18 +22,39 @@ export async function saveRemoteOrganization(org) {
     id: org.id || undefined,
     name: org.name,
     slug: org.slug,
-    plan: org.plan,
+    plan: normalizeOrganizationPlan(org.plan),
     status: org.status,
     rut: org.rut,
     mrr: org.mrr
   }
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('organizations')
     .upsert(payload)
     .select('*')
     .single()
+  if (error && error.message?.toLowerCase().includes('plan')) {
+    const retry = await supabase
+      .from('organizations')
+      .upsert({ ...payload, plan: normalizeLegacyOrganizationPlan(org.plan) })
+      .select('*')
+      .single()
+    data = retry.data
+    error = retry.error
+  }
   if (error) throw new Error(`organizations.upsert: ${error.message}`)
   return data
+}
+
+function normalizeOrganizationPlan(plan = '') {
+  if (plan.includes('Venta') || plan.includes('Pago')) return 'Venta Única'
+  if (plan.includes('Empresa') || plan.includes('Enterprise') || plan.includes('Pro')) return 'Empresa'
+  return 'Básico'
+}
+
+function normalizeLegacyOrganizationPlan(plan = '') {
+  if (plan.includes('Venta') || plan.includes('Pago')) return 'Venta Ãšnica'
+  if (plan.includes('Empresa') || plan.includes('Enterprise') || plan.includes('Pro')) return 'Empresa'
+  return 'BÃ¡sico'
 }
 
 export async function deleteRemoteOrganization(orgId) {

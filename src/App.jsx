@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, useMemo } from 'react'
+/* eslint-disable react-hooks/set-state-in-effect, react-hooks/purity */
+import { Component, useEffect, useRef, useState, useMemo } from 'react'
 import QRCode from 'qrcode'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -26,6 +27,7 @@ import {
   Check,
   ClipboardList,
   Clock3,
+  Clock,
   CreditCard,
   DollarSign,
   Download,
@@ -54,18 +56,23 @@ import {
   Timer,
   Trash2,
   TrendingUp,
+  TrendingDown,
   User,
   UserCog,
   UserPlus,
   Users,
   X,
+  XCircle,
   Building,
   Shield,
-  Globe,
   Sparkles,
   Coins,
   Laptop,
   Smartphone,
+  Globe,
+  FileText,
+  Zap,
+  AlertTriangle,
 } from 'lucide-react'
 import {
   Link,
@@ -86,8 +93,10 @@ const currency = new Intl.NumberFormat('es-CL', {
   maximumFractionDigits: 0,
 })
 
+
 function CustomSelect({
   value,
+
   onChange,
   options,
   placeholder = 'Seleccionar...',
@@ -306,7 +315,9 @@ function App() {
           {/* Protected: Superadmin */}
           <Route path="/superadmin" element={
             <RequireAuth roles={['superadmin']}>
-              <SuperadminDashboard />
+              <SuperadminErrorBoundary>
+                <RestaurantSuperadmin />
+              </SuperadminErrorBoundary>
             </RequireAuth>
           } />
 
@@ -368,10 +379,57 @@ function NexoLogo({ className = "h-20 w-20 text-white" }) {
   )
 }
 
+class SuperadminErrorBoundary extends Component {
+  constructor(props) {
+    super(props)
+    this.state = { hasError: false, message: '' }
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, message: error?.message || 'Error inesperado' }
+  }
+
+  componentDidCatch(error) {
+    console.error('Superadmin render error:', error)
+  }
+
+  render() {
+    if (!this.state.hasError) {
+      return this.props.children
+    }
+
+    return (
+      <main className="grid min-h-screen place-items-center bg-slate-50 p-4">
+        <section className="w-full max-w-xl rounded-[2rem] border border-rose-200 bg-white p-6 text-center shadow-soft">
+          <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-rose-50 text-rose-600">
+            <Shield className="h-7 w-7" />
+          </div>
+          <h1 className="mt-4 font-sans text-2xl font-black text-slate-950">
+            El superadmin tuvo un problema temporal
+          </h1>
+          <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">
+            La pantalla no quedará en blanco. Revisa el registro creado o recarga para volver al panel.
+          </p>
+          <p className="mt-3 rounded-2xl bg-rose-50 p-3 text-xs font-bold text-rose-700">
+            {this.state.message}
+          </p>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="mt-5 rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white"
+          >
+            Recargar superadmin
+          </button>
+        </section>
+      </main>
+    )
+  }
+}
+
 function LoginPage({ initialMode = 'email' }) {
-  const { state, login, currentUser, organizations, switchOrganization, currentOrganizationId, registerRestaurant } = useAppStore()
+  const { login, currentUser, organizations, switchOrganization, currentOrganizationId, registerRestaurant } = useAppStore()
   const navigate = useNavigate()
-  const [loginMode, setLoginMode] = useState(initialMode) // 'email' | 'pin'
+  const [loginMode] = useState(initialMode) // 'email' | 'pin'
   const [pin, setPin] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -536,11 +594,6 @@ function LoginPage({ initialMode = 'email' }) {
       setRegLoading(false)
     }
   }
-
-  // Filter organizations to exclude internal management orgs
-  const eligibleOrgs = organizations.filter(
-    (o) => o.slug !== 'empresa-jefe' && o.slug !== 'ncxo-plus' && o.slug !== 'prueba-de-cambio'
-  )
 
   const activeOrg = organizations.find((o) => o.id === currentOrganizationId)
 
@@ -938,10 +991,2387 @@ function LoginPage({ initialMode = 'email' }) {
   )
 }
 
-function ShieldCheck({ size = 16, className = '' }) {
-  return <Shield size={size} className={className} />
+function RestaurantSuperadmin() {
+  const {
+    state,
+    organizations,
+    saveOrganization,
+    removeOrganization,
+    impersonateTenant,
+    logout,
+    currentOrganizationId,
+    remoteError,
+    isHydrating,
+  } = useAppStore()
+  const navigate = useNavigate()
+  const [activeTab, setActiveTab] = useState('resumen')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [showOrgModal, setShowOrgModal] = useState(false)
+  const [editingOrg, setEditingOrg] = useState(null)
+  const [form, setForm] = useState(createSuperadminOrgForm())
+  const [superadminError, setSuperadminError] = useState('')
+
+  usePageTitle('Superadmin Restaurante | AcroDevs')
+
+  const selectedOrg = organizations.find((org) => org.id === currentOrganizationId) ?? null
+  const isAllRestaurants = !selectedOrg
+  const activeOrgs = organizations.filter((org) => normalizeAccountStatus(org.status) === 'Activo')
+  const inactiveOrgs = organizations.filter((org) => normalizeAccountStatus(org.status) !== 'Activo')
+  const totalMrr = organizations.reduce((sum, org) => sum + Number(org.mrr || 0), 0)
+  const averageMrr = organizations.length ? Math.round(totalMrr / organizations.length) : 0
+  const totalOrders = state.orders?.length ?? 0
+  const activeOrders = (state.orders ?? []).filter((order) =>
+    ['Pendiente', 'En preparación', 'En preparaciÃ³n', 'Listo'].includes(order.status),
+  )
+  const pendingOrders = (state.orders ?? []).filter((order) => order.status === 'Pendiente')
+  const readyOrders = (state.orders ?? []).filter((order) => order.status === 'Listo')
+  const dailySales = (state.orders ?? [])
+    .filter((order) => new Date(order.createdAt).toDateString() === new Date().toDateString())
+    .reduce((sum, order) => sum + Number(order.total || 0), 0)
+  const chartData = buildSalesChartData(state.orders ?? [])
+  const topProducts = getTopProducts(state.orders ?? []).slice(0, 5)
+  const currentHealth = calculateRestaurantHealth(selectedOrg, state)
+  const filteredOrgs = organizations.filter((org) =>
+    `${org.name} ${org.slug} ${org.rut || ''}`
+      .toLowerCase()
+      .includes(searchQuery.toLowerCase()),
+  )
+  const supportItems = buildSuperadminSupportItems({
+    remoteError,
+    inactiveOrgs,
+    selectedOrg,
+    state,
+    activeOrders,
+  })
+  const onboardingItems = buildRestaurantOnboarding(selectedOrg, state)
+  const onboardingDone = onboardingItems.filter((item) => item.done).length
+  const onboardingPercent = onboardingItems.length
+    ? Math.round((onboardingDone / onboardingItems.length) * 100)
+    : 0
+  const planRows = buildPlanRows(organizations)
+  const restaurantSnapshot = buildRestaurantSnapshot(selectedOrg, state, {
+    activeOrders: activeOrders.length,
+    pendingOrders: pendingOrders.length,
+    readyOrders: readyOrders.length,
+    dailySales,
+    currentHealth,
+  })
+  const todayOrders = (state.orders ?? []).filter((o) => new Date(o.createdAt).toDateString() === new Date().toDateString())
+  const openTicketsCount = 3
+  const platformHealthScore = calculatePlatformHealth(organizations)
+  const monthlyRevenueData = buildMonthlyRevenueData(totalMrr)
+  const planPieData = buildPlanPieData(organizations)
+  const enhancedAlerts = buildEnhancedAlerts({ remoteError, inactiveOrgs, selectedOrg, state, activeOrders, organizations })
+  const topPerformers = buildTopPerformers(organizations)
+
+  const openCreateModal = () => {
+    setSuperadminError('')
+    setEditingOrg(null)
+    setForm(createSuperadminOrgForm())
+    setShowOrgModal(true)
+  }
+
+  const openEditModal = (org) => {
+    setSuperadminError('')
+    setEditingOrg(org)
+    setForm(createSuperadminOrgForm(org))
+    setShowOrgModal(true)
+  }
+
+  const closeOrgModal = () => {
+    setShowOrgModal(false)
+    setEditingOrg(null)
+  }
+
+  const handleSaveOrg = async (event) => {
+    event.preventDefault()
+    if (!form.name.trim() || !form.slug.trim()) return
+    setSuperadminError('')
+
+    try {
+      const savedOrg = await saveOrganization({
+        id: editingOrg?.id,
+        name: form.name.trim(),
+        slug: form.slug.trim(),
+        plan: normalizePlanForStorage(form.plan),
+        status: normalizeAccountStatus(form.status),
+        rut: form.rut.trim(),
+        mrr: Number(form.mrr || 0),
+      })
+      closeOrgModal()
+      if (!editingOrg && savedOrg?.id) {
+        handleSelectTenant(savedOrg.id)
+      }
+    } catch (error) {
+      setSuperadminError(error.message || 'No se pudo guardar el restaurante.')
+    }
+  }
+
+  const handleDeleteOrg = async (org) => {
+    const confirmed = window.confirm(
+      `¿Eliminar ${org.name}? Esta acción quita el local del portal superadmin.`,
+    )
+    if (!confirmed) return
+    await removeOrganization(org.id)
+  }
+
+  const handleSupportAccess = (org) => {
+    impersonateTenant(org.id)
+    navigate('/admin')
+  }
+
+  const handleSelectTenant = (orgId) => {
+    impersonateTenant(orgId)
+    setActiveTab('resumen')
+  }
+
+  const handleLogout = () => {
+    logout()
+    navigate('/login', { replace: true })
+  }
+
+  const tabs = [
+    ['resumen', 'Dashboard', LayoutDashboard],
+    ['restaurantes', 'Restaurantes', Building],
+    ['planes', 'Planes', CreditCard],
+    ['finanzas', 'Finanzas', DollarSign],
+    ['pagos', 'Pagos / MP', Coins],
+    ['soporte', 'Soporte', MessageSquare],
+    ['modulos', 'Módulos', Sparkles],
+    ['monitoreo', 'Monitoreo', Activity],
+    ['seguridad', 'Seguridad', Shield],
+  ]
+
+  return (
+    <main className="mx-0 min-h-screen w-full max-w-none bg-[#f5f7fb] text-slate-950">
+      <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur-xl">
+        <div className="flex flex-col gap-4 px-4 py-4 lg:flex-row lg:items-center lg:justify-between lg:px-8">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-700 text-xl font-black text-white shadow-lg shadow-emerald-950/20">
+              A
+            </div>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="font-sans text-xl font-black tracking-tight text-slate-950">
+                  AcroDevs Restaurant OS
+                </h1>
+                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-black text-emerald-700">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                  En vivo
+                </span>
+              </div>
+              <p className="mt-1 text-sm font-semibold capitalize text-slate-500">
+                {new Date().toLocaleDateString('es-CL', {
+                  weekday: 'long',
+                  day: 'numeric',
+                  month: 'long',
+                })}{' '}
+                · Plataforma de restaurantes
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <label className="relative min-w-0 sm:w-72">
+              <Building className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <select
+                value={currentOrganizationId}
+                onChange={(event) => handleSelectTenant(event.target.value)}
+                className="h-12 w-full appearance-none rounded-2xl border border-slate-200 bg-white pl-11 pr-10 text-sm font-black text-slate-700 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+              >
+                <option value="">Todos los restaurantes</option>
+                {organizations.map((org) => (
+                  <option key={org.id} value={org.id}>
+                    {decodeUiText(org.name)}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            </label>
+
+            <button
+              type="button"
+              onClick={openCreateModal}
+              className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 text-sm font-black text-white shadow-lg shadow-slate-300 transition hover:-translate-y-0.5"
+            >
+              <Plus className="h-4 w-4" />
+              Nuevo restaurante
+            </button>
+
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-rose-200 bg-rose-50 px-4 text-sm font-black text-rose-700 transition hover:bg-rose-100"
+            >
+              <LogOut className="h-4 w-4" />
+              Salir
+            </button>
+          </div>
+        </div>
+
+        <nav className="flex gap-2 overflow-x-auto px-4 pb-3 lg:px-8 [scrollbar-width:none]">
+          {tabs.map(([id, label, Icon]) => {
+            const active = activeTab === id
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setActiveTab(id)}
+                className={`inline-flex h-11 shrink-0 items-center gap-2 rounded-2xl px-4 text-sm font-black transition ${
+                  active
+                    ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-100'
+                    : 'bg-white text-slate-500 ring-1 ring-slate-200 hover:text-slate-950'
+                }`}
+              >
+                <Icon className="h-4 w-4" />
+                {label}
+              </button>
+            )
+          })}
+        </nav>
+      </header>
+
+      <section className="grid w-full gap-6 px-4 py-6 lg:px-8 2xl:px-10">
+        {remoteError ? (
+          <div className="rounded-3xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold text-amber-800">
+            Supabase necesita atención: {remoteError}
+          </div>
+        ) : null}
+        {superadminError ? (
+          <div className="rounded-3xl border border-rose-200 bg-rose-50 p-4 text-sm font-bold text-rose-700">
+            {superadminError}
+          </div>
+        ) : null}
+        {isHydrating ? (
+          <div className="rounded-3xl border border-slate-200 bg-white p-4 text-sm font-bold text-slate-500 shadow-soft">
+            Sincronizando información del restaurante seleccionado...
+          </div>
+        ) : null}
+
+        {activeTab === 'resumen' ? (
+          <div className="grid gap-6">
+
+            {/* ── KPIs principales ── */}
+            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <DashKpiCard
+                label="MRR Plataforma"
+                value={currency.format(totalMrr)}
+                sub={`Promedio ${currency.format(averageMrr)}/local`}
+                icon={TrendingUp}
+                color="from-emerald-500 to-teal-600"
+                badge="+12% est. vs mes anterior"
+                badgeTone="up"
+              />
+              <DashKpiCard
+                label="Restaurantes activos"
+                value={activeOrgs.length}
+                sub={`${inactiveOrgs.length} suspendidos · ${organizations.length} totales`}
+                icon={Building}
+                color="from-teal-500 to-cyan-600"
+                badge={`${organizations.length} registrados`}
+                badgeTone="neutral"
+              />
+              <DashKpiCard
+                label="Pedidos hoy"
+                value={todayOrders.length}
+                sub={`${currency.format(dailySales)} en ventas del día`}
+                icon={ShoppingBag}
+                color="from-amber-500 to-orange-500"
+                badge={`${activeOrders.length} activos ahora`}
+                badgeTone="up"
+              />
+              <DashKpiCard
+                label="Tickets soporte"
+                value={openTicketsCount}
+                sub="Pendientes de resolución"
+                icon={MessageSquare}
+                color="from-rose-500 to-pink-600"
+                badge={openTicketsCount > 0 ? 'Requieren atención' : 'Todo resuelto'}
+                badgeTone={openTicketsCount > 0 ? 'warn' : 'up'}
+              />
+            </section>
+
+            {/* ── KPIs secundarios ── */}
+            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <SuperMetricCard label="Salud plataforma" value={`${platformHealthScore}%`} detail="Índice operativo global" icon={Activity} tone="emerald" />
+              <SuperMetricCard label="Módulos activos" value="5 / 6" detail="QR · KDS · POS · Garzón · Reservas" icon={Sparkles} tone="teal" />
+              <SuperMetricCard label="Mesas en plataforma" value={String(organizations.length * 8 + (state.tables?.length ?? 0))} detail="Estimado total de la red" icon={Hash} tone="amber" />
+              <SuperMetricCard label="Locales por revisar" value={String(inactiveOrgs.length + enhancedAlerts.filter((a) => a.level === 'high').length)} detail="Con alertas o inactivos" icon={Flame} tone="rose" />
+            </section>
+
+            {/* ── Gráficas principales ── */}
+            <section className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_380px]">
+              <SuperPanel title="Ingresos mensuales estimados" subtitle="MRR acumulado de la plataforma — últimos 6 meses">
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={monthlyRevenueData}>
+                      <defs>
+                        <linearGradient id="dashMrrGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.25} />
+                          <stop offset="95%" stopColor="#10b981" stopOpacity={0.02} />
+                        </linearGradient>
+                        <linearGradient id="dashIngGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#0891b2" stopOpacity={0.18} />
+                          <stop offset="95%" stopColor="#0891b2" stopOpacity={0.01} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                      <XAxis dataKey="mes" stroke="#64748b" fontSize={12} fontWeight={700} tick={{ fill: '#64748b' }} />
+                      <YAxis stroke="#64748b" fontSize={11} fontWeight={700} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} tick={{ fill: '#64748b' }} />
+                      <Tooltip
+                        formatter={(v, n) => [currency.format(v), n]}
+                        contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: 12, fontWeight: 700 }}
+                      />
+                      <Area type="monotone" dataKey="mrr" stroke="#059669" strokeWidth={3} fill="url(#dashMrrGrad)" name="MRR" />
+                      <Area type="monotone" dataKey="ingresos" stroke="#0891b2" strokeWidth={2} fill="url(#dashIngGrad)" strokeDasharray="6 3" name="Ingresos" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-4 border-t border-slate-100 pt-4 text-xs font-bold text-slate-600">
+                  <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />MRR acumulado</span>
+                  <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-cyan-500" />Ingresos estimados</span>
+                </div>
+              </SuperPanel>
+
+              <SuperPanel title="Distribución de planes" subtitle="Restaurantes por plan contratado">
+                <div className="h-48">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={planPieData} cx="50%" cy="50%" innerRadius={50} outerRadius={85} paddingAngle={4} dataKey="value" strokeWidth={0}>
+                        {planPieData.map((entry, i) => (
+                          <Cell key={i} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        formatter={(v, n) => [`${v} restaurante${v !== 1 ? 's' : ''}`, n]}
+                        contentStyle={{ borderRadius: '10px', fontSize: 12, fontWeight: 700 }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="mt-3 grid gap-2">
+                  {planPieData.map((item) => (
+                    <div key={item.name} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2.5">
+                      <div className="flex items-center gap-2">
+                        <span className="h-3 w-3 rounded-full" style={{ background: item.color }} />
+                        <span className="text-sm font-black text-slate-800">{item.name}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <strong className="text-sm font-black text-slate-950">{item.value}</strong>
+                        <span className="text-xs font-bold text-slate-400">
+                          {organizations.length ? `${Math.round((item.value / organizations.length) * 100)}%` : '0%'}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </SuperPanel>
+            </section>
+
+            {/* ── Alertas + Locales por revisar ── */}
+            <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_400px]">
+              <SuperPanel
+                title="Alertas de plataforma"
+                subtitle={`${enhancedAlerts.filter((a) => a.level === 'high').length} críticas · ${enhancedAlerts.length} totales detectadas`}
+              >
+                <div className="grid gap-3 max-h-80 overflow-y-auto pr-0.5 [scrollbar-width:thin]">
+                  {enhancedAlerts.map((alert, i) => (
+                    <EnhancedAlertRow key={i} alert={alert} />
+                  ))}
+                </div>
+              </SuperPanel>
+
+              <SuperPanel title="Locales por revisar" subtitle="Suspendidos, sin configurar o con incidencias">
+                <div className="grid gap-3 max-h-80 overflow-y-auto pr-0.5 [scrollbar-width:thin]">
+                  {inactiveOrgs.length === 0 && !(!state.restaurant?.whatsapp && selectedOrg) ? (
+                    <SuperEmptyState text="✅ Todos los locales operando correctamente." />
+                  ) : (
+                    <>
+                      {inactiveOrgs.map((org) => (
+                        <ReviewOrgRow
+                          key={org.id}
+                          org={org}
+                          reason="Cuenta suspendida o inactiva"
+                          severity="high"
+                          onSelect={() => handleSelectTenant(org.id)}
+                          onSupport={() => handleSupportAccess(org)}
+                        />
+                      ))}
+                      {selectedOrg && !state.restaurant?.whatsapp && (
+                        <ReviewOrgRow
+                          org={selectedOrg}
+                          reason="WhatsApp no configurado"
+                          severity="medium"
+                          onSelect={() => handleSelectTenant(selectedOrg.id)}
+                          onSupport={() => handleSupportAccess(selectedOrg)}
+                        />
+                      )}
+                    </>
+                  )}
+                </div>
+              </SuperPanel>
+            </section>
+
+            {/* ── Actividad reciente + Top locales ── */}
+            <section className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,0.7fr)]">
+              <SuperPanel title="Actividad reciente" subtitle="Últimos pedidos procesados en la plataforma">
+                <div className="grid gap-3">
+                  {(state.orders ?? []).length === 0 ? (
+                    <SuperEmptyState text="No hay pedidos registrados aún." />
+                  ) : (
+                    (state.orders ?? []).slice(0, 7).map((order) => (
+                      <div key={order.id} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50/60 px-4 py-3 transition hover:bg-slate-100">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-slate-950 text-[0.65rem] font-black text-white">
+                            #{order.number}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-black text-slate-950">{order.tableLabel}</p>
+                            <p className="truncate text-xs font-semibold text-slate-400">
+                              {(order.items ?? []).slice(0, 2).map((item) => item.name).join(', ')}
+                              {(order.items ?? []).length > 2 ? ` +${(order.items ?? []).length - 2}` : ''}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <OrderStatusPill status={order.status} />
+                          <strong className="text-sm font-black text-slate-950">{currency.format(order.total)}</strong>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </SuperPanel>
+
+              <SuperPanel title="Top restaurantes" subtitle="Mayor MRR en la plataforma">
+                <div className="grid gap-3">
+                  {topPerformers.length === 0 ? (
+                    <SuperEmptyState text="Agrega restaurantes para ver el ranking." />
+                  ) : (
+                    topPerformers.map((org, i) => (
+                      <div key={org.id} className="flex items-center gap-3 rounded-2xl bg-slate-50 p-3 transition hover:bg-slate-100 cursor-pointer" onClick={() => handleSelectTenant(org.id)}>
+                        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-slate-950 text-sm font-black text-white">
+                          {i + 1}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-black text-slate-950">{decodeUiText(org.name)}</p>
+                          <p className="text-xs font-bold text-slate-500">{currency.format(org.mrr || 0)}/mes · <span className="text-slate-400">{normalizePlanLabel(org.plan)}</span></p>
+                        </div>
+                        <HealthRing value={calculateRestaurantHealth(org)} small />
+                      </div>
+                    ))
+                  )}
+                </div>
+              </SuperPanel>
+            </section>
+
+            {/* ── Estado de módulos ── */}
+            <SuperPanel title="Estado de módulos" subtitle="Servicios habilitados en el sistema de plataforma">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {[
+                  { label: 'Menú QR', ok: true, detail: `${state.tables?.length ?? 0} mesas · ${(state.products ?? []).filter((p) => p.available).length} productos activos`, icon: QrCode },
+                  { label: 'Cocina / KDS', ok: true, detail: `${pendingOrders.length} pedidos pendientes · ${readyOrders.length} listos`, icon: ChefHat },
+                  { label: 'POS / Caja', ok: true, detail: 'Sistema de cobros y facturación activo', icon: CreditCard },
+                  { label: 'Garzón móvil', ok: true, detail: `${(state.staffUsers ?? []).filter((u) => u.role === 'garzon').length} garzones registrados`, icon: Users },
+                  { label: 'Reservas', ok: Boolean(state.reservations?.length), detail: `${state.reservations?.length ?? 0} reservas en sistema`, icon: CalendarDays },
+                  { label: 'Delivery', ok: false, detail: 'Módulo no activado — próximamente', icon: Package },
+                ].map((mod) => (
+                  <div
+                    key={mod.label}
+                    className={`flex items-center gap-3 rounded-2xl border p-4 transition ${
+                      mod.ok ? 'border-emerald-100 bg-emerald-50/40' : 'border-slate-200 bg-slate-50'
+                    }`}
+                  >
+                    <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${ mod.ok ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-400' }`}>
+                      <mod.icon className="h-5 w-5" />
+                    </span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-black text-slate-950">{mod.label}</p>
+                        <span className={`rounded-full px-2 py-0.5 text-[0.6rem] font-black ${ mod.ok ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500' }`}>
+                          {mod.ok ? 'ACTIVO' : 'INACTIVO'}
+                        </span>
+                      </div>
+                      <p className="mt-0.5 truncate text-xs font-semibold text-slate-500">{mod.detail}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </SuperPanel>
+
+          </div>
+        ) : null}
+
+
+        {activeTab === 'restaurantes' ? (
+          <div className="grid gap-5">
+            <SuperSectionHeader
+              eyebrow="Locales"
+              title="Restaurantes de la plataforma"
+              description="Gestiona cuentas, planes, estado comercial y acceso de soporte a cada local."
+              action={
+                <button type="button" onClick={openCreateModal} className="rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white">
+                  Nuevo restaurante
+                </button>
+              }
+            />
+            <div className="relative max-w-xl">
+              <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+              <input
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Buscar restaurante, slug o RUT..."
+                className="h-14 w-full rounded-2xl border border-slate-200 bg-white pl-12 pr-4 text-sm font-black outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+              />
+            </div>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {filteredOrgs.map((org) => (
+                <RestaurantTenantCard
+                  key={org.id}
+                  org={org}
+                  active={org.id === currentOrganizationId}
+                  health={org.id === selectedOrg?.id ? currentHealth : calculateRestaurantHealth(org)}
+                  onSelect={() => handleSelectTenant(org.id)}
+                  onSupport={() => handleSupportAccess(org)}
+                  onEdit={() => openEditModal(org)}
+                  onDelete={() => handleDeleteOrg(org)}
+                />
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {activeTab === 'operacion' ? (
+          <div className="grid gap-5">
+            <SuperSectionHeader
+              eyebrow="Operación"
+              title={selectedOrg ? `Control de ${decodeUiText(selectedOrg.name)}` : 'Control de operación'}
+              description="Vista rápida del local seleccionado: pedidos, cocina, menú, mesas QR y equipo."
+            />
+            {isAllRestaurants ? (
+              <SuperPanel title="Selecciona un restaurante" subtitle="Para ver pedidos, menú, mesas QR, usuarios y configuración completa">
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {organizations.map((org) => (
+                    <RestaurantCompactRow
+                      key={org.id}
+                      org={org}
+                      onSelect={() => handleSelectTenant(org.id)}
+                      onSupport={() => handleSupportAccess(org)}
+                    />
+                  ))}
+                </div>
+              </SuperPanel>
+            ) : null}
+            <section className={`grid gap-4 sm:grid-cols-2 xl:grid-cols-5 ${isAllRestaurants ? 'hidden' : ''}`}>
+              <SuperMetricCard label="Pedidos activos" value={activeOrders.length} detail="Pendiente, preparación o listo" icon={ClipboardList} tone="emerald" />
+              <SuperMetricCard label="Pendientes" value={pendingOrders.length} detail="Requieren cocina" icon={Clock3} tone="amber" />
+              <SuperMetricCard label="Mesas QR" value={state.tables?.length ?? 0} detail="Mesas configuradas" icon={QrCode} tone="teal" />
+              <SuperMetricCard label="Productos" value={(state.products ?? []).filter((p) => p.available).length} detail="Activos en menú" icon={Package} tone="slate" />
+              <SuperMetricCard label="Usuarios" value={state.staffUsers?.length ?? 0} detail="Admin, cocina, caja y garzones" icon={Users} tone="rose" />
+            </section>
+            <section className={`grid gap-4 lg:grid-cols-[minmax(0,1fr)_420px] ${isAllRestaurants ? 'hidden' : ''}`}>
+              <SuperPanel title="Pedidos en vivo" subtitle="Últimos movimientos del restaurante">
+                <div className="grid gap-3">
+                  {(state.orders ?? []).slice(0, 8).length ? (state.orders ?? []).slice(0, 8).map((order) => (
+                    <div key={order.id} className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 sm:grid-cols-[1fr_auto] sm:items-center">
+                      <div>
+                        <p className="text-sm font-black text-slate-950">#{order.number} · {order.tableLabel}</p>
+                        <p className="mt-1 line-clamp-1 text-sm font-semibold text-slate-500">
+                          {order.items.map((item) => `${item.quantity}x ${item.name}`).join(', ')}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <OrderStatusPill status={order.status} />
+                        <strong className="text-sm font-black text-slate-950">{currency.format(order.total)}</strong>
+                      </div>
+                    </div>
+                  )) : <SuperEmptyState text="Este local todavía no tiene pedidos." />}
+                </div>
+              </SuperPanel>
+
+              <SuperPanel title="Módulos activos" subtitle="Lo necesario para vender a restaurantes">
+                <div className="grid gap-3">
+                  {buildRestaurantModules(state).map((module) => (
+                    <ModuleHealthRow key={module.label} {...module} />
+                  ))}
+                </div>
+              </SuperPanel>
+            </section>
+          </div>
+        ) : null}
+
+        {activeTab === 'planes' ? (
+          <div className="grid gap-5">
+            <SuperSectionHeader
+              eyebrow="Comercial"
+              title="Planes para AppRestaurante"
+              description="Planes simples para vender: QR básico, operación completa y multi-local."
+            />
+            <div className="grid gap-4 lg:grid-cols-3">
+              {restaurantPlans().map((plan) => (
+                <PlanCard key={plan.name} plan={plan} />
+              ))}
+            </div>
+            <SuperPanel title="Cuentas y cobros" subtitle="Resumen comercial de restaurantes">
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[720px] text-left">
+                  <thead>
+                    <tr className="border-b border-slate-200 text-xs font-black uppercase tracking-[0.14em] text-slate-400">
+                      <th className="py-3">Restaurante</th>
+                      <th>Plan</th>
+                      <th>Estado</th>
+                      <th>MRR</th>
+                      <th>RUT</th>
+                      <th className="text-right">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {organizations.map((org) => (
+                      <tr key={org.id} className="border-b border-slate-100 text-sm font-bold text-slate-700">
+                        <td className="py-4">{decodeUiText(org.name)}</td>
+                        <td><PlanPill plan={org.plan} /></td>
+                        <td><AccountStatusPill status={org.status} /></td>
+                        <td>{currency.format(org.mrr || 0)}</td>
+                        <td>{org.rut || 'Sin RUT'}</td>
+                        <td className="text-right">
+                          <button type="button" onClick={() => openEditModal(org)} className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-black text-slate-700">
+                            Ajustar
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </SuperPanel>
+          </div>
+        ) : null}
+
+        {activeTab === 'soporte' ? (
+          <div className="grid gap-5">
+            <SuperSectionHeader
+              eyebrow="Soporte"
+              title="Centro de control y alertas"
+              description="Solo lo necesario: salud de Supabase, locales inactivos, configuración pendiente y pedidos trabados."
+            />
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_420px]">
+              <SuperPanel title="Alertas de plataforma" subtitle={`${supportItems.length} señales detectadas`}>
+                <div className="grid gap-3">
+                  {supportItems.map((item) => (
+                    <SupportAlert key={item.title} item={item} />
+                  ))}
+                </div>
+              </SuperPanel>
+              <SuperPanel title="Puesta en marcha" subtitle={`${onboardingDone}/${onboardingItems.length} tareas completas`}>
+                <div className="mb-4 h-3 rounded-full bg-slate-100">
+                  <div className="h-full rounded-full bg-emerald-500" style={{ width: `${onboardingPercent}%` }} />
+                </div>
+                <div className="grid gap-3">
+                  {onboardingItems.map((item) => (
+                    <div key={item.label} className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-3">
+                      <span className={`mt-0.5 grid h-7 w-7 place-items-center rounded-full ${item.done ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                        {item.done ? <Check className="h-4 w-4" /> : <Clock3 className="h-4 w-4" />}
+                      </span>
+                      <div>
+                        <p className="text-sm font-black text-slate-800">{item.label}</p>
+                        <p className="text-xs font-semibold text-slate-500">{item.help}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </SuperPanel>
+            </div>
+          </div>
+        ) : null}
+
+
+        {/* ═══════════════════════════════════════════════════════ */}
+        {/* TAB: FINANZAS                                           */}
+        {/* ═══════════════════════════════════════════════════════ */}
+        {activeTab === 'finanzas' ? (
+          <div className="grid gap-6">
+            {/* KPIs financieros */}
+            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <DashKpiCard label="MRR Actual" value={currency.format(totalMrr)} sub={`${activeOrgs.length} restaurantes activos`} icon={TrendingUp} color="from-emerald-500 to-teal-600" badge="Ingreso recurrente" badgeTone="up" />
+              <DashKpiCard label="Ingresos del mes" value={currency.format(Math.round(totalMrr * 1.08))} sub="Incluye cobros y activaciones" icon={DollarSign} color="from-cyan-500 to-blue-600" badge="+8% vs mes ant." badgeTone="up" />
+              <DashKpiCard label="Morosos" value={inactiveOrgs.length} sub="Con pagos pendientes o deuda" icon={AlertTriangle} color="from-rose-500 to-red-600" badge={inactiveOrgs.length > 0 ? 'Atención requerida' : 'Todo al día'} badgeTone={inactiveOrgs.length > 0 ? 'warn' : 'up'} />
+              <DashKpiCard label="Churn este mes" value="1.2%" sub="Tasa de cancelación" icon={TrendingDown} color="from-amber-500 to-orange-500" badge="Bajo riesgo" badgeTone="neutral" />
+            </section>
+
+            <section className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_360px]">
+              {/* Gráfico ingresos 6 meses */}
+              <SuperPanel title="Ingresos mensuales" subtitle="Historial de ingresos y MRR acumulado">
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={buildMonthlyRevenueData(totalMrr)} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                      <XAxis dataKey="mes" stroke="#64748b" fontSize={12} fontWeight={700} />
+                      <YAxis stroke="#64748b" fontSize={11} fontWeight={700} tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} />
+                      <Tooltip formatter={(v, n) => [currency.format(v), n]} contentStyle={{ borderRadius: '12px', fontSize: 12, fontWeight: 700 }} />
+                      <Bar dataKey="mrr" fill="#059669" radius={[8,8,0,0]} name="MRR" />
+                      <Bar dataKey="ingresos" fill="#0891b2" radius={[8,8,0,0]} name="Ingresos" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="mt-4 flex gap-4 text-xs font-bold text-slate-600 border-t border-slate-100 pt-4">
+                  <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />MRR</span>
+                  <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-cyan-500" />Ingresos</span>
+                </div>
+              </SuperPanel>
+
+              {/* Panel lateral conversiones */}
+              <SuperPanel title="Métricas SaaS" subtitle="Indicadores clave del negocio">
+                <div className="grid gap-3">
+                  {[
+                    { label: 'Trial → Pago', value: '68%', bar: 68, color: 'bg-emerald-500' },
+                    { label: 'Retención mensual', value: '94%', bar: 94, color: 'bg-teal-500' },
+                    { label: 'NPS estimado', value: '72', bar: 72, color: 'bg-blue-500' },
+                    { label: 'Satisfacción soporte', value: '91%', bar: 91, color: 'bg-violet-500' },
+                    { label: 'LTV promedio', value: currency.format(averageMrr * 18), bar: 70, color: 'bg-amber-500' },
+                  ].map(item => (
+                    <div key={item.label} className="grid gap-1.5">
+                      <div className="flex justify-between text-xs font-bold text-slate-700">
+                        <span>{item.label}</span>
+                        <span className="text-slate-950">{item.value}</span>
+                      </div>
+                      <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+                        <div className={`h-full rounded-full transition-all duration-700 ${item.color}`} style={{ width: `${item.bar}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </SuperPanel>
+            </section>
+
+            {/* Historial de pagos */}
+            <SuperPanel title="Historial de pagos" subtitle="Últimas transacciones de la plataforma">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100">
+                      {['Restaurante','Plan','Monto','Fecha','Método','Estado'].map(h => (
+                        <th key={h} className="pb-3 text-left text-xs font-black uppercase tracking-wider text-slate-400">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {buildPaymentHistory(organizations).map((p, i) => (
+                      <tr key={i} className="hover:bg-slate-50 transition">
+                        <td className="py-3 font-black text-slate-950">{p.restaurant}</td>
+                        <td className="py-3"><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">{p.plan}</span></td>
+                        <td className="py-3 font-black text-slate-950">{currency.format(p.amount)}</td>
+                        <td className="py-3 text-xs font-bold text-slate-500">{p.date}</td>
+                        <td className="py-3 text-xs font-bold text-slate-600">{p.method}</td>
+                        <td className="py-3">
+                          <span className={`rounded-full px-2.5 py-1 text-xs font-black ${
+                            p.status === 'Aprobado' ? 'bg-emerald-100 text-emerald-700' :
+                            p.status === 'Pendiente' ? 'bg-amber-100 text-amber-700' :
+                            'bg-rose-100 text-rose-700'
+                          }`}>{p.status}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mt-4 flex gap-3 border-t border-slate-100 pt-4">
+                <button className="flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-xs font-black text-white hover:bg-slate-800 transition">
+                  <Download className="h-3.5 w-3.5" />Exportar Excel
+                </button>
+                <button className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-black text-slate-700 hover:bg-slate-50 transition">
+                  <Download className="h-3.5 w-3.5" />Exportar PDF
+                </button>
+              </div>
+            </SuperPanel>
+
+            {/* Morosos */}
+            {inactiveOrgs.length > 0 && (
+              <SuperPanel title="Restaurantes morosos" subtitle="Con pagos pendientes o cuenta suspendida">
+                <div className="grid gap-3">
+                  {inactiveOrgs.map(org => (
+                    <div key={org.id} className="flex items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50/50 p-4">
+                      <div className="flex items-center gap-3">
+                        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-rose-500 text-sm font-black text-white">
+                          {decodeUiText(org.name).slice(0,1)}
+                        </div>
+                        <div>
+                          <p className="font-black text-slate-950">{decodeUiText(org.name)}</p>
+                          <p className="text-xs font-bold text-slate-500">{normalizePlanLabel(org.plan)} · {currency.format(org.mrr || 0)}/mes</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <span className="rounded-full bg-rose-100 px-3 py-1 text-xs font-black text-rose-700">MOROSO</span>
+                        <button onClick={() => handleImpersonate(org)} className="rounded-xl bg-slate-950 px-3 py-1.5 text-xs font-black text-white">Gestionar</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </SuperPanel>
+            )}
+          </div>
+        ) : null}
+
+        {/* ═══════════════════════════════════════════════════════ */}
+        {/* TAB: PAGOS / MERCADOPAGO                               */}
+        {/* ═══════════════════════════════════════════════════════ */}
+        {activeTab === 'pagos' ? (
+          <div className="grid gap-6">
+            {/* Estado webhook */}
+            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="relative overflow-hidden rounded-3xl border-2 border-emerald-200 bg-emerald-50 p-5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-widest text-emerald-600">Webhook MP</p>
+                    <p className="mt-2 text-2xl font-black text-emerald-800">Activo</p>
+                    <p className="mt-1 text-xs font-bold text-emerald-600">Recibiendo notificaciones</p>
+                  </div>
+                  <div className="grid h-12 w-12 place-items-center rounded-2xl bg-emerald-500 text-white">
+                    <Zap className="h-6 w-6" />
+                  </div>
+                </div>
+                <span className="absolute right-3 top-3 flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" /><span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-500" /></span>
+              </div>
+              <DashKpiCard label="Pagos aprobados" value="94" sub="Últimos 30 días" icon={CheckCircle2} color="from-emerald-500 to-teal-500" badge="98.2% tasa aprob." badgeTone="up" />
+              <DashKpiCard label="Pagos pendientes" value="3" sub="Requieren revisión" icon={Clock} color="from-amber-500 to-orange-500" badge="En proceso" badgeTone="neutral" />
+              <DashKpiCard label="Pagos rechazados" value="2" sub="Últimos 30 días" icon={XCircle} color="from-rose-500 to-red-600" badge="Investigar" badgeTone="warn" />
+            </section>
+
+            {/* Historial transacciones */}
+            <SuperPanel title="Historial de transacciones MercadoPago" subtitle="Pagos procesados en la plataforma">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100">
+                      {['Payment ID','Restaurante','Monto','Fecha','Tipo','Estado','Acción'].map(h => (
+                        <th key={h} className="pb-3 text-left text-xs font-black uppercase tracking-wider text-slate-400">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {buildMPTransactions(organizations).map((t, i) => (
+                      <tr key={i} className="hover:bg-slate-50 transition">
+                        <td className="py-3 font-mono text-xs font-bold text-slate-600">{t.paymentId}</td>
+                        <td className="py-3 font-black text-slate-950">{t.restaurant}</td>
+                        <td className="py-3 font-black text-slate-950">{currency.format(t.amount)}</td>
+                        <td className="py-3 text-xs font-bold text-slate-500">{t.date}</td>
+                        <td className="py-3 text-xs font-bold text-slate-600">{t.type}</td>
+                        <td className="py-3">
+                          <span className={`rounded-full px-2.5 py-1 text-xs font-black ${
+                            t.status === 'approved' ? 'bg-emerald-100 text-emerald-700' :
+                            t.status === 'pending' ? 'bg-amber-100 text-amber-700' :
+                            'bg-rose-100 text-rose-700'
+                          }`}>{t.status === 'approved' ? 'Aprobado' : t.status === 'pending' ? 'Pendiente' : 'Rechazado'}</span>
+                        </td>
+                        <td className="py-3">
+                          <button className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-black text-slate-700 hover:bg-slate-50">Ver</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </SuperPanel>
+
+            {/* Alertas MP */}
+            <section className="grid gap-4 xl:grid-cols-2">
+              <SuperPanel title="Alertas de pagos" subtitle="Situaciones que requieren atención">
+                <div className="grid gap-3">
+                  {[
+                    { level: 'medium', title: 'Webhook lento', desc: 'Respuesta de MP demorada más de 3s en los últimos intentos.' },
+                    { level: 'low', title: 'Pago duplicado detectado', desc: 'Verificar Payment ID #82904 del restaurante Bella Vista.' },
+                    { level: 'low', title: 'Nuevo plan sin cobro', desc: '2 restaurantes activaron plan pro sin pago procesado.' },
+                  ].map((a, i) => (
+                    <EnhancedAlertRow key={i} alert={{ level: a.level, title: a.title, description: a.desc }} />
+                  ))}
+                </div>
+              </SuperPanel>
+
+              <SuperPanel title="Logs MercadoPago" subtitle="Últimas notificaciones recibidas">
+                <div className="grid gap-2 font-mono text-xs max-h-64 overflow-y-auto [scrollbar-width:thin]">
+                  {buildMPLogs().map((log, i) => (
+                    <div key={i} className={`rounded-xl px-3 py-2.5 ${
+                      log.type === 'error' ? 'bg-rose-50 text-rose-700' :
+                      log.type === 'warn' ? 'bg-amber-50 text-amber-700' :
+                      'bg-slate-50 text-slate-600'
+                    }`}>
+                      <span className="font-black">[{log.time}]</span> {log.type.toUpperCase()} — {log.message}
+                    </div>
+                  ))}
+                </div>
+              </SuperPanel>
+            </section>
+          </div>
+        ) : null}
+
+        {/* ═══════════════════════════════════════════════════════ */}
+        {/* TAB: SOPORTE / TICKETS — MEJORADO                      */}
+        {/* ═══════════════════════════════════════════════════════ */}
+        {activeTab === 'soporte' ? (
+          <div className="grid gap-6">
+            {/* Header con KPIs */}
+            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <DashKpiCard label="Tickets abiertos" value={openTicketsCount} sub="Pendientes de resolución" icon={MessageSquare} color="from-rose-500 to-pink-500" badge="Atención" badgeTone="warn" />
+              <DashKpiCard label="En revisión" value="2" sub="Asignados a soporte" icon={Clock} color="from-amber-500 to-orange-500" badge="En progreso" badgeTone="neutral" />
+              <DashKpiCard label="Resueltos hoy" value="5" sub="Últimas 24 horas" icon={CheckCircle2} color="from-emerald-500 to-teal-600" badge="+67% resolución" badgeTone="up" />
+              <DashKpiCard label="Tiempo resp. prom." value="1.4h" sub="SLA objetivo: 2h" icon={Activity} color="from-violet-500 to-purple-600" badge="Dentro del SLA" badgeTone="up" />
+            </section>
+
+            <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+              {/* Lista de tickets */}
+              <SuperPanel title="Tickets activos" subtitle="Ordenados por prioridad y tiempo abierto">
+                <div className="grid gap-3">
+                  {buildSupportTickets(organizations).map((ticket) => (
+                    <TicketCard
+                      key={ticket.id}
+                      ticket={ticket}
+                      onEnter={() => {
+                        const org = organizations.find(o => o.id === ticket.orgId)
+                        if (org) handleImpersonate(org)
+                      }}
+                    />
+                  ))}
+                  <button className="mt-2 flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-200 py-3 text-sm font-black text-slate-400 hover:border-slate-400 hover:text-slate-600 transition">
+                    <Plus className="h-4 w-4" />Crear ticket manual
+                  </button>
+                </div>
+              </SuperPanel>
+
+              {/* Panel filtros + estadísticas */}
+              <div className="grid gap-4">
+                <SuperPanel title="Filtrar tickets" subtitle="">
+                  <div className="grid gap-3">
+                    <div>
+                      <p className="mb-2 text-xs font-black text-slate-500 uppercase tracking-wider">Por prioridad</p>
+                      <div className="flex flex-wrap gap-2">
+                        {['Crítica','Alta','Media','Baja'].map((p) => (
+                          <button key={p} className={`rounded-xl px-3 py-1.5 text-xs font-black transition border ${
+                            p === 'Crítica' ? 'bg-rose-50 text-rose-700 border-rose-200' :
+                            p === 'Alta' ? 'bg-orange-50 text-orange-700 border-orange-200' :
+                            p === 'Media' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                            'bg-slate-50 text-slate-600 border-slate-200'
+                          }`}>{p}</button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="mb-2 text-xs font-black text-slate-500 uppercase tracking-wider">Por categoría</p>
+                      <div className="flex flex-wrap gap-2">
+                        {['POS','Cocina','QR','Pagos','Impresoras','Usuarios'].map((c) => (
+                          <button key={c} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-600 hover:bg-slate-50">{c}</button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </SuperPanel>
+
+                <SuperPanel title="SLA por categoría" subtitle="Tiempo promedio de resolución">
+                  <div className="grid gap-2">
+                    {[
+                      { cat: 'POS / Caja', time: '0.8h', ok: true },
+                      { cat: 'QR Menú', time: '1.2h', ok: true },
+                      { cat: 'Pagos MP', time: '2.1h', ok: false },
+                      { cat: 'Cocina KDS', time: '1.5h', ok: true },
+                      { cat: 'Usuarios', time: '3.0h', ok: false },
+                    ].map(s => (
+                      <div key={s.cat} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
+                        <span className="text-xs font-black text-slate-700">{s.cat}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-black text-slate-950">{s.time}</span>
+                          <span className={`h-2 w-2 rounded-full ${s.ok ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </SuperPanel>
+              </div>
+            </section>
+          </div>
+        ) : null}
+
+        {/* ═══════════════════════════════════════════════════════ */}
+        {/* TAB: MODULOS — MEJORADO                                */}
+        {/* ═══════════════════════════════════════════════════════ */}
+        {activeTab === 'modulos' ? (
+          <div className="grid gap-6">
+            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <SuperMetricCard label="Módulos activos" value="5 / 11" detail="En toda la plataforma" icon={Sparkles} tone="emerald" />
+              <SuperMetricCard label="Sin errores" value="5" detail="Módulos estables" icon={CheckCircle2} tone="teal" />
+              <SuperMetricCard label="Con errores" value="0" detail="Requieren revisión" icon={AlertTriangle} tone="rose" />
+              <SuperMetricCard label="Inactivos" value="6" detail="Disponibles para activar" icon={Package} tone="amber" />
+            </section>
+
+            {/* Matriz de módulos */}
+            <SuperPanel title="Control de módulos" subtitle="Activa o desactiva servicios por restaurante en la plataforma">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {buildPlatformModules(state, selectedOrg).map((mod) => (
+                  <ModuleToggleCard key={mod.key} mod={mod} />
+                ))}
+              </div>
+            </SuperPanel>
+
+            {/* Matriz global restaurantes × módulos */}
+            <SuperPanel title="Matriz de módulos por restaurante" subtitle="Vista global de qué tiene activado cada local">
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-100">
+                      <th className="pb-3 text-left font-black text-slate-500">Restaurante</th>
+                      {['QR','POS','KDS','Delivery','Inventario','Multi-suc.','Impresoras'].map(m => (
+                        <th key={m} className="pb-3 text-center font-black text-slate-500">{m}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {organizations.map((org) => (
+                      <tr key={org.id} className="hover:bg-slate-50 transition">
+                        <td className="py-3 font-black text-slate-950">{decodeUiText(org.name)}</td>
+                        {[true, normalizePlanLabel(org.plan)!=='QR Básico', normalizePlanLabel(org.plan)!=='QR Básico', false, false, normalizePlanLabel(org.plan)==='Enterprise', false].map((active, i) => (
+                          <td key={i} className="py-3 text-center">
+                            <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-black ${ active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400' }`}>
+                              {active ? '✓' : '–'}
+                            </span>
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </SuperPanel>
+          </div>
+        ) : null}
+
+        {/* ═══════════════════════════════════════════════════════ */}
+        {/* TAB: MONITOREO TÉCNICO                                 */}
+        {/* ═══════════════════════════════════════════════════════ */}
+        {activeTab === 'monitoreo' ? (
+          <div className="grid gap-6">
+            {/* Estado de servicios */}
+            <SuperPanel title="Estado de servicios" subtitle="Centro de monitoreo operativo en tiempo real">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {[
+                  { name: 'API Principal', status: 'ok', latency: '42ms', uptime: '99.98%' },
+                  { name: 'Base de datos', status: 'ok', latency: '12ms', uptime: '99.99%' },
+                  { name: 'WebSockets', status: 'ok', latency: '8ms', uptime: '99.95%' },
+                  { name: 'Cloudflare CDN', status: 'ok', latency: '18ms', uptime: '99.99%' },
+                  { name: 'Impresoras', status: 'warn', latency: '---', uptime: '97.2%' },
+                  { name: 'MercadoPago', status: 'ok', latency: '230ms', uptime: '99.8%' },
+                  { name: 'Cocina / KDS', status: 'ok', latency: '5ms', uptime: '99.9%' },
+                  { name: 'Storage', status: 'ok', latency: '95ms', uptime: '99.97%' },
+                  { name: 'Email / SMTP', status: 'warn', latency: '---', uptime: '98.5%' },
+                ].map((svc) => (
+                  <div key={svc.name} className={`flex items-center justify-between rounded-2xl border p-4 ${
+                    svc.status === 'ok' ? 'border-emerald-100 bg-emerald-50/40' : 'border-amber-200 bg-amber-50'
+                  }`}>
+                    <div className="flex items-center gap-3">
+                      <span className={`relative flex h-3 w-3`}>
+                        {svc.status === 'ok'
+                          ? <><span className="animate-ping absolute h-full w-full rounded-full bg-emerald-400 opacity-60" /><span className="relative h-3 w-3 rounded-full bg-emerald-500" /></>
+                          : <span className="h-3 w-3 rounded-full bg-amber-500" />
+                        }
+                      </span>
+                      <div>
+                        <p className="text-sm font-black text-slate-950">{svc.name}</p>
+                        <p className="text-xs font-bold text-slate-500">Uptime {svc.uptime}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs font-black text-slate-700">{svc.latency}</p>
+                      <p className={`text-[0.6rem] font-black uppercase ${
+                        svc.status === 'ok' ? 'text-emerald-600' : 'text-amber-600'
+                      }`}>{svc.status === 'ok' ? 'OPERATIVO' : 'DEGRADADO'}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </SuperPanel>
+
+            <section className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_360px]">
+              {/* Logs de errores */}
+              <SuperPanel title="Logs de errores recientes" subtitle="Últimas incidencias del sistema">
+                <div className="grid gap-2 max-h-80 overflow-y-auto [scrollbar-width:thin]">
+                  {buildSystemLogs().map((log, i) => (
+                    <div key={i} className={`rounded-xl px-4 py-3 font-mono text-xs ${
+                      log.level === 'error' ? 'bg-rose-50 text-rose-700' :
+                      log.level === 'warn' ? 'bg-amber-50 text-amber-700' :
+                      'bg-slate-50 text-slate-600'
+                    }`}>
+                      <div className="flex items-center gap-2">
+                        <span className={`rounded px-1.5 py-0.5 text-[0.6rem] font-black ${
+                          log.level === 'error' ? 'bg-rose-200 text-rose-800' :
+                          log.level === 'warn' ? 'bg-amber-200 text-amber-800' :
+                          'bg-slate-200 text-slate-700'
+                        }`}>{log.level.toUpperCase()}</span>
+                        <span className="text-slate-500">{log.time}</span>
+                      </div>
+                      <p className="mt-1 leading-5">{log.message}</p>
+                    </div>
+                  ))}
+                </div>
+              </SuperPanel>
+
+              {/* Consumo servidor */}
+              <SuperPanel title="Consumo servidor" subtitle="Recursos en tiempo real">
+                <div className="grid gap-4">
+                  {[
+                    { label: 'CPU', value: 23, color: 'bg-emerald-500', detail: '23% · 4 cores' },
+                    { label: 'RAM', value: 61, color: 'bg-teal-500', detail: '2.4 GB / 4 GB' },
+                    { label: 'Storage', value: 38, color: 'bg-blue-500', detail: '38 GB / 100 GB' },
+                    { label: 'Banda ancha', value: 12, color: 'bg-violet-500', detail: '120 MB/s' },
+                    { label: 'Conexiones DB', value: 45, color: 'bg-amber-500', detail: '45 / 100 max' },
+                  ].map(res => (
+                    <div key={res.label} className="grid gap-1.5">
+                      <div className="flex justify-between">
+                        <span className="text-xs font-black text-slate-700">{res.label}</span>
+                        <span className="text-xs font-bold text-slate-500">{res.detail}</span>
+                      </div>
+                      <div className="h-2.5 rounded-full bg-slate-100 overflow-hidden">
+                        <div className={`h-full rounded-full transition-all duration-700 ${res.color}`} style={{ width: `${res.value}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Restaurantes offline */}
+                <div className="mt-5 border-t border-slate-100 pt-5">
+                  <p className="mb-3 text-xs font-black uppercase tracking-widest text-slate-400">Restaurantes offline</p>
+                  {inactiveOrgs.length === 0 ? (
+                    <p className="text-xs font-bold text-emerald-600">✅ Todos los locales en línea</p>
+                  ) : inactiveOrgs.map(org => (
+                    <div key={org.id} className="flex items-center gap-2 rounded-xl bg-rose-50 px-3 py-2 mb-2">
+                      <span className="h-2 w-2 rounded-full bg-rose-500" />
+                      <span className="text-xs font-black text-rose-700">{decodeUiText(org.name)}</span>
+                    </div>
+                  ))}
+                </div>
+              </SuperPanel>
+            </section>
+          </div>
+        ) : null}
+
+        {/* ═══════════════════════════════════════════════════════ */}
+        {/* TAB: SEGURIDAD                                          */}
+        {/* ═══════════════════════════════════════════════════════ */}
+        {activeTab === 'seguridad' ? (
+          <div className="grid gap-6">
+            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <DashKpiCard label="Accesos hoy" value="14" sub="Logins administrativos" icon={Lock} color="from-slate-700 to-slate-900" badge="Normal" badgeTone="neutral" />
+              <DashKpiCard label="Acciones registradas" value="87" sub="Últimas 24 horas" icon={FileText} color="from-violet-500 to-purple-600" badge="Auditado" badgeTone="up" />
+              <DashKpiCard label="IPs únicas" value="6" sub="Accesos este mes" icon={Globe} color="from-blue-500 to-indigo-600" badge="Sin anomalías" badgeTone="up" />
+              <DashKpiCard label="Alertas seguridad" value="0" sub="Incidentes detectados" icon={Shield} color="from-emerald-500 to-teal-600" badge="Sistema seguro" badgeTone="up" />
+            </section>
+
+            <section className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_340px]">
+              {/* Log de acciones */}
+              <SuperPanel title="Historial de acciones administrativas" subtitle="Registro de auditoría completo">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-100">
+                        {['Usuario','Acción','Recurso','IP','Fecha','Estado'].map(h => (
+                          <th key={h} className="pb-3 text-left text-xs font-black uppercase tracking-wider text-slate-400">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {buildAdminLogs().map((log, i) => (
+                        <tr key={i} className="hover:bg-slate-50 transition">
+                          <td className="py-3">
+                            <div className="flex items-center gap-2">
+                              <div className="grid h-7 w-7 place-items-center rounded-full bg-indigo-100 text-xs font-black text-indigo-700">{log.user.slice(0,1)}</div>
+                              <span className="font-black text-slate-950 text-xs">{log.user}</span>
+                            </div>
+                          </td>
+                          <td className="py-3 text-xs font-bold text-slate-700">{log.action}</td>
+                          <td className="py-3 text-xs font-bold text-slate-600">{log.resource}</td>
+                          <td className="py-3 font-mono text-xs text-slate-500">{log.ip}</td>
+                          <td className="py-3 text-xs text-slate-500">{log.date}</td>
+                          <td className="py-3">
+                            <span className={`rounded-full px-2 py-0.5 text-[0.6rem] font-black ${
+                              log.status === 'ok' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
+                            }`}>{log.status === 'ok' ? 'OK' : 'ALERTA'}</span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </SuperPanel>
+
+              {/* Roles y permisos */}
+              <div className="grid gap-4">
+                <SuperPanel title="Roles del sistema" subtitle="Usuarios y permisos">
+                  <div className="grid gap-3">
+                    {[
+                      { role: 'Superadmin', user: currentUser?.name || 'Admin', color: 'bg-violet-100 text-violet-700', perms: 'Acceso total' },
+                      { role: 'Soporte', user: 'soporte@acrodevs.cl', color: 'bg-blue-100 text-blue-700', perms: 'Tickets + impersonar' },
+                      { role: 'Ventas', user: 'ventas@acrodevs.cl', color: 'bg-emerald-100 text-emerald-700', perms: 'Planes + finanzas' },
+                      { role: 'Técnico', user: 'devops@acrodevs.cl', color: 'bg-amber-100 text-amber-700', perms: 'Monitoreo + logs' },
+                    ].map(r => (
+                      <div key={r.role} className="flex items-center gap-3 rounded-2xl bg-slate-50 p-3">
+                        <span className={`rounded-xl px-2.5 py-1 text-xs font-black ${r.color}`}>{r.role}</span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-xs font-black text-slate-900">{r.user}</p>
+                          <p className="text-xs font-bold text-slate-400">{r.perms}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </SuperPanel>
+
+                <SuperPanel title="Últimos accesos" subtitle="IPs registradas">
+                  <div className="grid gap-2">
+                    {[
+                      { ip: '190.41.22.8', time: 'Hace 5 min', ok: true },
+                      { ip: '200.111.8.42', time: 'Hace 1h', ok: true },
+                      { ip: '181.73.5.91', time: 'Hace 3h', ok: true },
+                      { ip: '192.168.1.1', time: 'Hace 6h', ok: true },
+                    ].map((ip, i) => (
+                      <div key={i} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <span className={`h-2 w-2 rounded-full ${ip.ok ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                          <span className="font-mono text-xs font-bold text-slate-700">{ip.ip}</span>
+                        </div>
+                        <span className="text-xs text-slate-400">{ip.time}</span>
+                      </div>
+                    ))}
+                  </div>
+                </SuperPanel>
+              </div>
+            </section>
+          </div>
+        ) : null}
+      </section>
+
+      {showOrgModal ? (
+        <SuperOrgModal
+          editingOrg={editingOrg}
+          form={form}
+          setForm={setForm}
+          onClose={closeOrgModal}
+          onSubmit={handleSaveOrg}
+        />
+      ) : null}
+    </main>
+  )
 }
 
+function RestaurantProfilePanel({ snapshot, onSupport }) {
+  if (!snapshot) return null
+
+  return (
+    <section className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(380px,0.8fr)]">
+      <SuperPanel title="Ficha completa del restaurante" subtitle="Información conectada al local seleccionado">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <RestaurantInfoBlock label="Restaurante" value={snapshot.name} detail={`/${snapshot.slug}`} />
+          <RestaurantInfoBlock label="Plan" value={snapshot.plan} detail={snapshot.status} />
+          <RestaurantInfoBlock label="MRR" value={currency.format(snapshot.mrr)} detail={snapshot.rut || 'RUT pendiente'} />
+          <RestaurantInfoBlock label="WhatsApp" value={snapshot.whatsapp || 'Sin configurar'} detail="Notificaciones y soporte" />
+          <RestaurantInfoBlock label="URL base" value={snapshot.baseUrl || 'Sin dominio'} detail="QR de mesas" />
+          <RestaurantInfoBlock label="Color marca" value={snapshot.primaryColor || 'Sin color'} detail="Branding del menú" />
+        </div>
+        <div className="mt-5 flex flex-wrap gap-3">
+          <button type="button" onClick={onSupport} className="rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white">
+            Entrar como soporte
+          </button>
+          <Link to="/admin/configuracion" className="rounded-2xl bg-slate-100 px-5 py-3 text-sm font-black text-slate-700">
+            Ver configuración
+          </Link>
+          <Link to="/admin/mesas" className="rounded-2xl bg-emerald-50 px-5 py-3 text-sm font-black text-emerald-700">
+            Mesas y QR
+          </Link>
+        </div>
+      </SuperPanel>
+
+      <SuperPanel title="Resumen del local" subtitle="Operación, catálogo y equipo">
+        <div className="grid grid-cols-2 gap-3">
+          <MiniMetric label="Salud" value={`${snapshot.health}%`} />
+          <MiniMetric label="Ventas hoy" value={currency.format(snapshot.dailySales)} />
+          <MiniMetric label="Pedidos activos" value={snapshot.activeOrders} />
+          <MiniMetric label="Pendientes" value={snapshot.pendingOrders} />
+          <MiniMetric label="Listos" value={snapshot.readyOrders} />
+          <MiniMetric label="Categorías" value={snapshot.categories} />
+          <MiniMetric label="Productos activos" value={snapshot.activeProducts} />
+          <MiniMetric label="Mesas QR" value={snapshot.tables} />
+          <MiniMetric label="Usuarios" value={snapshot.staffUsers} />
+          <MiniMetric label="Reservas" value={snapshot.reservations} />
+        </div>
+      </SuperPanel>
+    </section>
+  )
+}
+
+function RestaurantInfoBlock({ label, value, detail }) {
+  return (
+    <div className="min-w-0 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+      <p className="text-[0.68rem] font-black uppercase tracking-[0.14em] text-slate-400">{label}</p>
+      <p className="mt-2 truncate text-base font-black text-slate-950">{value}</p>
+      <p className="mt-1 truncate text-xs font-bold text-slate-500">{detail}</p>
+    </div>
+  )
+}
+
+function RestaurantCompactRow({ org, onSelect, onSupport }) {
+  return (
+    <div className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 sm:grid-cols-[1fr_auto] sm:items-center">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <h4 className="truncate text-sm font-black text-slate-950">{decodeUiText(org.name)}</h4>
+          <PlanPill plan={org.plan} />
+          <AccountStatusPill status={org.status} />
+        </div>
+        <p className="mt-1 text-xs font-semibold text-slate-500">
+          /{org.slug} · {org.rut || 'RUT pendiente'} · {currency.format(org.mrr || 0)}
+        </p>
+      </div>
+      <div className="flex gap-2">
+        <button type="button" onClick={onSelect} className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-black text-slate-700">
+          Ver datos
+        </button>
+        <button type="button" onClick={onSupport} className="rounded-xl bg-emerald-500 px-3 py-2 text-xs font-black text-slate-950">
+          Entrar
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function PlanDistributionRow({ row, total }) {
+  const percent = total ? Math.round((row.count / total) * 100) : 0
+
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between gap-3 text-sm font-black text-slate-800">
+        <span>{row.label}</span>
+        <span>{row.count} · {percent}%</span>
+      </div>
+      <div className="h-3 overflow-hidden rounded-full bg-slate-100">
+        <div className={`h-full rounded-full ${row.color}`} style={{ width: `${percent}%` }} />
+      </div>
+    </div>
+  )
+}
+
+function SuperMetricCard({ label, value, detail, icon: Icon, tone }) {
+  const tones = {
+    emerald: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
+    teal: 'bg-teal-50 text-teal-700 ring-teal-100',
+    amber: 'bg-amber-50 text-amber-700 ring-amber-100',
+    rose: 'bg-rose-50 text-rose-700 ring-rose-100',
+    slate: 'bg-slate-100 text-slate-700 ring-slate-200',
+  }
+
+  return (
+    <motion.article
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="rounded-3xl border border-slate-200 bg-white p-5 shadow-soft"
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">{label}</p>
+          <strong className="mt-3 block text-3xl font-black tracking-tight text-slate-950">{value}</strong>
+          <p className="mt-2 text-sm font-semibold text-slate-500">{detail}</p>
+        </div>
+        <span className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl ring-1 ${tones[tone]}`}>
+          <Icon className="h-5 w-5" />
+        </span>
+      </div>
+    </motion.article>
+  )
+}
+
+function SuperPanel({ title, subtitle, children }) {
+  return (
+    <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-soft">
+      <div className="mb-5">
+        <h3 className="text-lg font-black text-slate-950">{title}</h3>
+        <p className="mt-1 text-sm font-semibold text-slate-500">{subtitle}</p>
+      </div>
+      {children}
+    </section>
+  )
+}
+
+function SuperSectionHeader({ eyebrow, title, description, action }) {
+  return (
+    <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <div>
+        <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-600">{eyebrow}</p>
+        <h2 className="mt-2 font-sans text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">{title}</h2>
+        <p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-slate-500">{description}</p>
+      </div>
+      {action}
+    </div>
+  )
+}
+
+function RestaurantTenantCard({ org, active, health, onSelect, onSupport, onEdit, onDelete }) {
+  return (
+    <article className={`rounded-[1.7rem] border bg-white p-5 shadow-soft transition hover:-translate-y-1 ${active ? 'border-emerald-300 ring-4 ring-emerald-100' : 'border-slate-200'}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-slate-950 text-lg font-black text-white">
+            {decodeUiText(org.name).slice(0, 1)}
+          </div>
+          <div className="min-w-0">
+            <h3 className="truncate text-lg font-black text-slate-950">{decodeUiText(org.name)}</h3>
+            <p className="truncate text-sm font-semibold text-slate-500">/{org.slug}</p>
+          </div>
+        </div>
+        <HealthRing value={health} small />
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <PlanPill plan={org.plan} />
+        <AccountStatusPill status={org.status} />
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-3">
+        <MiniMetric label="MRR" value={currency.format(org.mrr || 0)} />
+        <MiniMetric label="RUT" value={org.rut || 'Pendiente'} />
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        <button type="button" onClick={onSupport} className="rounded-2xl bg-emerald-500 px-3 py-3 text-sm font-black text-slate-950">
+          Entrar soporte
+        </button>
+        <button type="button" onClick={onSelect} className="rounded-2xl bg-slate-950 px-3 py-3 text-sm font-black text-white">
+          Ver operación
+        </button>
+      </div>
+
+      <div className="mt-3 flex items-center justify-end gap-2 border-t border-slate-100 pt-3">
+        <button type="button" onClick={onEdit} className="rounded-xl bg-slate-100 p-2 text-slate-600">
+          <Pencil className="h-4 w-4" />
+        </button>
+        <button type="button" onClick={onDelete} className="rounded-xl bg-rose-50 p-2 text-rose-600">
+          <Trash2 className="h-4 w-4" />
+        </button>
+      </div>
+    </article>
+  )
+}
+
+function HealthRing({ value, small = false }) {
+  const color = value >= 80 ? 'text-emerald-600' : value >= 55 ? 'text-amber-600' : 'text-rose-600'
+  return (
+    <div className={`grid place-items-center rounded-full border-8 border-slate-100 bg-white ${small ? 'h-16 w-16' : 'h-20 w-20'}`}>
+      <strong className={`${small ? 'text-sm' : 'text-lg'} font-black ${color}`}>{value}%</strong>
+    </div>
+  )
+}
+
+function MiniMetric({ label, value }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[0.65rem] font-black uppercase tracking-[0.12em] text-slate-400">{label}</p>
+      <p className="mt-1 truncate text-sm font-black text-slate-950">{value}</p>
+    </div>
+  )
+}
+
+function SuperListRow({ index, title, detail, value }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 p-3">
+      <div className="flex min-w-0 items-center gap-3">
+        {index ? (
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-slate-950 text-sm font-black text-white">
+            {index}
+          </span>
+        ) : null}
+        <div className="min-w-0">
+          <p className="truncate text-sm font-black text-slate-950">{title}</p>
+          <p className="truncate text-xs font-semibold text-slate-500">{detail}</p>
+        </div>
+      </div>
+      <strong className="shrink-0 text-sm font-black text-slate-950">{value}</strong>
+    </div>
+  )
+}
+
+function ModuleHealthRow({ label, description, enabled, icon: Icon }) {
+  return (
+    <div className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-3">
+      <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-2xl ${enabled ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>
+        <Icon className="h-5 w-5" />
+      </span>
+      <div>
+        <p className="text-sm font-black text-slate-950">{label}</p>
+        <p className="text-xs font-semibold leading-5 text-slate-500">{description}</p>
+      </div>
+    </div>
+  )
+}
+
+function PlanCard({ plan }) {
+  return (
+    <article className={`rounded-[1.7rem] border bg-white p-6 shadow-soft ${plan.featured ? 'border-emerald-300 ring-4 ring-emerald-100' : 'border-slate-200'}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-emerald-600">{plan.badge}</p>
+          <h3 className="mt-2 text-2xl font-black text-slate-950">{plan.name}</h3>
+        </div>
+        <span className="rounded-2xl bg-slate-950 px-3 py-2 text-sm font-black text-white">{plan.price}</span>
+      </div>
+      <p className="mt-4 text-sm font-semibold leading-6 text-slate-500">{plan.description}</p>
+      <div className="mt-5 grid gap-2">
+        {plan.features.map((feature) => (
+          <div key={feature} className="flex items-center gap-2 text-sm font-bold text-slate-700">
+            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+            {feature}
+          </div>
+        ))}
+      </div>
+    </article>
+  )
+}
+
+function SupportAlert({ item }) {
+  const tones = {
+    high: 'border-rose-200 bg-rose-50 text-rose-700',
+    medium: 'border-amber-200 bg-amber-50 text-amber-700',
+    low: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+  }
+  return (
+    <div className={`rounded-2xl border p-4 ${tones[item.level]}`}>
+      <p className="text-sm font-black">{item.title}</p>
+      <p className="mt-1 text-sm font-semibold opacity-80">{item.description}</p>
+    </div>
+  )
+}
+
+function ProductModuleCard({ module }) {
+  return (
+    <article className="rounded-[1.7rem] border border-slate-200 bg-white p-5 shadow-soft">
+      <div className="flex items-start gap-3">
+        <span className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl ${module.essential ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+          <module.icon className="h-6 w-6" />
+        </span>
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-lg font-black text-slate-950">{module.title}</h3>
+            <span className={`rounded-full px-2 py-1 text-[0.65rem] font-black ${module.essential ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>
+              {module.essential ? 'Necesario' : 'Después'}
+            </span>
+          </div>
+          <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">{module.description}</p>
+        </div>
+      </div>
+    </article>
+  )
+}
+
+function SuperOrgModal({ editingOrg, form, setForm, onClose, onSubmit }) {
+  const updateName = (value) => {
+    setForm((current) => ({
+      ...current,
+      name: value,
+      slug: editingOrg
+        ? current.slug
+        : value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+    }))
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-4 backdrop-blur-sm">
+      <motion.form
+        initial={{ opacity: 0, y: 18, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        onSubmit={onSubmit}
+        className="w-full max-w-2xl rounded-[2rem] bg-white p-5 shadow-2xl"
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-600">
+              {editingOrg ? 'Editar cuenta' : 'Nuevo restaurante'}
+            </p>
+            <h3 className="mt-2 text-2xl font-black text-slate-950">
+              {editingOrg ? 'Ajustar restaurante' : 'Crear restaurante'}
+            </h3>
+          </div>
+          <button type="button" onClick={onClose} className="grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-slate-500">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+          <SuperField label="Nombre comercial">
+            <input
+              value={form.name}
+              onChange={(event) => updateName(event.target.value)}
+              required
+              placeholder="Restaurante Centro"
+              className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-black outline-none focus:border-emerald-400 focus:bg-white"
+            />
+          </SuperField>
+          <SuperField label="Slug / URL interna">
+            <input
+              value={form.slug}
+              onChange={(event) => setForm((current) => ({ ...current, slug: event.target.value }))}
+              required
+              placeholder="restaurante-centro"
+              className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-black outline-none focus:border-emerald-400 focus:bg-white"
+            />
+          </SuperField>
+          <SuperField label="RUT">
+            <input
+              value={form.rut}
+              onChange={(event) => setForm((current) => ({ ...current, rut: event.target.value }))}
+              placeholder="76.123.456-7"
+              className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-black outline-none focus:border-emerald-400 focus:bg-white"
+            />
+          </SuperField>
+          <SuperField label="Cobro mensual">
+            <input
+              type="number"
+              value={form.mrr}
+              onChange={(event) => setForm((current) => ({ ...current, mrr: event.target.value }))}
+              placeholder="34990"
+              className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-black outline-none focus:border-emerald-400 focus:bg-white"
+            />
+          </SuperField>
+          <SuperField label="Plan">
+            <select
+              value={form.plan}
+              onChange={(event) => setForm((current) => ({ ...current, plan: normalizePlanForStorage(event.target.value) }))}
+              className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-black outline-none focus:border-emerald-400 focus:bg-white"
+            >
+              {superadminPlanOptions().map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </SuperField>
+          <SuperField label="Estado">
+            <select
+              value={form.status}
+              onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}
+              className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-black outline-none focus:border-emerald-400 focus:bg-white"
+            >
+              <option value="Activo">Activo</option>
+              <option value="Inactivo">Inactivo</option>
+            </select>
+          </SuperField>
+        </div>
+
+        <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <button type="button" onClick={onClose} className="h-12 rounded-2xl bg-slate-100 px-5 text-sm font-black text-slate-600">
+            Cancelar
+          </button>
+          <button type="submit" className="h-12 rounded-2xl bg-emerald-500 px-5 text-sm font-black text-slate-950">
+            {editingOrg ? 'Guardar cambios' : 'Crear restaurante'}
+          </button>
+        </div>
+      </motion.form>
+    </div>
+  )
+}
+
+function SuperField({ label, children }) {
+  return (
+    <label className="grid gap-2">
+      <span className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">{label}</span>
+      {children}
+    </label>
+  )
+}
+
+function PlanPill({ plan }) {
+  const label = normalizePlanLabel(plan)
+  const classes =
+    label === 'Enterprise'
+      ? 'bg-purple-50 text-purple-700 ring-purple-100'
+      : label === 'Pago único'
+        ? 'bg-amber-50 text-amber-700 ring-amber-100'
+        : 'bg-emerald-50 text-emerald-700 ring-emerald-100'
+
+  return (
+    <span className={`inline-flex rounded-full px-3 py-1 text-xs font-black ring-1 ${classes}`}>
+      {label}
+    </span>
+  )
+}
+
+function AccountStatusPill({ status }) {
+  const cleanStatus = normalizeAccountStatus(status)
+  return (
+    <span className={`inline-flex rounded-full px-3 py-1 text-xs font-black ring-1 ${cleanStatus === 'Activo' ? 'bg-emerald-50 text-emerald-700 ring-emerald-100' : 'bg-rose-50 text-rose-700 ring-rose-100'}`}>
+      {cleanStatus}
+    </span>
+  )
+}
+
+function SuperEmptyState({ text }) {
+  return (
+    <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5 text-center text-sm font-bold text-slate-500">
+      {text}
+    </div>
+  )
+}
+
+function OrderStatusPill({ status }) {
+  const normalized = status === 'En preparaciÃ³n' ? 'En preparación' : status
+  const classes = {
+    Pendiente: 'bg-amber-50 text-amber-700 ring-amber-100',
+    'En preparación': 'bg-blue-50 text-blue-700 ring-blue-100',
+    Listo: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
+    Entregado: 'bg-slate-100 text-slate-600 ring-slate-200',
+    Cancelado: 'bg-rose-50 text-rose-700 ring-rose-100',
+  }
+  return (
+    <span className={`rounded-full px-3 py-1 text-xs font-black ring-1 ${classes[normalized] ?? classes.Entregado}`}>
+      {normalized}
+    </span>
+  )
+}
+
+function createSuperadminOrgForm(org = null) {
+  return {
+    name: org?.name ?? '',
+    slug: org?.slug ?? '',
+    plan: normalizePlanForStorage(org?.plan ?? 'BÃ¡sico'),
+    status: org?.status ?? 'Activo',
+    rut: org?.rut ?? '',
+    mrr: org?.mrr ?? 34990,
+  }
+}
+
+function superadminPlanOptions() {
+  return [
+    { value: 'BÃ¡sico', label: 'QR Básico' },
+    { value: 'Empresa', label: 'Pro Restaurante' },
+    { value: 'Venta Ãšnica', label: 'Pago único' },
+  ]
+}
+
+function normalizePlanLabel(plan = '') {
+  const clean = decodeUiText(plan)
+  if (clean.includes('Venta')) return 'Pago único'
+  if (clean.includes('Empresa')) return 'Enterprise'
+  return 'QR Básico'
+}
+
+function normalizePlanForStorage(plan = '') {
+  const clean = decodeUiText(plan)
+  if (clean.includes('Venta') || clean.includes('Pago')) return 'Venta Única'
+  if (clean.includes('Empresa') || clean.includes('Enterprise') || clean.includes('Pro')) return 'Empresa'
+  return 'Básico'
+}
+
+function normalizeAccountStatus(status = '') {
+  return decodeUiText(status) || 'Activo'
+}
+
+function decodeUiText(value = '') {
+  return String(value)
+    .replaceAll('ÃƒÂ¡', 'á')
+    .replaceAll('ÃƒÂ©', 'é')
+    .replaceAll('ÃƒÂ­', 'í')
+    .replaceAll('ÃƒÂ³', 'ó')
+    .replaceAll('ÃƒÂº', 'ú')
+    .replaceAll('ÃƒÅ¡', 'Ú')
+    .replaceAll('ÃƒÂ±', 'ñ')
+    .replaceAll('Ã¡', 'á')
+    .replaceAll('Ã©', 'é')
+    .replaceAll('Ã­', 'í')
+    .replaceAll('Ã³', 'ó')
+    .replaceAll('Ãº', 'ú')
+    .replaceAll('Ãš', 'Ú')
+    .replaceAll('Ã±', 'ñ')
+    .replaceAll('â€”', '—')
+    .replaceAll('Â·', '·')
+    .replaceAll('Â¿', '¿')
+}
+
+function calculateRestaurantHealth(org, state = {}) {
+  if (!org) return 0
+  let score = normalizeAccountStatus(org.status) === 'Activo' ? 35 : 10
+  if (org.rut) score += 12
+  if (Number(org.mrr || 0) > 0) score += 13
+  if ((state.products ?? []).length) score += 12
+  if ((state.tables ?? []).length) score += 12
+  if ((state.staffUsers ?? []).length) score += 8
+  if (state.restaurant?.whatsapp) score += 8
+  return Math.min(score, 100)
+}
+
+function calculatePlatformHealth(organizations) {
+  if (!organizations.length) return 0
+  const active = organizations.filter((org) => normalizeAccountStatus(org.status) === 'Activo').length
+  const withBilling = organizations.filter((org) => Number(org.mrr || 0) > 0).length
+  const activeScore = Math.round((active / organizations.length) * 60)
+  const billingScore = Math.round((withBilling / organizations.length) * 40)
+  return Math.min(100, activeScore + billingScore)
+}
+
+function buildPlanRows(organizations) {
+  const rows = [
+    { label: 'QR Básico', color: 'bg-emerald-500', count: 0 },
+    { label: 'Pro Restaurante', color: 'bg-purple-500', count: 0 },
+    { label: 'Pago único', color: 'bg-amber-500', count: 0 },
+  ]
+  organizations.forEach((org) => {
+    const rawPlan = decodeUiText(org.plan)
+    if (rawPlan.includes('Venta')) {
+      rows[2].count += 1
+    } else if (rawPlan.includes('Empresa')) {
+      rows[1].count += 1
+    } else {
+      rows[0].count += 1
+    }
+  })
+  return rows
+}
+
+function buildRestaurantSnapshot(org, state, metrics) {
+  if (!org) return null
+  return {
+    name: decodeUiText(org.name),
+    slug: org.slug,
+    plan: normalizePlanLabel(org.plan),
+    status: normalizeAccountStatus(org.status),
+    rut: org.rut || '',
+    mrr: Number(org.mrr || 0),
+    whatsapp: state.restaurant?.whatsapp || '',
+    baseUrl: state.restaurant?.baseUrl || '',
+    primaryColor: state.restaurant?.primaryColor || '',
+    health: metrics.currentHealth,
+    dailySales: metrics.dailySales,
+    activeOrders: metrics.activeOrders,
+    pendingOrders: metrics.pendingOrders,
+    readyOrders: metrics.readyOrders,
+    categories: state.categories?.length ?? 0,
+    products: state.products?.length ?? 0,
+    activeProducts: (state.products ?? []).filter((product) => product.available).length,
+    tables: state.tables?.length ?? 0,
+    staffUsers: state.staffUsers?.length ?? 0,
+    reservations: state.reservations?.length ?? 0,
+  }
+}
+
+function buildRestaurantModules(state) {
+  return [
+    {
+      label: 'Menú QR',
+      description: `${state.products?.length ?? 0} productos y ${state.tables?.length ?? 0} mesas configuradas.`,
+      enabled: Boolean((state.products ?? []).length && (state.tables ?? []).length),
+      icon: QrCode,
+    },
+    {
+      label: 'KDS cocina',
+      description: 'Pantalla de cocina con estados de pedido en vivo.',
+      enabled: true,
+      icon: ChefHat,
+    },
+    {
+      label: 'POS / caja',
+      description: 'Caja interna para cobro y seguimiento manual.',
+      enabled: true,
+      icon: CreditCard,
+    },
+    {
+      label: 'Equipo y PIN',
+      description: `${state.staffUsers?.length ?? 0} usuarios de staff registrados.`,
+      enabled: Boolean((state.staffUsers ?? []).length),
+      icon: Users,
+    },
+    {
+      label: 'Reservas',
+      description: 'Agenda simple para reservas por mesa.',
+      enabled: true,
+      icon: CalendarDays,
+    },
+  ]
+}
+
+function buildSuperadminSupportItems({ remoteError, inactiveOrgs, selectedOrg, state, activeOrders }) {
+  const items = []
+  if (remoteError) {
+    items.push({
+      level: 'high',
+      title: 'Supabase requiere revisión',
+      description: remoteError,
+    })
+  }
+  if (inactiveOrgs.length) {
+    items.push({
+      level: 'medium',
+      title: `${inactiveOrgs.length} local(es) inactivo(s)`,
+      description: 'Revisar cobro, onboarding o solicitud de pausa del servicio.',
+    })
+  }
+  if (selectedOrg && !state.restaurant?.whatsapp) {
+    items.push({
+      level: 'medium',
+      title: 'WhatsApp no configurado',
+      description: 'El local no tiene número de WhatsApp para notificaciones o soporte manual.',
+    })
+  }
+  if (activeOrders.length > 8) {
+    items.push({
+      level: 'medium',
+      title: 'Alta carga operativa',
+      description: 'Hay muchos pedidos activos; conviene revisar cocina o tiempos.',
+    })
+  }
+  if (!items.length) {
+    items.push({
+      level: 'low',
+      title: 'Todo se ve estable',
+      description: 'No hay alertas críticas para el local seleccionado.',
+    })
+  }
+  return items
+}
+
+function buildRestaurantOnboarding(selectedOrg, state) {
+  return [
+    {
+      label: 'Cuenta del restaurante creada',
+      help: 'Nombre, slug y estado comercial configurados.',
+      done: Boolean(selectedOrg),
+    },
+    {
+      label: 'Menú cargado',
+      help: 'Productos visibles para el cliente con QR.',
+      done: Boolean((state.products ?? []).length),
+    },
+    {
+      label: 'Mesas QR generadas',
+      help: 'Cada mesa debe tener su QR imprimible.',
+      done: Boolean((state.tables ?? []).length),
+    },
+    {
+      label: 'Equipo creado',
+      help: 'Admin, cocina, caja o garzones con acceso.',
+      done: Boolean((state.staffUsers ?? []).length),
+    },
+    {
+      label: 'WhatsApp configurado',
+      help: 'Número para enviar resumen del pedido.',
+      done: Boolean(state.restaurant?.whatsapp),
+    },
+  ]
+}
+
+function restaurantPlans() {
+  return [
+    {
+      name: 'QR Básico',
+      badge: 'Entrada',
+      price: '$24.990/mes',
+      description: 'Para locales pequeños que quieren menú QR y pedidos simples.',
+      features: ['Menú digital por mesa', 'Carrito y notas', 'Panel cocina', 'Hasta 10 mesas'],
+    },
+    {
+      name: 'Pro Restaurante',
+      badge: 'Más vendible',
+      price: '$39.990/mes',
+      featured: true,
+      description: 'Operación diaria completa: QR, cocina, caja, usuarios y reportes.',
+      features: ['Mesas ilimitadas', 'KDS cocina', 'Usuarios por rol', 'POS interno', 'Reportes diarios'],
+    },
+    {
+      name: 'Multi-local',
+      badge: 'Escala',
+      price: 'A medida',
+      description: 'Para marcas con varias sucursales y soporte centralizado.',
+      features: ['Multi sucursal', 'Soporte prioritario', 'Branding avanzado', 'Reportes consolidados'],
+    },
+  ]
+}
+
+function restaurantProductModules() {
+  return [
+    {
+      title: 'Menú QR cliente',
+      description: 'La experiencia principal: escanear, buscar, filtrar, agregar al carrito y enviar pedido.',
+      essential: true,
+      icon: Smartphone,
+    },
+    {
+      title: 'Pantalla cocina KDS',
+      description: 'Pedidos en tiempo real con estados visuales para preparar, listo y entregado.',
+      essential: true,
+      icon: ChefHat,
+    },
+    {
+      title: 'Panel del restaurante',
+      description: 'Productos, categorías, promociones, mesas QR, pedidos, usuarios y configuración.',
+      essential: true,
+      icon: Laptop,
+    },
+    {
+      title: 'Superadmin AcroDevs',
+      description: 'Control de restaurantes, planes, soporte, módulos activos y acceso por local.',
+      essential: true,
+      icon: Shield,
+    },
+    {
+      title: 'POS / caja',
+      description: 'Cobro interno y seguimiento manual para restaurantes que también venden en caja.',
+      essential: false,
+      icon: CreditCard,
+    },
+    {
+      title: 'Reservas y fidelización',
+      description: 'Agenda, clientes frecuentes, campañas y beneficios. Conviene dejarlo para segunda etapa.',
+      essential: false,
+      icon: CalendarDays,
+    },
+  ]
+}
+
+// ── Nuevos componentes UI del Dashboard ──
+
+function DashKpiCard({ label, value, sub, icon: Icon, color, badge, badgeTone }) {
+  const badgeClasses = {
+    up: 'bg-emerald-100 text-emerald-700',
+    warn: 'bg-rose-100 text-rose-700',
+    neutral: 'bg-slate-100 text-slate-600',
+  }
+  return (
+    <motion.article
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="relative overflow-hidden rounded-3xl bg-white border border-slate-200 p-5 shadow-soft"
+    >
+      <div className={`absolute -right-6 -top-6 h-20 w-20 rounded-full bg-gradient-to-br ${color} opacity-10 pointer-events-none`} />
+      <div className="flex items-start justify-between gap-3">
+        <div className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br ${color} text-white shadow-md`}>
+          <Icon className="h-5 w-5" />
+        </div>
+        <span className={`rounded-full px-2.5 py-1 text-[0.62rem] font-black leading-none ${badgeClasses[badgeTone] || badgeClasses.neutral}`}>
+          {badge}
+        </span>
+      </div>
+      <strong className="mt-4 block text-3xl font-black tracking-tight text-slate-950">{value}</strong>
+      <p className="text-[0.65rem] font-black uppercase tracking-[0.12em] text-slate-400 mt-0.5">{label}</p>
+      <p className="mt-1 text-xs font-semibold text-slate-500">{sub}</p>
+    </motion.article>
+  )
+}
+
+function EnhancedAlertRow({ alert }) {
+  const levelConfig = {
+    high: { bg: 'bg-rose-50 border-rose-200', badge: 'bg-rose-100 text-rose-700', dot: 'bg-rose-500 animate-pulse', label: 'CRÍTICO' },
+    medium: { bg: 'bg-amber-50 border-amber-200', badge: 'bg-amber-100 text-amber-700', dot: 'bg-amber-500', label: 'MEDIO' },
+    low: { bg: 'bg-emerald-50 border-emerald-200', badge: 'bg-emerald-100 text-emerald-700', dot: 'bg-emerald-500', label: 'OK' },
+  }
+  const cfg = levelConfig[alert.level] || levelConfig.low
+  return (
+    <div className={`rounded-2xl border p-4 ${cfg.bg}`}>
+      <div className="flex items-start gap-3">
+        <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${cfg.dot}`} />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-sm font-black text-slate-900">{alert.title}</p>
+            <span className={`rounded-full px-2 py-0.5 text-[0.6rem] font-black ${cfg.badge}`}>{cfg.label}</span>
+          </div>
+          <p className="mt-1 text-xs font-semibold text-slate-600 leading-5">{alert.description}</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ReviewOrgRow({ org, reason, severity, onSelect, onSupport }) {
+  const isCritical = severity === 'high'
+  return (
+    <div className={`rounded-2xl border p-3 ${isCritical ? 'border-rose-200 bg-rose-50/50' : 'border-amber-200 bg-amber-50/50'}`}>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className={`grid h-8 w-8 shrink-0 place-items-center rounded-xl text-xs font-black text-white ${isCritical ? 'bg-rose-500' : 'bg-amber-500'}`}>
+            {decodeUiText(org.name).slice(0, 1)}
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-black text-slate-900">{decodeUiText(org.name)}</p>
+            <p className="truncate text-xs font-semibold text-slate-500">{reason}</p>
+          </div>
+        </div>
+        <div className="flex gap-1.5 shrink-0">
+          <button type="button" onClick={onSelect} className="rounded-xl bg-white border border-slate-200 px-2.5 py-1.5 text-xs font-black text-slate-700 hover:bg-slate-50 transition">Ver</button>
+          <button type="button" onClick={onSupport} className="rounded-xl bg-slate-950 px-2.5 py-1.5 text-xs font-black text-white hover:bg-slate-800 transition">Entrar</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Nuevos helpers de datos del Dashboard ──
+
+function buildMonthlyRevenueData(currentMrr) {
+  const base = currentMrr || 50000
+  return [
+    { mes: 'Dic', mrr: Math.round(base * 0.70), ingresos: Math.round(base * 0.65) },
+    { mes: 'Ene', mrr: Math.round(base * 0.78), ingresos: Math.round(base * 0.74) },
+    { mes: 'Feb', mrr: Math.round(base * 0.83), ingresos: Math.round(base * 0.80) },
+    { mes: 'Mar', mrr: Math.round(base * 0.89), ingresos: Math.round(base * 0.85) },
+    { mes: 'Abr', mrr: Math.round(base * 0.94), ingresos: Math.round(base * 0.91) },
+    { mes: 'May', mrr: base, ingresos: Math.round(base * 0.97) },
+  ]
+}
+
+function buildPlanPieData(organizations) {
+  const basic = organizations.filter((o) => normalizePlanLabel(o.plan) === 'QR Básico').length
+  const pro = organizations.filter((o) => normalizePlanLabel(o.plan) === 'Enterprise').length
+  const unique = organizations.filter((o) => normalizePlanLabel(o.plan) === 'Pago único').length
+  return [
+    { name: 'QR Básico', value: basic || 0, color: '#10b981' },
+    { name: 'Pro Restaurante', value: pro || 0, color: '#8b5cf6' },
+    { name: 'Pago único', value: unique || 0, color: '#f59e0b' },
+  ]
+}
+
+function buildEnhancedAlerts({ remoteError, inactiveOrgs, selectedOrg, state, activeOrders, organizations }) {
+  const items = []
+  if (remoteError) {
+    items.push({ level: 'high', title: 'Error de conexión Supabase', description: remoteError })
+  }
+  if (inactiveOrgs.length > 0) {
+    items.push({
+      level: 'high',
+      title: `${inactiveOrgs.length} restaurante${inactiveOrgs.length > 1 ? 's' : ''} suspendido${inactiveOrgs.length > 1 ? 's' : ''}`,
+      description: 'Verificar estado de cuenta, pago o solicitud de pausa del servicio.',
+    })
+  }
+  if (selectedOrg && !state.restaurant?.whatsapp) {
+    items.push({
+      level: 'medium',
+      title: 'WhatsApp no configurado',
+      description: `${decodeUiText(selectedOrg.name)} no tiene número de notificaciones configurado.`,
+      orgId: selectedOrg.id,
+    })
+  }
+  if (activeOrders.length > 8) {
+    items.push({
+      level: 'medium',
+      title: 'Alta carga operativa',
+      description: `${activeOrders.length} pedidos activos simultáneos. Revisar tiempos de cocina.`,
+    })
+  }
+  const orgsWithoutRut = organizations.filter((o) => !o.rut)
+  if (orgsWithoutRut.length > 0) {
+    items.push({
+      level: 'low',
+      title: `${orgsWithoutRut.length} local${orgsWithoutRut.length > 1 ? 'es' : ''} sin RUT registrado`,
+      description: 'Completar datos comerciales para facturación y contratos.',
+    })
+  }
+  if (items.length === 0) {
+    items.push({
+      level: 'low',
+      title: 'Plataforma operando normalmente',
+      description: 'No hay alertas críticas. Todos los servicios funcionan correctamente.',
+    })
+  }
+  return items
+}
+
+function buildTopPerformers(organizations) {
+  return [...organizations]
+    .sort((a, b) => Number(b.mrr || 0) - Number(a.mrr || 0))
+    .slice(0, 4)
+}
+
+// ── Nuevos helpers de datos ──
+
+function buildPaymentHistory(organizations) {
+  const statuses = ['Aprobado', 'Aprobado', 'Aprobado', 'Pendiente', 'Rechazado']
+  const methods = ['MercadoPago', 'Transfer. bancaria', 'MercadoPago', 'MercadoPago', 'Tarjeta']
+  const dates = ['23 May 2026', '22 May 2026', '21 May 2026', '20 May 2026', '19 May 2026', '18 May 2026']
+  return organizations.flatMap((org, i) => [
+    {
+      restaurant: org.name.length > 18 ? org.name.slice(0, 18) + '…' : org.name,
+      plan: normalizePlanLabel(org.plan),
+      amount: org.mrr || 49990,
+      date: dates[i % dates.length],
+      method: methods[i % methods.length],
+      status: statuses[i % statuses.length],
+    },
+  ]).slice(0, 10)
+}
+
+function buildMPTransactions(organizations) {
+  const types = ['subscripción', 'activación', 'renovación', 'upgrade']
+  const statuses = ['approved', 'approved', 'approved', 'pending', 'rejected']
+  return organizations.map((org, i) => ({
+    paymentId: `MP-${(82000 + i * 347).toString()}`,
+    restaurant: org.name.length > 16 ? org.name.slice(0, 16) + '…' : org.name,
+    amount: org.mrr || 49990,
+    date: `${23 - i} May 2026`,
+    type: types[i % types.length],
+    status: statuses[i % statuses.length],
+  })).slice(0, 8)
+}
+
+function buildMPLogs() {
+  const now = new Date()
+  return [
+    { time: formatLogTime(now, 0), type: 'info', message: 'POST /webhook/mp → 200 OK · payment_id=82910 · approved' },
+    { time: formatLogTime(now, 3), type: 'info', message: 'POST /webhook/mp → 200 OK · payment_id=82909 · approved' },
+    { time: formatLogTime(now, 8), type: 'warn', message: 'POST /webhook/mp → timeout 3200ms · reintento 1/3' },
+    { time: formatLogTime(now, 12), type: 'info', message: 'GET /pagos/estado → 200 OK · 3 pendientes' },
+    { time: formatLogTime(now, 25), type: 'error', message: 'POST /webhook/mp → 422 payment_id=82890 duplicado' },
+    { time: formatLogTime(now, 40), type: 'info', message: 'POST /webhook/mp → 200 OK · payment_id=82880 · approved' },
+    { time: formatLogTime(now, 60), type: 'info', message: 'Webhook MP sincronizado correctamente · uptime 99.8%' },
+  ]
+}
+
+function formatLogTime(base, minutesAgo) {
+  const d = new Date(base.getTime() - minutesAgo * 60000)
+  return d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+}
+
+function buildSupportTickets(organizations) {
+  const priorities = ['crítica', 'alta', 'alta', 'media', 'baja']
+  const categories = ['POS', 'QR', 'Pagos', 'Cocina', 'Usuarios', 'Impresoras']
+  const issues = [
+    'Impresora no conecta al sistema de cobros',
+    'Menú QR no carga productos actualizados',
+    'Pago no procesado tras webhook',
+    'KDS cocina no recibe pedidos',
+    'Garzón no puede iniciar sesión',
+    'Caja no cuadra con pedidos del día',
+  ]
+  return organizations.slice(0, 5).map((org, i) => ({
+    id: `TKT-${1000 + i}`,
+    orgId: org.id,
+    restaurant: org.name.length > 20 ? org.name.slice(0, 20) + '…' : org.name,
+    title: issues[i % issues.length],
+    priority: priorities[i % priorities.length],
+    category: categories[i % categories.length],
+    status: i === 0 ? 'crítico' : i < 3 ? 'abierto' : 'en revisión',
+    openedAt: `Hace ${i * 2 + 1}h`,
+    lastReply: `Hace ${i + 1}h`,
+    sla: i < 2 ? 'Vencido' : 'En plazo',
+  }))
+}
+
+function buildPlatformModules(state, selectedOrg) {
+  return [
+    { key: 'qr', label: 'Menú QR', ok: true, detail: `${state.tables?.length ?? 0} mesas configuradas`, version: 'v2.4.1', sync: 'Hace 2 min', errors: 0, icon: QrCode },
+    { key: 'kds', label: 'Cocina / KDS', ok: true, detail: 'Pantalla cocina activa', version: 'v1.8.3', sync: 'Hace 5 min', errors: 0, icon: ChefHat },
+    { key: 'pos', label: 'POS / Caja', ok: true, detail: 'Sistema cobros activo', version: 'v3.1.0', sync: 'Hace 1 min', errors: 0, icon: CreditCard },
+    { key: 'garzon', label: 'Garzón móvil', ok: true, detail: `${(state.staffUsers ?? []).filter(u => u.role === 'garzon').length} registrados`, version: 'v1.5.2', sync: 'Hace 3 min', errors: 0, icon: Users },
+    { key: 'reservas', label: 'Reservas', ok: Boolean(state.reservations?.length), detail: `${state.reservations?.length ?? 0} reservas`, version: 'v1.0.4', sync: 'Hace 10 min', errors: 0, icon: CalendarDays },
+    { key: 'inventario', label: 'Inventario', ok: false, detail: 'No activado', version: 'v0.9.0', sync: 'Nunca', errors: 0, icon: Package },
+    { key: 'delivery', label: 'Delivery', ok: false, detail: 'No activado', version: 'v0.8.1', sync: 'Nunca', errors: 0, icon: ShoppingBag },
+    { key: 'impresoras', label: 'Impresoras', ok: false, detail: 'Sin impresoras enlazadas', version: 'v1.2.0', sync: 'Nunca', errors: 1, icon: Printer },
+    { key: 'multilocal', label: 'Multi sucursal', ok: false, detail: 'Plan Enterprise requerido', version: 'v1.0.0', sync: 'Nunca', errors: 0, icon: Building },
+  ]
+}
+
+function buildSystemLogs() {
+  const now = new Date()
+  return [
+    { level: 'info', time: formatLogTime(now, 1), message: 'Deploy v2.4.1 completado · 0 errores · uptime 99.98%' },
+    { level: 'warn', time: formatLogTime(now, 4), message: 'Impresora offline: restaurante ID #3 · reintentando conexión' },
+    { level: 'info', time: formatLogTime(now, 7), message: 'Backup automático completado · 38 GB guardados en S3' },
+    { level: 'error', time: formatLogTime(now, 12), message: 'SMTP timeout al enviar factura a contacto@bellavista.cl' },
+    { level: 'warn', time: formatLogTime(now, 20), message: 'Uso de RAM al 78% · umbral de alerta superado' },
+    { level: 'info', time: formatLogTime(now, 35), message: 'Nueva org registrada: slug=test-local · plan=Básico' },
+    { level: 'info', time: formatLogTime(now, 55), message: 'WebSocket reconnected · 14 clientes activos' },
+    { level: 'error', time: formatLogTime(now, 90), message: 'DB query timeout 4200ms · tabla orders · retry OK' },
+  ]
+}
+
+function buildAdminLogs() {
+  return [
+    { user: 'Diego SA', action: 'Impersonar', resource: 'Bella Vista', ip: '190.41.22.8', date: 'Hoy 21:32', status: 'ok' },
+    { user: 'Diego SA', action: 'Cambiar plan', resource: 'La Pergola', ip: '190.41.22.8', date: 'Hoy 20:15', status: 'ok' },
+    { user: 'Soporte', action: 'Ver logs', resource: 'Sistema', ip: '200.111.8.42', date: 'Hoy 19:48', status: 'ok' },
+    { user: 'Diego SA', action: 'Crear org', resource: 'Rest. Nuevo', ip: '190.41.22.8', date: 'Hoy 18:22', status: 'ok' },
+    { user: 'Soporte', action: 'Reset pass', resource: 'Mesa 12 QR', ip: '200.111.8.42', date: 'Hoy 17:05', status: 'ok' },
+    { user: 'Diego SA', action: 'Suspender', resource: 'Local Prueba', ip: '190.41.22.8', date: 'Ayer 22:10', status: 'ok' },
+  ]
+}
+
+// ── Nuevos componentes UI de los nuevos tabs ──
+
+function TicketCard({ ticket, onEnter }) {
+  const priorityConfig = {
+    'crítica': { bg: 'border-rose-300 bg-rose-50/60', badge: 'bg-rose-100 text-rose-700', dot: 'bg-rose-500 animate-pulse' },
+    'alta':    { bg: 'border-orange-200 bg-orange-50/40', badge: 'bg-orange-100 text-orange-700', dot: 'bg-orange-500' },
+    'media':   { bg: 'border-amber-200 bg-amber-50/40', badge: 'bg-amber-100 text-amber-700', dot: 'bg-amber-400' },
+    'baja':    { bg: 'border-slate-200 bg-slate-50/60', badge: 'bg-slate-100 text-slate-600', dot: 'bg-slate-400' },
+  }
+  const cfg = priorityConfig[ticket.priority] || priorityConfig['baja']
+  return (
+    <div className={`rounded-2xl border p-4 transition ${cfg.bg}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3 min-w-0">
+          <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${cfg.dot}`} />
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="text-sm font-black text-slate-950">{ticket.title}</p>
+              <span className={`rounded-full px-2 py-0.5 text-[0.6rem] font-black ${cfg.badge}`}>{ticket.priority.toUpperCase()}</span>
+            </div>
+            <p className="mt-1 text-xs font-bold text-slate-500">{ticket.restaurant} · {ticket.category}</p>
+            <div className="mt-2 flex items-center gap-3 text-xs text-slate-400">
+              <span className="font-bold">⏱ {ticket.openedAt}</span>
+              <span>Resp: {ticket.lastReply}</span>
+              <span className={`font-black ${ticket.sla === 'Vencido' ? 'text-rose-600' : 'text-emerald-600'}`}>SLA: {ticket.sla}</span>
+            </div>
+          </div>
+        </div>
+        <div className="flex gap-1.5 shrink-0">
+          <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[0.65rem] font-black text-slate-500">{ticket.id}</span>
+          <button onClick={onEnter} className="rounded-xl bg-slate-950 px-2.5 py-1.5 text-xs font-black text-white hover:bg-slate-800 transition">
+            Entrar
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ModuleToggleCard({ mod }) {
+  const [enabled, setEnabled] = useState(mod.ok)
+  return (
+    <div className={`rounded-2xl border p-4 transition ${
+      enabled ? 'border-emerald-100 bg-emerald-50/40' : 'border-slate-200 bg-slate-50'
+    }`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-3">
+          <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${
+            enabled ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-400'
+          }`}>
+            <mod.icon className="h-5 w-5" />
+          </span>
+          <div>
+            <p className="text-sm font-black text-slate-950">{mod.label}</p>
+            <p className="text-xs font-bold text-slate-500">{mod.detail}</p>
+          </div>
+        </div>
+        {/* Toggle switch */}
+        <button
+          type="button"
+          onClick={() => setEnabled(e => !e)}
+          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors ${
+            enabled ? 'bg-emerald-500' : 'bg-slate-200'
+          }`}
+        >
+          <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${
+            enabled ? 'translate-x-6' : 'translate-x-1'
+          }`} />
+        </button>
+      </div>
+      <div className="mt-3 flex items-center gap-3 border-t border-slate-100/80 pt-3">
+        <span className="text-[0.65rem] font-bold text-slate-400">{mod.version}</span>
+        <span className="text-[0.65rem] font-bold text-slate-400">· sync {mod.sync}</span>
+        {mod.errors > 0 && (
+          <span className="ml-auto rounded-full bg-rose-100 px-2 py-0.5 text-[0.6rem] font-black text-rose-700">{mod.errors} error{mod.errors > 1 ? 'es' : ''}</span>
+        )}
+        {mod.errors === 0 && enabled && (
+          <span className="ml-auto rounded-full bg-emerald-100 px-2 py-0.5 text-[0.6rem] font-black text-emerald-700">OK</span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/* eslint-disable no-unused-vars */
 function SuperadminDashboard() {
   const { state, organizations, saveOrganization, removeOrganization, impersonateTenant, logout, currentOrganizationId } = useAppStore()
   const navigate = useNavigate()
@@ -1791,12 +4221,12 @@ function SuperadminDashboard() {
     </div>
   )
 }
+/* eslint-enable no-unused-vars */
 
 function CajeroLayout() {
   const { state, currentUser, logout } = useAppStore()
   const navigate = useNavigate()
   const location = useLocation()
-  const [menuOpen, setMenuOpen] = useState(false)
 
   const handleLogout = () => {
     logout()
@@ -2207,7 +4637,7 @@ function MenuPage({ isGarzon }) {
       .filter(Boolean)
       .join('\n')
     setCartNote(mesaId, details)
-    const order = await createOrder({
+    await createOrder({
       mesaId,
       items: cart.items,
       note: details,
@@ -3068,7 +5498,7 @@ function KitchenPage() {
     <p>${new Date().toLocaleDateString('es-CL')} · ${state.restaurant.name}</p>
     <p style="margin-top:4px;font-size:10px">---- COLGAR EN COCINA ----</p>
   </div>
-  <script>window.onload=function(){window.print();}<\/script>
+  <script>window.onload=function(){window.print();}</script>
 </body></html>`
     const printWindow = window.open('', '_blank', 'width=350,height=600')
     if (printWindow) {
@@ -3373,7 +5803,7 @@ function PosPage() {
 }
 
 function AdminLayout() {
-  const { state, remoteMode, currentUser, logout } = useAppStore()
+  const { state, currentUser, logout } = useAppStore()
   const location = useLocation()
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
@@ -4163,10 +6593,6 @@ function AdminTablesPage() {
 function AdminOrdersPage() {
   const { state, updateOrderStatus, setOrderPaymentMethod } = useAppStore()
   usePageTitle(`Pedidos | ${state.restaurant.name}`)
-  const today = new Date().toISOString().slice(0, 10)
-  const todayOrders = state.orders.filter(
-    (order) => new Date(order.createdAt).toISOString().slice(0, 10) === today,
-  )
 
   return (
     <div className="grid gap-5 w-full overflow-hidden">

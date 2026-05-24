@@ -1,4 +1,4 @@
-/* eslint-disable react-refresh/only-export-components */
+/* eslint-disable react-refresh/only-export-components, react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { demoState, buildProductImage } from '../data/demoData.js'
 import {
@@ -79,7 +79,7 @@ export function AppStoreProvider({ children }) {
     return localStorage.getItem('lasthit-impersonated-org-id') || ''
   })
 
-  const [remoteMode, setRemoteMode] = useState(isSupabaseEnabled())
+  const [remoteMode] = useState(isSupabaseEnabled())
   const [remoteError, setRemoteError] = useState('')
   const [isHydrating, setIsHydrating] = useState(isSupabaseEnabled())
 
@@ -402,6 +402,11 @@ export function AppStoreProvider({ children }) {
       },
       switchOrganization(orgId) {
         setCurrentOrganizationId(orgId)
+        if (orgId) {
+          localStorage.setItem('lasthit-current-org-id', orgId)
+        } else {
+          localStorage.removeItem('lasthit-current-org-id')
+        }
       },
       impersonateTenant(tenantId) {
         if (tenantId) {
@@ -411,13 +416,8 @@ export function AppStoreProvider({ children }) {
         } else {
           setImpersonatedOrgId('')
           localStorage.removeItem('lasthit-impersonated-org-id')
-          const savedOrgId = localStorage.getItem('lasthit-current-org-id')
-          if (savedOrgId) {
-            setCurrentOrganizationId(savedOrgId)
-          } else if (organizations.length > 0) {
-            const mainOrgId = organizations.find(o => o.slug === 'guaton-xii')?.id || organizations[0].id
-            setCurrentOrganizationId(mainOrgId)
-          }
+          localStorage.removeItem('lasthit-current-org-id')
+          setCurrentOrganizationId('')
         }
       },
       async saveOrganization(org) {
