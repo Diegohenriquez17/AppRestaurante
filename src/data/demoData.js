@@ -29,6 +29,10 @@ export function buildProductImage(name, brandColor = '#d92d48') {
   return svgDataUrl(background, name, accent)
 }
 
+function getDemoBaseUrl() {
+  return import.meta.env.VITE_APP_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : '')
+}
+
 const categories = [
   { id: 'cat-1', name: 'Pizzas', description: 'Pizzas artesanales al horno' },
   { id: 'cat-2', name: 'Hamburguesas', description: 'Burgers smash y clasicas' },
@@ -134,8 +138,8 @@ const products = [
 export const demoState = {
   restaurant: {
     name: 'LastHit Bistro',
-    whatsapp: '56912345678',
-    baseUrl: 'https://dominio.cl',
+    whatsapp: '',
+    baseUrl: getDemoBaseUrl(),
     primaryColor: '#d92d48',
   },
   categories,

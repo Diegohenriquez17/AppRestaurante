@@ -122,10 +122,10 @@ insert into public.organizations (name, slug, plan, status, rut, mrr) values
 
 -- restaurant_settings
 insert into public.restaurant_settings (singleton, name, whatsapp, base_url, primary_color, organization_id)
-select false, 'Restaurante Guaton XII', '56936306560', 'http://localhost:5173', '#c2553d', id
+select false, 'Restaurante Guaton XII', '', 'http://localhost:5173', '#c2553d', id
 from public.organizations where slug = 'guaton-xii';
 
 -- Administrador por organización (Login por Email)
 insert into public.staff_users (name, role, pin, active, email, password, organization_id)
-select 'Admin Guaton XII', 'administrador', '1234', true, 'diegohen2005gonzales@gmail.com', 'diego2412', id
+select 'Admin Guaton XII', 'administrador', '1234', true, 'admin-restaurante@example.invalid', 'CAMBIAR_PASSWORD_ADMIN', id
 from public.organizations where slug = 'guaton-xii';

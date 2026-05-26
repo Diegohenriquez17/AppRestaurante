@@ -999,6 +999,7 @@ function RestaurantSuperadmin() {
     removeOrganization,
     impersonateTenant,
     logout,
+    currentUser,
     currentOrganizationId,
     remoteError,
     isHydrating,
@@ -1019,7 +1020,6 @@ function RestaurantSuperadmin() {
   const inactiveOrgs = organizations.filter((org) => normalizeAccountStatus(org.status) !== 'Activo')
   const totalMrr = organizations.reduce((sum, org) => sum + Number(org.mrr || 0), 0)
   const averageMrr = organizations.length ? Math.round(totalMrr / organizations.length) : 0
-  const totalOrders = state.orders?.length ?? 0
   const activeOrders = (state.orders ?? []).filter((order) =>
     ['Pendiente', 'En preparación', 'En preparaciÃ³n', 'Listo'].includes(order.status),
   )
@@ -1028,8 +1028,6 @@ function RestaurantSuperadmin() {
   const dailySales = (state.orders ?? [])
     .filter((order) => new Date(order.createdAt).toDateString() === new Date().toDateString())
     .reduce((sum, order) => sum + Number(order.total || 0), 0)
-  const chartData = buildSalesChartData(state.orders ?? [])
-  const topProducts = getTopProducts(state.orders ?? []).slice(0, 5)
   const currentHealth = calculateRestaurantHealth(selectedOrg, state)
   const filteredOrgs = organizations.filter((org) =>
     `${org.name} ${org.slug} ${org.rut || ''}`
@@ -1048,14 +1046,6 @@ function RestaurantSuperadmin() {
   const onboardingPercent = onboardingItems.length
     ? Math.round((onboardingDone / onboardingItems.length) * 100)
     : 0
-  const planRows = buildPlanRows(organizations)
-  const restaurantSnapshot = buildRestaurantSnapshot(selectedOrg, state, {
-    activeOrders: activeOrders.length,
-    pendingOrders: pendingOrders.length,
-    readyOrders: readyOrders.length,
-    dailySales,
-    currentHealth,
-  })
   const todayOrders = (state.orders ?? []).filter((o) => new Date(o.createdAt).toDateString() === new Date().toDateString())
   const openTicketsCount = 3
   const platformHealthScore = calculatePlatformHealth(organizations)
@@ -1119,6 +1109,8 @@ function RestaurantSuperadmin() {
     impersonateTenant(org.id)
     navigate('/admin')
   }
+
+  const handleImpersonate = handleSupportAccess
 
   const handleSelectTenant = (orgId) => {
     impersonateTenant(orgId)
@@ -2003,7 +1995,7 @@ function RestaurantSuperadmin() {
             {/* Matriz de módulos */}
             <SuperPanel title="Control de módulos" subtitle="Activa o desactiva servicios por restaurante en la plataforma">
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {buildPlatformModules(state, selectedOrg).map((mod) => (
+                {buildPlatformModules(state).map((mod) => (
                   <ModuleToggleCard key={mod.key} mod={mod} />
                 ))}
               </div>
@@ -2256,6 +2248,7 @@ function RestaurantSuperadmin() {
   )
 }
 
+// eslint-disable-next-line no-unused-vars
 function RestaurantProfilePanel({ snapshot, onSupport }) {
   if (!snapshot) return null
 
@@ -2336,6 +2329,7 @@ function RestaurantCompactRow({ org, onSelect, onSupport }) {
   )
 }
 
+// eslint-disable-next-line no-unused-vars
 function PlanDistributionRow({ row, total }) {
   const percent = total ? Math.round((row.count / total) * 100) : 0
 
@@ -2471,6 +2465,7 @@ function MiniMetric({ label, value }) {
   )
 }
 
+// eslint-disable-next-line no-unused-vars
 function SuperListRow({ index, title, detail, value }) {
   return (
     <div className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 p-3">
@@ -2541,6 +2536,7 @@ function SupportAlert({ item }) {
   )
 }
 
+// eslint-disable-next-line no-unused-vars
 function ProductModuleCard({ module }) {
   return (
     <article className="rounded-[1.7rem] border border-slate-200 bg-white p-5 shadow-soft">
@@ -2804,6 +2800,7 @@ function calculatePlatformHealth(organizations) {
   return Math.min(100, activeScore + billingScore)
 }
 
+// eslint-disable-next-line no-unused-vars
 function buildPlanRows(organizations) {
   const rows = [
     { label: 'QR Básico', color: 'bg-emerald-500', count: 0 },
@@ -2823,6 +2820,7 @@ function buildPlanRows(organizations) {
   return rows
 }
 
+// eslint-disable-next-line no-unused-vars
 function buildRestaurantSnapshot(org, state, metrics) {
   if (!org) return null
   return {
@@ -2981,6 +2979,7 @@ function restaurantPlans() {
   ]
 }
 
+// eslint-disable-next-line no-unused-vars
 function restaurantProductModules() {
   return [
     {
@@ -3248,7 +3247,7 @@ function buildSupportTickets(organizations) {
   }))
 }
 
-function buildPlatformModules(state, selectedOrg) {
+function buildPlatformModules(state) {
   return [
     { key: 'qr', label: 'Menú QR', ok: true, detail: `${state.tables?.length ?? 0} mesas configuradas`, version: 'v2.4.1', sync: 'Hace 2 min', errors: 0, icon: QrCode },
     { key: 'kds', label: 'Cocina / KDS', ok: true, detail: 'Pantalla cocina activa', version: 'v1.8.3', sync: 'Hace 5 min', errors: 0, icon: ChefHat },
@@ -7469,7 +7468,7 @@ function AdminConfigPage() {
             <input
               value={config.whatsapp}
               onChange={(event) => setConfig({ ...config, whatsapp: event.target.value })}
-              placeholder="56912345678"
+              placeholder="+56 9 XXXX XXXX"
             />
           </label>
           <label className="field">
@@ -7496,8 +7495,7 @@ function AdminConfigPage() {
         <p>
           URL detectada:{' '}
           <code>
-            {import.meta.env.VITE_SUPABASE_URL ||
-              'https://gdayxcyifngmjhiqkpoq.supabase.co'}
+            {import.meta.env.VITE_SUPABASE_URL || 'No configurada'}
           </code>
         </p>
         <p>

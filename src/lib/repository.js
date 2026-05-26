@@ -5,6 +5,10 @@ function cloneDemoState() {
   return JSON.parse(JSON.stringify(demoState))
 }
 
+function getDefaultBaseUrl() {
+  return import.meta.env.VITE_APP_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : '')
+}
+
 export function isSupabaseEnabled() {
   return Boolean(supabase)
 }
@@ -92,8 +96,8 @@ export async function loadRemoteState(organizationId) {
 
   const restaurantSettings = settingsRes.data ?? {
     name: 'Restaurante Demo',
-    whatsapp: '56912345678',
-    base_url: 'http://localhost:5173',
+    whatsapp: '',
+    base_url: getDefaultBaseUrl(),
     primary_color: '#c2553d'
   }
   const categories = (categoriesRes.data ?? []).map((item) => ({

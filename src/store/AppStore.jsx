@@ -51,6 +51,13 @@ function generatePin(existingPins) {
   return pin
 }
 
+function getDevSuperadminCredentials() {
+  const email = import.meta.env.VITE_DEV_SUPERADMIN_EMAIL?.trim().toLowerCase()
+  const password = import.meta.env.VITE_DEV_SUPERADMIN_PASSWORD
+  if (!email || !password) return null
+  return { email, password }
+}
+
 function loadAuthUser() {
   const saved = localStorage.getItem(AUTH_KEY)
   if (saved) {
@@ -97,10 +104,10 @@ export function AppStoreProvider({ children }) {
   useEffect(() => {
     if (!isSupabaseEnabled()) {
       const localOrgs = [
-        { id: 'org-guaton', name: 'Restaurante Guaton XII', slug: 'guaton-xii', plan: 'Venta Única', status: 'Activo', rut: '76.999.888-k', mrr: 45000 },
-        { id: 'org-dios', name: 'Restaurante El Dios', slug: 'el-dios', plan: 'Básico', status: 'Activo', rut: '77.111.222-3', mrr: 25000 },
-        { id: 'org-jefe', name: 'Empresa de Jefe', slug: 'empresa-jefe', plan: 'Venta Única', status: 'Activo', rut: '76.123.456-7', mrr: 84980 },
-        { id: 'org-ncxo', name: 'Ncxo+', slug: 'ncxo-plus', plan: 'Básico', status: 'Activo', rut: '', mrr: 0 },
+        { id: 'org-guaton', name: 'Restaurante Guaton XII', slug: 'guaton-xii', plan: 'Venta Unica', status: 'Activo', rut: '76.999.888-k', mrr: 45000 },
+        { id: 'org-dios', name: 'Restaurante El Dios', slug: 'el-dios', plan: 'Basico', status: 'Activo', rut: '77.111.222-3', mrr: 25000 },
+        { id: 'org-jefe', name: 'Empresa de Jefe', slug: 'empresa-jefe', plan: 'Venta Unica', status: 'Activo', rut: '76.123.456-7', mrr: 84980 },
+        { id: 'org-ncxo', name: 'Ncxo+', slug: 'ncxo-plus', plan: 'Basico', status: 'Activo', rut: '', mrr: 0 },
         { id: 'org-prueba', name: 'Prueba de cambio', slug: 'prueba-de-cambio', plan: 'Empresa', status: 'Activo', rut: '76.123.456-7', mrr: 0 }
       ]
       setOrganizations(localOrgs)
@@ -217,27 +224,10 @@ export function AppStoreProvider({ children }) {
       remoteError,
       isHydrating,
       async login(pinOrEmail, password) {
-        // 1. Superadmin check
-        if (pinOrEmail?.trim().toLowerCase() === 'diegohenriquez176@gmail.com') {
-          if (password !== 'diego2412') {
-            throw new Error('Contraseña incorrecta para Superadmin')
-          }
-          const superadminUser = {
-            id: 'super-admin-user',
-            name: 'Diegol Admin',
-            role: 'superadmin',
-            email: 'diegohenriquez176@gmail.com',
-            active: true
-          }
-          setCurrentUser(superadminUser)
-          localStorage.setItem(AUTH_KEY, JSON.stringify(superadminUser))
-          return superadminUser
-        }
-
-        // 2. Email-based Restaurant Admin check
         if (pinOrEmail?.includes('@')) {
+          const email = pinOrEmail.trim().toLowerCase()
           if (remoteMode) {
-            const data = await loginWithEmailAndPassword(pinOrEmail, password)
+            const data = await loginWithEmailAndPassword(email, password)
             if (!data) {
               throw new Error('Credenciales incorrectas o usuario inactivo')
             }
@@ -248,19 +238,37 @@ export function AppStoreProvider({ children }) {
               pin: data.pin,
               email: data.email,
               active: data.active,
-              organizationId: data.organization_id,
+              organizationId: data.organization_id || null,
             }
             setCurrentUser(loggedUser)
             localStorage.setItem(AUTH_KEY, JSON.stringify(loggedUser))
             
-            // Switch to the logged user's organization!
-            setCurrentOrganizationId(data.organization_id)
-            localStorage.setItem('lasthit-current-org-id', data.organization_id)
+            if (loggedUser.role === 'superadmin') {
+              setImpersonatedOrgId('')
+              localStorage.removeItem('lasthit-impersonated-org-id')
+            } else if (data.organization_id) {
+              setCurrentOrganizationId(data.organization_id)
+              localStorage.setItem('lasthit-current-org-id', data.organization_id)
+            }
             return loggedUser
           } else {
-            // Local mode fallback
+            const devSuperadmin = getDevSuperadminCredentials()
+            if (devSuperadmin && email === devSuperadmin.email && password === devSuperadmin.password) {
+              const superadminUser = {
+                id: 'local-superadmin-user',
+                name: 'Superadmin',
+                role: 'superadmin',
+                email: devSuperadmin.email,
+                active: true,
+                organizationId: null,
+              }
+              setCurrentUser(superadminUser)
+              localStorage.setItem(AUTH_KEY, JSON.stringify(superadminUser))
+              return superadminUser
+            }
+
             const localUser = (state.staffUsers || []).find(
-              (u) => u.email?.trim().toLowerCase() === pinOrEmail.trim().toLowerCase() && u.password === password && u.active
+              (u) => u.email?.trim().toLowerCase() === email && u.password === password && u.active
             )
             if (!localUser) {
               throw new Error('Credenciales incorrectas o usuario inactivo')
@@ -298,7 +306,7 @@ export function AppStoreProvider({ children }) {
         const orgPayload = {
           name: restaurantName,
           slug,
-          plan: 'Básico',
+          plan: 'Basico',
           status: 'Activo',
           rut: '',
           mrr: 0
@@ -720,7 +728,7 @@ export function AppStoreProvider({ children }) {
         }))
       },
 
-      // ── Staff Users ──
+      // Staff Users
       async addStaffUser(name, role) {
         const existingPins = (state.staffUsers || []).map((u) => u.pin)
         const pin = generatePin(existingPins)
@@ -777,7 +785,7 @@ export function AppStoreProvider({ children }) {
         }))
       },
 
-      // ── Reservations ──
+      // Reservations
       addReservation(reservation) {
         const newReservation = {
           id: crypto.randomUUID(),
@@ -837,3 +845,4 @@ Total: ${new Intl.NumberFormat('es-CL', {
     maximumFractionDigits: 0,
   }).format(total)}`
 }
+

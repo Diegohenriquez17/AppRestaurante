@@ -115,22 +115,23 @@ VALUES (
   '11111111-1111-1111-1111-111111111111',
   false,
   'Empresa de Jefe',
-  '+56900000000',
+  '',
   'http://localhost:5173',
   '#0d9488'
 );
 
--- Crear el Usuario Superadmin (diegohenriquez176@gmail.com)
+-- Crear el Usuario Superadmin demo.
+-- Cambia email/password inmediatamente. No uses passwords reales en scripts versionados.
 INSERT INTO public.staff_users (id, organization_id, name, role, pin, active, email, password)
 VALUES (
   '22222222-2222-2222-2222-222222222222',
   '11111111-1111-1111-1111-111111111111',
-  'Diego Superadmin',
+  'Superadmin Demo',
   'superadmin',
   '9999',
   true,
-  'diegohenriquez176@gmail.com',
-  'diego2412'
+  'superadmin@example.invalid',
+  'CAMBIAR_PASSWORD_SUPERADMIN'
 );
 
 -- 6. SEMBRAR ORGANIZACIÓN DEL ADMINISTRADOR DE RESTAURANTE ("Restaurante Guaton XII")
@@ -151,22 +152,23 @@ VALUES (
   '33333333-3333-3333-3333-333333333333',
   false,
   'Restaurante Guaton XII',
-  '+56936306560',
+  '',
   'http://localhost:5173',
   '#c2553d'
 );
 
--- Crear el Usuario Administrador del Restaurante (diegohen2005gonzales@gmail.com)
+-- Crear el Usuario Administrador demo.
+-- Cambia email/password inmediatamente. No uses passwords reales en scripts versionados.
 INSERT INTO public.staff_users (id, organization_id, name, role, pin, active, email, password)
 VALUES (
   '44444444-4444-4444-4444-444444444444',
   '33333333-3333-3333-3333-333333333333',
-  'Diego Administrador',
+  'Administrador Demo',
   'administrador',
   '7777',
   true,
-  'diegohen2005gonzales@gmail.com',
-  'diego2412'
+  'admin-restaurante@example.invalid',
+  'CAMBIAR_PASSWORD_ADMIN'
 );
 
 -- 7. Crear personal para Restaurante Guaton XII (Garzones y Cajeros de prueba)

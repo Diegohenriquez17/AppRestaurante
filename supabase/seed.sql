@@ -1,5 +1,5 @@
 insert into public.restaurant_settings (singleton, name, whatsapp, base_url, primary_color)
-values (true, 'LastHit Bistro', '56912345678', 'https://dominio.cl', '#d92d48')
+values (true, 'LastHit Bistro', '', 'http://localhost:5173', '#d92d48')
 on conflict (singleton) do update
 set
   name = excluded.name,
