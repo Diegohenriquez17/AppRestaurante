@@ -991,6 +991,64 @@ function LoginPage({ initialMode = 'email' }) {
   )
 }
 
+
+// ─── Datos demo para el superadmin ────────────────────────────────────────────
+const DEMO_TICKETS = [
+  { id: 't1', restaurant: 'Restaurante Guaton XII', subject: 'Error al imprimir comandas', priority: 'alta', status: 'abierto', created: new Date(Date.now() - 90*60000).toISOString(), sla: 4, assignee: 'Diego H.' },
+  { id: 't2', restaurant: 'Ncxo+', subject: 'No carga el menu QR', priority: 'alta', status: 'en_progreso', created: new Date(Date.now() - 120*60000).toISOString(), sla: 2, assignee: 'Sin asignar' },
+  { id: 't3', restaurant: 'Restaurante El Dios', subject: 'Solicitud de cambio de plan', priority: 'media', status: 'abierto', created: new Date(Date.now() - 300*60000).toISOString(), sla: 24, assignee: 'Sin asignar' },
+]
+
+const DEMO_AUDIT = [
+  { id: 'a1', user: 'diegohenriquez176@gmail.com', action: 'Inicio de sesion como superadmin', ts: new Date(Date.now() - 5*60000).toISOString(), level: 'info' },
+  { id: 'a2', user: 'diegohen2005gonzales@gmail.com', action: 'Login como administrador — Restaurante Guaton XII', ts: new Date(Date.now() - 18*60000).toISOString(), level: 'info' },
+  { id: 'a3', user: 'unknown@intento.com', action: 'Intento de login fallido (5 intentos)', ts: new Date(Date.now() - 42*60000).toISOString(), level: 'warn' },
+  { id: 'a4', user: 'diegohenriquez176@gmail.com', action: 'Cambio de plan: Guaton XII a Pro', ts: new Date(Date.now() - 2*3600000).toISOString(), level: 'info' },
+  { id: 'a5', user: 'sistema', action: 'Backup automatico completado', ts: new Date(Date.now() - 6*3600000).toISOString(), level: 'success' },
+]
+
+const DEMO_MODULES_LIST = [
+  { id: 'pos', name: 'POS / Caja', icon: '💳', desc: 'Sistema de punto de venta', enabled: true },
+  { id: 'qr', name: 'Menu QR', icon: '📱', desc: 'Menu digital via codigo QR', enabled: true },
+  { id: 'kds', name: 'Panel Cocina (KDS)', icon: '👨‍🍳', desc: 'Display para cocina en tiempo real', enabled: true },
+  { id: 'delivery', name: 'Delivery', icon: '🛵', desc: 'Gestion de pedidos a domicilio', enabled: false },
+  { id: 'reservas', name: 'Reservas', icon: '📅', desc: 'Sistema de reservas de mesas', enabled: true },
+  { id: 'reportes', name: 'Reportes Avanzados', icon: '📊', desc: 'Reportes con exportacion CSV', enabled: false },
+  { id: 'whatsapp', name: 'WhatsApp', icon: '💬', desc: 'Notificaciones por WhatsApp', enabled: true },
+  { id: 'fidelizacion', name: 'Fidelizacion', icon: '🎁', desc: 'Puntos y recompensas para clientes', enabled: false },
+]
+
+const SERVICE_STATUS_LIST = [
+  { name: 'API', status: 'ok', uptime: '99.98%', latency: '42ms' },
+  { name: 'Base de Datos', status: 'ok', uptime: '99.95%', latency: '8ms' },
+  { name: 'Pagos', status: 'ok', uptime: '99.9%', latency: '210ms' },
+  { name: 'KDS / Cocina', status: 'degraded', uptime: '98.2%', latency: '180ms' },
+  { name: 'Menu QR', status: 'ok', uptime: '100%', latency: '28ms' },
+  { name: 'Storage', status: 'ok', uptime: '100%', latency: '15ms' },
+]
+
+function saFormatRelative(iso) {
+  const diff = Math.floor((Date.now() - new Date(iso)) / 1000)
+  if (diff < 60) return `hace ${diff}s`
+  if (diff < 3600) return `hace ${Math.floor(diff / 60)}min`
+  if (diff < 86400) return `hace ${Math.floor(diff / 3600)}h`
+  return `hace ${Math.floor(diff / 86400)}d`
+}
+
+function saPlanColor(plan) {
+  const p = plan || ''
+  if (p.includes('Empresa') || p.includes('Pro')) return 'bg-purple-50 text-purple-700 border-purple-200'
+  if (p.includes('Unica') || p.includes('Única')) return 'bg-amber-50 text-amber-700 border-amber-200'
+  return 'bg-teal-50 text-teal-700 border-teal-200'
+}
+
+function saStatusDot(status) {
+  const s = (status || '').toLowerCase()
+  if (s === 'activo') return 'bg-emerald-500'
+  if (s === 'inactivo') return 'bg-red-400'
+  return 'bg-slate-300'
+}
+
 function RestaurantSuperadmin() {
   const {
     state,
@@ -1000,3227 +1058,659 @@ function RestaurantSuperadmin() {
     impersonateTenant,
     logout,
     currentUser,
-    currentOrganizationId,
     remoteError,
-    isHydrating,
   } = useAppStore()
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState('resumen')
+
+  const [activeTab, setActiveTab] = useState('dashboard')
   const [searchQuery, setSearchQuery] = useState('')
   const [showOrgModal, setShowOrgModal] = useState(false)
   const [editingOrg, setEditingOrg] = useState(null)
-  const [form, setForm] = useState(createSuperadminOrgForm())
-  const [superadminError, setSuperadminError] = useState('')
+  const [orgForm, setOrgForm] = useState({ name: '', slug: '', rut: '', mrr: '', plan: 'Basico', status: 'Activo' })
+  const [orgSaving, setOrgSaving] = useState(false)
+  const [orgError, setOrgError] = useState('')
 
-  usePageTitle('Superadmin Restaurante | AcroDevs')
+  const [selectedTicket, setSelectedTicket] = useState(null)
+  const [ticketMsg, setTicketMsg] = useState('')
+  const [ticketChats, setTicketChats] = useState({ t1: [], t2: [], t3: [] })
 
-  const selectedOrg = organizations.find((org) => org.id === currentOrganizationId) ?? null
-  const isAllRestaurants = !selectedOrg
-  const activeOrgs = organizations.filter((org) => normalizeAccountStatus(org.status) === 'Activo')
-  const inactiveOrgs = organizations.filter((org) => normalizeAccountStatus(org.status) !== 'Activo')
-  const totalMrr = organizations.reduce((sum, org) => sum + Number(org.mrr || 0), 0)
-  const averageMrr = organizations.length ? Math.round(totalMrr / organizations.length) : 0
-  const activeOrders = (state.orders ?? []).filter((order) =>
-    ['Pendiente', 'En preparación', 'En preparaciÃ³n', 'Listo'].includes(order.status),
+  const [modulesByOrg, setModulesByOrg] = useState(null)
+  const [modulesOrgId, setModulesOrgId] = useState('')
+
+  usePageTitle('Superadmin | AcroDevs SV')
+
+  const totalMrr = organizations.reduce((s, o) => s + Number(o.mrr || 0), 0)
+  const activeOrgs = organizations.filter(o => (o.status || '').toLowerCase().includes('activ'))
+  const inactiveOrgs = organizations.filter(o => !(o.status || '').toLowerCase().includes('activ'))
+  const todayOrders = (state.orders || []).filter(o => new Date(o.createdAt).toDateString() === new Date().toDateString())
+  const dailySales = todayOrders.reduce((s, o) => s + Number(o.total || 0), 0)
+  const activeOrders = (state.orders || []).filter(o => ['Pendiente', 'En preparacion', 'Listo'].includes(o.status))
+  const openTickets = DEMO_TICKETS.filter(t => t.status !== 'cerrado').length
+  const urgentTickets = DEMO_TICKETS.filter(t => t.priority === 'alta')
+
+  const filteredOrgs = organizations.filter(o =>
+    (o.name + ' ' + o.slug + ' ' + (o.rut || '')).toLowerCase().includes(searchQuery.toLowerCase())
   )
-  const pendingOrders = (state.orders ?? []).filter((order) => order.status === 'Pendiente')
-  const readyOrders = (state.orders ?? []).filter((order) => order.status === 'Listo')
-  const dailySales = (state.orders ?? [])
-    .filter((order) => new Date(order.createdAt).toDateString() === new Date().toDateString())
-    .reduce((sum, order) => sum + Number(order.total || 0), 0)
-  const currentHealth = calculateRestaurantHealth(selectedOrg, state)
-  const filteredOrgs = organizations.filter((org) =>
-    `${org.name} ${org.slug} ${org.rut || ''}`
-      .toLowerCase()
-      .includes(searchQuery.toLowerCase()),
-  )
-  const supportItems = buildSuperadminSupportItems({
-    remoteError,
-    inactiveOrgs,
-    selectedOrg,
-    state,
-    activeOrders,
+
+  const mrrByPlan = organizations.reduce((acc, o) => {
+    const p = o.plan || 'Basico'
+    acc[p] = (acc[p] || 0) + Number(o.mrr || 0)
+    return acc
+  }, {})
+
+  const mrrChartData = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date()
+    d.setMonth(d.getMonth() - (5 - i))
+    const factor = 0.7 + i * 0.06
+    return {
+      mes: d.toLocaleDateString('es-CL', { month: 'short' }),
+      mrr: Math.round(totalMrr * factor),
+      meta: Math.round(totalMrr * 1.1),
+    }
   })
-  const onboardingItems = buildRestaurantOnboarding(selectedOrg, state)
-  const onboardingDone = onboardingItems.filter((item) => item.done).length
-  const onboardingPercent = onboardingItems.length
-    ? Math.round((onboardingDone / onboardingItems.length) * 100)
-    : 0
-  const todayOrders = (state.orders ?? []).filter((o) => new Date(o.createdAt).toDateString() === new Date().toDateString())
-  const openTicketsCount = 3
-  const platformHealthScore = calculatePlatformHealth(organizations)
-  const monthlyRevenueData = buildMonthlyRevenueData(totalMrr)
-  const planPieData = buildPlanPieData(organizations)
-  const enhancedAlerts = buildEnhancedAlerts({ remoteError, inactiveOrgs, selectedOrg, state, activeOrders, organizations })
-  const topPerformers = buildTopPerformers(organizations)
-
-  const openCreateModal = () => {
-    setSuperadminError('')
-    setEditingOrg(null)
-    setForm(createSuperadminOrgForm())
-    setShowOrgModal(true)
-  }
 
   const openEditModal = (org) => {
-    setSuperadminError('')
     setEditingOrg(org)
-    setForm(createSuperadminOrgForm(org))
+    setOrgForm({ name: org.name, slug: org.slug, rut: org.rut || '', mrr: org.mrr || '', plan: org.plan || 'Basico', status: org.status || 'Activo' })
+    setOrgError('')
     setShowOrgModal(true)
   }
 
-  const closeOrgModal = () => {
-    setShowOrgModal(false)
+  const openCreateModal = () => {
     setEditingOrg(null)
+    setOrgForm({ name: '', slug: '', rut: '', mrr: '', plan: 'Basico', status: 'Activo' })
+    setOrgError('')
+    setShowOrgModal(true)
   }
 
-  const handleSaveOrg = async (event) => {
-    event.preventDefault()
-    if (!form.name.trim() || !form.slug.trim()) return
-    setSuperadminError('')
-
+  const handleSaveOrg = async (e) => {
+    e.preventDefault()
+    if (!orgForm.name.trim() || !orgForm.slug.trim()) { setOrgError('Nombre y slug son requeridos.'); return }
+    setOrgSaving(true); setOrgError('')
     try {
-      const savedOrg = await saveOrganization({
+      await saveOrganization({
         id: editingOrg?.id,
-        name: form.name.trim(),
-        slug: form.slug.trim(),
-        plan: normalizePlanForStorage(form.plan),
-        status: normalizeAccountStatus(form.status),
-        rut: form.rut.trim(),
-        mrr: Number(form.mrr || 0),
+        name: orgForm.name.trim(), slug: orgForm.slug.trim(),
+        plan: orgForm.plan, status: orgForm.status,
+        rut: orgForm.rut.trim(), mrr: Number(orgForm.mrr || 0),
       })
-      closeOrgModal()
-      if (!editingOrg && savedOrg?.id) {
-        handleSelectTenant(savedOrg.id)
-      }
-    } catch (error) {
-      setSuperadminError(error.message || 'No se pudo guardar el restaurante.')
-    }
+      setShowOrgModal(false)
+    } catch (err) { setOrgError(err.message || 'Error al guardar.') }
+    finally { setOrgSaving(false) }
   }
 
   const handleDeleteOrg = async (org) => {
-    const confirmed = window.confirm(
-      `¿Eliminar ${org.name}? Esta acción quita el local del portal superadmin.`,
-    )
-    if (!confirmed) return
+    if (!window.confirm('Eliminar "' + org.name + '"? Esta accion no se puede deshacer.')) return
     await removeOrganization(org.id)
   }
 
-  const handleSupportAccess = (org) => {
-    impersonateTenant(org.id)
-    navigate('/admin')
+  const handleImpersonate = (org) => { impersonateTenant(org.id); navigate('/admin') }
+  const handleLogout = () => { logout(); navigate('/login', { replace: true }) }
+
+  const toggleModule = (orgId, moduleId) => {
+    setModulesByOrg(prev => {
+      const base = prev || Object.fromEntries(organizations.map(o => [o.id, DEMO_MODULES_LIST.map(m => ({ ...m }))]))
+      return { ...base, [orgId]: base[orgId].map(m => m.id === moduleId ? { ...m, enabled: !m.enabled } : m) }
+    })
   }
 
-  const handleImpersonate = handleSupportAccess
+  const getOrgModules = (orgId) => modulesByOrg?.[orgId] || DEMO_MODULES_LIST.map(m => ({ ...m }))
 
-  const handleSelectTenant = (orgId) => {
-    impersonateTenant(orgId)
-    setActiveTab('resumen')
+  const sendTicketMsg = (ticketId) => {
+    if (!ticketMsg.trim()) return
+    setTicketChats(prev => ({ ...prev, [ticketId]: [...(prev[ticketId] || []), { from: 'superadmin', msg: ticketMsg.trim(), ts: new Date().toISOString() }] }))
+    setTicketMsg('')
   }
 
-  const handleLogout = () => {
-    logout()
-    navigate('/login', { replace: true })
-  }
-
-  const tabs = [
-    ['resumen', 'Dashboard', LayoutDashboard],
-    ['restaurantes', 'Restaurantes', Building],
-    ['planes', 'Planes', CreditCard],
-    ['finanzas', 'Finanzas', DollarSign],
-    ['pagos', 'Pagos / MP', Coins],
-    ['soporte', 'Soporte', MessageSquare],
-    ['modulos', 'Módulos', Sparkles],
-    ['monitoreo', 'Monitoreo', Activity],
-    ['seguridad', 'Seguridad', Shield],
+  const TABS = [
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'restaurantes', label: 'Restaurantes', icon: Building },
+    { id: 'finanzas', label: 'Finanzas', icon: DollarSign },
+    { id: 'soporte', label: 'Soporte', icon: MessageSquare, badge: openTickets },
+    { id: 'modulos', label: 'Modulos', icon: Sparkles },
+    { id: 'monitoreo', label: 'Monitoreo', icon: Activity },
+    { id: 'seguridad', label: 'Seguridad', icon: Shield },
   ]
 
+  const serviceAll = SERVICE_STATUS_LIST.every(s => s.status === 'ok')
+  const fmtCLP = v => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(v)
+
   return (
-    <main className="mx-0 min-h-screen w-full max-w-none bg-[#f5f7fb] text-slate-950">
-      <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur-xl">
-        <div className="flex flex-col gap-4 px-4 py-4 lg:flex-row lg:items-center lg:justify-between lg:px-8">
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-700 text-xl font-black text-white shadow-lg shadow-emerald-950/20">
-              A
+    <main className="min-h-screen w-full bg-[#f0f2f7] text-slate-950">
+      {/* HEADER */}
+      <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/95 backdrop-blur-xl shadow-sm">
+        <div className="flex items-center justify-between gap-4 px-4 py-3 lg:px-8">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl shadow-lg" style={{ background: 'linear-gradient(135deg,#0d9488,#059669)' }}>
+              <span className="text-base font-black text-white">A</span>
             </div>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="font-sans text-xl font-black tracking-tight text-slate-950">
-                  AcroDevs Restaurant OS
-                </h1>
-                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-black text-emerald-700">
-                  <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                  En vivo
-                </span>
-              </div>
-              <p className="mt-1 text-sm font-semibold capitalize text-slate-500">
-                {new Date().toLocaleDateString('es-CL', {
-                  weekday: 'long',
-                  day: 'numeric',
-                  month: 'long',
-                })}{' '}
-                · Plataforma de restaurantes
-              </p>
+            <div className="hidden sm:block min-w-0">
+              <h1 className="text-base font-black text-slate-900 leading-none">AcroDevs SV</h1>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">Panel Superadmin</p>
             </div>
           </div>
 
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <label className="relative min-w-0 sm:w-72">
-              <Building className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <select
-                value={currentOrganizationId}
-                onChange={(event) => handleSelectTenant(event.target.value)}
-                className="h-12 w-full appearance-none rounded-2xl border border-slate-200 bg-white pl-11 pr-10 text-sm font-black text-slate-700 outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
-              >
-                <option value="">Todos los restaurantes</option>
-                {organizations.map((org) => (
-                  <option key={org.id} value={org.id}>
-                    {decodeUiText(org.name)}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            </label>
-
-            <button
-              type="button"
-              onClick={openCreateModal}
-              className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 text-sm font-black text-white shadow-lg shadow-slate-300 transition hover:-translate-y-0.5"
-            >
-              <Plus className="h-4 w-4" />
-              Nuevo restaurante
-            </button>
-
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-rose-200 bg-rose-50 px-4 text-sm font-black text-rose-700 transition hover:bg-rose-100"
-            >
-              <LogOut className="h-4 w-4" />
-              Salir
-            </button>
-          </div>
-        </div>
-
-        <nav className="flex gap-2 overflow-x-auto px-4 pb-3 lg:px-8 [scrollbar-width:none]">
-          {tabs.map(([id, label, Icon]) => {
-            const active = activeTab === id
-            return (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setActiveTab(id)}
-                className={`inline-flex h-11 shrink-0 items-center gap-2 rounded-2xl px-4 text-sm font-black transition ${
-                  active
-                    ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-100'
-                    : 'bg-white text-slate-500 ring-1 ring-slate-200 hover:text-slate-950'
-                }`}
-              >
-                <Icon className="h-4 w-4" />
-                {label}
-              </button>
-            )
-          })}
-        </nav>
-      </header>
-
-      <section className="grid w-full gap-6 px-4 py-6 lg:px-8 2xl:px-10">
-        {remoteError ? (
-          <div className="rounded-3xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold text-amber-800">
-            Supabase necesita atención: {remoteError}
-          </div>
-        ) : null}
-        {superadminError ? (
-          <div className="rounded-3xl border border-rose-200 bg-rose-50 p-4 text-sm font-bold text-rose-700">
-            {superadminError}
-          </div>
-        ) : null}
-        {isHydrating ? (
-          <div className="rounded-3xl border border-slate-200 bg-white p-4 text-sm font-bold text-slate-500 shadow-soft">
-            Sincronizando información del restaurante seleccionado...
-          </div>
-        ) : null}
-
-        {activeTab === 'resumen' ? (
-          <div className="grid gap-6">
-
-            {/* ── KPIs principales ── */}
-            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <DashKpiCard
-                label="MRR Plataforma"
-                value={currency.format(totalMrr)}
-                sub={`Promedio ${currency.format(averageMrr)}/local`}
-                icon={TrendingUp}
-                color="from-emerald-500 to-teal-600"
-                badge="+12% est. vs mes anterior"
-                badgeTone="up"
-              />
-              <DashKpiCard
-                label="Restaurantes activos"
-                value={activeOrgs.length}
-                sub={`${inactiveOrgs.length} suspendidos · ${organizations.length} totales`}
-                icon={Building}
-                color="from-teal-500 to-cyan-600"
-                badge={`${organizations.length} registrados`}
-                badgeTone="neutral"
-              />
-              <DashKpiCard
-                label="Pedidos hoy"
-                value={todayOrders.length}
-                sub={`${currency.format(dailySales)} en ventas del día`}
-                icon={ShoppingBag}
-                color="from-amber-500 to-orange-500"
-                badge={`${activeOrders.length} activos ahora`}
-                badgeTone="up"
-              />
-              <DashKpiCard
-                label="Tickets soporte"
-                value={openTicketsCount}
-                sub="Pendientes de resolución"
-                icon={MessageSquare}
-                color="from-rose-500 to-pink-600"
-                badge={openTicketsCount > 0 ? 'Requieren atención' : 'Todo resuelto'}
-                badgeTone={openTicketsCount > 0 ? 'warn' : 'up'}
-              />
-            </section>
-
-            {/* ── KPIs secundarios ── */}
-            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <SuperMetricCard label="Salud plataforma" value={`${platformHealthScore}%`} detail="Índice operativo global" icon={Activity} tone="emerald" />
-              <SuperMetricCard label="Módulos activos" value="5 / 6" detail="QR · KDS · POS · Garzón · Reservas" icon={Sparkles} tone="teal" />
-              <SuperMetricCard label="Mesas en plataforma" value={String(organizations.length * 8 + (state.tables?.length ?? 0))} detail="Estimado total de la red" icon={Hash} tone="amber" />
-              <SuperMetricCard label="Locales por revisar" value={String(inactiveOrgs.length + enhancedAlerts.filter((a) => a.level === 'high').length)} detail="Con alertas o inactivos" icon={Flame} tone="rose" />
-            </section>
-
-            {/* ── Gráficas principales ── */}
-            <section className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_380px]">
-              <SuperPanel title="Ingresos mensuales estimados" subtitle="MRR acumulado de la plataforma — últimos 6 meses">
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={monthlyRevenueData}>
-                      <defs>
-                        <linearGradient id="dashMrrGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.25} />
-                          <stop offset="95%" stopColor="#10b981" stopOpacity={0.02} />
-                        </linearGradient>
-                        <linearGradient id="dashIngGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#0891b2" stopOpacity={0.18} />
-                          <stop offset="95%" stopColor="#0891b2" stopOpacity={0.01} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                      <XAxis dataKey="mes" stroke="#64748b" fontSize={12} fontWeight={700} tick={{ fill: '#64748b' }} />
-                      <YAxis stroke="#64748b" fontSize={11} fontWeight={700} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} tick={{ fill: '#64748b' }} />
-                      <Tooltip
-                        formatter={(v, n) => [currency.format(v), n]}
-                        contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: 12, fontWeight: 700 }}
-                      />
-                      <Area type="monotone" dataKey="mrr" stroke="#059669" strokeWidth={3} fill="url(#dashMrrGrad)" name="MRR" />
-                      <Area type="monotone" dataKey="ingresos" stroke="#0891b2" strokeWidth={2} fill="url(#dashIngGrad)" strokeDasharray="6 3" name="Ingresos" />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="mt-4 flex flex-wrap gap-4 border-t border-slate-100 pt-4 text-xs font-bold text-slate-600">
-                  <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />MRR acumulado</span>
-                  <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-cyan-500" />Ingresos estimados</span>
-                </div>
-              </SuperPanel>
-
-              <SuperPanel title="Distribución de planes" subtitle="Restaurantes por plan contratado">
-                <div className="h-48">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={planPieData} cx="50%" cy="50%" innerRadius={50} outerRadius={85} paddingAngle={4} dataKey="value" strokeWidth={0}>
-                        {planPieData.map((entry, i) => (
-                          <Cell key={i} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        formatter={(v, n) => [`${v} restaurante${v !== 1 ? 's' : ''}`, n]}
-                        contentStyle={{ borderRadius: '10px', fontSize: 12, fontWeight: 700 }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="mt-3 grid gap-2">
-                  {planPieData.map((item) => (
-                    <div key={item.name} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2.5">
-                      <div className="flex items-center gap-2">
-                        <span className="h-3 w-3 rounded-full" style={{ background: item.color }} />
-                        <span className="text-sm font-black text-slate-800">{item.name}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <strong className="text-sm font-black text-slate-950">{item.value}</strong>
-                        <span className="text-xs font-bold text-slate-400">
-                          {organizations.length ? `${Math.round((item.value / organizations.length) * 100)}%` : '0%'}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </SuperPanel>
-            </section>
-
-            {/* ── Alertas + Locales por revisar ── */}
-            <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_400px]">
-              <SuperPanel
-                title="Alertas de plataforma"
-                subtitle={`${enhancedAlerts.filter((a) => a.level === 'high').length} críticas · ${enhancedAlerts.length} totales detectadas`}
-              >
-                <div className="grid gap-3 max-h-80 overflow-y-auto pr-0.5 [scrollbar-width:thin]">
-                  {enhancedAlerts.map((alert, i) => (
-                    <EnhancedAlertRow key={i} alert={alert} />
-                  ))}
-                </div>
-              </SuperPanel>
-
-              <SuperPanel title="Locales por revisar" subtitle="Suspendidos, sin configurar o con incidencias">
-                <div className="grid gap-3 max-h-80 overflow-y-auto pr-0.5 [scrollbar-width:thin]">
-                  {inactiveOrgs.length === 0 && !(!state.restaurant?.whatsapp && selectedOrg) ? (
-                    <SuperEmptyState text="✅ Todos los locales operando correctamente." />
-                  ) : (
-                    <>
-                      {inactiveOrgs.map((org) => (
-                        <ReviewOrgRow
-                          key={org.id}
-                          org={org}
-                          reason="Cuenta suspendida o inactiva"
-                          severity="high"
-                          onSelect={() => handleSelectTenant(org.id)}
-                          onSupport={() => handleSupportAccess(org)}
-                        />
-                      ))}
-                      {selectedOrg && !state.restaurant?.whatsapp && (
-                        <ReviewOrgRow
-                          org={selectedOrg}
-                          reason="WhatsApp no configurado"
-                          severity="medium"
-                          onSelect={() => handleSelectTenant(selectedOrg.id)}
-                          onSupport={() => handleSupportAccess(selectedOrg)}
-                        />
-                      )}
-                    </>
-                  )}
-                </div>
-              </SuperPanel>
-            </section>
-
-            {/* ── Actividad reciente + Top locales ── */}
-            <section className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,0.7fr)]">
-              <SuperPanel title="Actividad reciente" subtitle="Últimos pedidos procesados en la plataforma">
-                <div className="grid gap-3">
-                  {(state.orders ?? []).length === 0 ? (
-                    <SuperEmptyState text="No hay pedidos registrados aún." />
-                  ) : (
-                    (state.orders ?? []).slice(0, 7).map((order) => (
-                      <div key={order.id} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50/60 px-4 py-3 transition hover:bg-slate-100">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-slate-950 text-[0.65rem] font-black text-white">
-                            #{order.number}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-black text-slate-950">{order.tableLabel}</p>
-                            <p className="truncate text-xs font-semibold text-slate-400">
-                              {(order.items ?? []).slice(0, 2).map((item) => item.name).join(', ')}
-                              {(order.items ?? []).length > 2 ? ` +${(order.items ?? []).length - 2}` : ''}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <OrderStatusPill status={order.status} />
-                          <strong className="text-sm font-black text-slate-950">{currency.format(order.total)}</strong>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </SuperPanel>
-
-              <SuperPanel title="Top restaurantes" subtitle="Mayor MRR en la plataforma">
-                <div className="grid gap-3">
-                  {topPerformers.length === 0 ? (
-                    <SuperEmptyState text="Agrega restaurantes para ver el ranking." />
-                  ) : (
-                    topPerformers.map((org, i) => (
-                      <div key={org.id} className="flex items-center gap-3 rounded-2xl bg-slate-50 p-3 transition hover:bg-slate-100 cursor-pointer" onClick={() => handleSelectTenant(org.id)}>
-                        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-slate-950 text-sm font-black text-white">
-                          {i + 1}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-black text-slate-950">{decodeUiText(org.name)}</p>
-                          <p className="text-xs font-bold text-slate-500">{currency.format(org.mrr || 0)}/mes · <span className="text-slate-400">{normalizePlanLabel(org.plan)}</span></p>
-                        </div>
-                        <HealthRing value={calculateRestaurantHealth(org)} small />
-                      </div>
-                    ))
-                  )}
-                </div>
-              </SuperPanel>
-            </section>
-
-            {/* ── Estado de módulos ── */}
-            <SuperPanel title="Estado de módulos" subtitle="Servicios habilitados en el sistema de plataforma">
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {[
-                  { label: 'Menú QR', ok: true, detail: `${state.tables?.length ?? 0} mesas · ${(state.products ?? []).filter((p) => p.available).length} productos activos`, icon: QrCode },
-                  { label: 'Cocina / KDS', ok: true, detail: `${pendingOrders.length} pedidos pendientes · ${readyOrders.length} listos`, icon: ChefHat },
-                  { label: 'POS / Caja', ok: true, detail: 'Sistema de cobros y facturación activo', icon: CreditCard },
-                  { label: 'Garzón móvil', ok: true, detail: `${(state.staffUsers ?? []).filter((u) => u.role === 'garzon').length} garzones registrados`, icon: Users },
-                  { label: 'Reservas', ok: Boolean(state.reservations?.length), detail: `${state.reservations?.length ?? 0} reservas en sistema`, icon: CalendarDays },
-                  { label: 'Delivery', ok: false, detail: 'Módulo no activado — próximamente', icon: Package },
-                ].map((mod) => (
-                  <div
-                    key={mod.label}
-                    className={`flex items-center gap-3 rounded-2xl border p-4 transition ${
-                      mod.ok ? 'border-emerald-100 bg-emerald-50/40' : 'border-slate-200 bg-slate-50'
-                    }`}
-                  >
-                    <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${ mod.ok ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-400' }`}>
-                      <mod.icon className="h-5 w-5" />
-                    </span>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-black text-slate-950">{mod.label}</p>
-                        <span className={`rounded-full px-2 py-0.5 text-[0.6rem] font-black ${ mod.ok ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500' }`}>
-                          {mod.ok ? 'ACTIVO' : 'INACTIVO'}
-                        </span>
-                      </div>
-                      <p className="mt-0.5 truncate text-xs font-semibold text-slate-500">{mod.detail}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </SuperPanel>
-
-          </div>
-        ) : null}
-
-
-        {activeTab === 'restaurantes' ? (
-          <div className="grid gap-5">
-            <SuperSectionHeader
-              eyebrow="Locales"
-              title="Restaurantes de la plataforma"
-              description="Gestiona cuentas, planes, estado comercial y acceso de soporte a cada local."
-              action={
-                <button type="button" onClick={openCreateModal} className="rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white">
-                  Nuevo restaurante
-                </button>
-              }
-            />
-            <div className="relative max-w-xl">
-              <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-              <input
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Buscar restaurante, slug o RUT..."
-                className="h-14 w-full rounded-2xl border border-slate-200 bg-white pl-12 pr-4 text-sm font-black outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
-              />
-            </div>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {filteredOrgs.map((org) => (
-                <RestaurantTenantCard
-                  key={org.id}
-                  org={org}
-                  active={org.id === currentOrganizationId}
-                  health={org.id === selectedOrg?.id ? currentHealth : calculateRestaurantHealth(org)}
-                  onSelect={() => handleSelectTenant(org.id)}
-                  onSupport={() => handleSupportAccess(org)}
-                  onEdit={() => openEditModal(org)}
-                  onDelete={() => handleDeleteOrg(org)}
-                />
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        {activeTab === 'operacion' ? (
-          <div className="grid gap-5">
-            <SuperSectionHeader
-              eyebrow="Operación"
-              title={selectedOrg ? `Control de ${decodeUiText(selectedOrg.name)}` : 'Control de operación'}
-              description="Vista rápida del local seleccionado: pedidos, cocina, menú, mesas QR y equipo."
-            />
-            {isAllRestaurants ? (
-              <SuperPanel title="Selecciona un restaurante" subtitle="Para ver pedidos, menú, mesas QR, usuarios y configuración completa">
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                  {organizations.map((org) => (
-                    <RestaurantCompactRow
-                      key={org.id}
-                      org={org}
-                      onSelect={() => handleSelectTenant(org.id)}
-                      onSupport={() => handleSupportAccess(org)}
-                    />
-                  ))}
-                </div>
-              </SuperPanel>
-            ) : null}
-            <section className={`grid gap-4 sm:grid-cols-2 xl:grid-cols-5 ${isAllRestaurants ? 'hidden' : ''}`}>
-              <SuperMetricCard label="Pedidos activos" value={activeOrders.length} detail="Pendiente, preparación o listo" icon={ClipboardList} tone="emerald" />
-              <SuperMetricCard label="Pendientes" value={pendingOrders.length} detail="Requieren cocina" icon={Clock3} tone="amber" />
-              <SuperMetricCard label="Mesas QR" value={state.tables?.length ?? 0} detail="Mesas configuradas" icon={QrCode} tone="teal" />
-              <SuperMetricCard label="Productos" value={(state.products ?? []).filter((p) => p.available).length} detail="Activos en menú" icon={Package} tone="slate" />
-              <SuperMetricCard label="Usuarios" value={state.staffUsers?.length ?? 0} detail="Admin, cocina, caja y garzones" icon={Users} tone="rose" />
-            </section>
-            <section className={`grid gap-4 lg:grid-cols-[minmax(0,1fr)_420px] ${isAllRestaurants ? 'hidden' : ''}`}>
-              <SuperPanel title="Pedidos en vivo" subtitle="Últimos movimientos del restaurante">
-                <div className="grid gap-3">
-                  {(state.orders ?? []).slice(0, 8).length ? (state.orders ?? []).slice(0, 8).map((order) => (
-                    <div key={order.id} className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 sm:grid-cols-[1fr_auto] sm:items-center">
-                      <div>
-                        <p className="text-sm font-black text-slate-950">#{order.number} · {order.tableLabel}</p>
-                        <p className="mt-1 line-clamp-1 text-sm font-semibold text-slate-500">
-                          {order.items.map((item) => `${item.quantity}x ${item.name}`).join(', ')}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <OrderStatusPill status={order.status} />
-                        <strong className="text-sm font-black text-slate-950">{currency.format(order.total)}</strong>
-                      </div>
-                    </div>
-                  )) : <SuperEmptyState text="Este local todavía no tiene pedidos." />}
-                </div>
-              </SuperPanel>
-
-              <SuperPanel title="Módulos activos" subtitle="Lo necesario para vender a restaurantes">
-                <div className="grid gap-3">
-                  {buildRestaurantModules(state).map((module) => (
-                    <ModuleHealthRow key={module.label} {...module} />
-                  ))}
-                </div>
-              </SuperPanel>
-            </section>
-          </div>
-        ) : null}
-
-        {activeTab === 'planes' ? (
-          <div className="grid gap-5">
-            <SuperSectionHeader
-              eyebrow="Comercial"
-              title="Planes para AppRestaurante"
-              description="Planes simples para vender: QR básico, operación completa y multi-local."
-            />
-            <div className="grid gap-4 lg:grid-cols-3">
-              {restaurantPlans().map((plan) => (
-                <PlanCard key={plan.name} plan={plan} />
-              ))}
-            </div>
-            <SuperPanel title="Cuentas y cobros" subtitle="Resumen comercial de restaurantes">
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[720px] text-left">
-                  <thead>
-                    <tr className="border-b border-slate-200 text-xs font-black uppercase tracking-[0.14em] text-slate-400">
-                      <th className="py-3">Restaurante</th>
-                      <th>Plan</th>
-                      <th>Estado</th>
-                      <th>MRR</th>
-                      <th>RUT</th>
-                      <th className="text-right">Acción</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {organizations.map((org) => (
-                      <tr key={org.id} className="border-b border-slate-100 text-sm font-bold text-slate-700">
-                        <td className="py-4">{decodeUiText(org.name)}</td>
-                        <td><PlanPill plan={org.plan} /></td>
-                        <td><AccountStatusPill status={org.status} /></td>
-                        <td>{currency.format(org.mrr || 0)}</td>
-                        <td>{org.rut || 'Sin RUT'}</td>
-                        <td className="text-right">
-                          <button type="button" onClick={() => openEditModal(org)} className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-black text-slate-700">
-                            Ajustar
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </SuperPanel>
-          </div>
-        ) : null}
-
-        {activeTab === 'soporte' ? (
-          <div className="grid gap-5">
-            <SuperSectionHeader
-              eyebrow="Soporte"
-              title="Centro de control y alertas"
-              description="Solo lo necesario: salud de Supabase, locales inactivos, configuración pendiente y pedidos trabados."
-            />
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_420px]">
-              <SuperPanel title="Alertas de plataforma" subtitle={`${supportItems.length} señales detectadas`}>
-                <div className="grid gap-3">
-                  {supportItems.map((item) => (
-                    <SupportAlert key={item.title} item={item} />
-                  ))}
-                </div>
-              </SuperPanel>
-              <SuperPanel title="Puesta en marcha" subtitle={`${onboardingDone}/${onboardingItems.length} tareas completas`}>
-                <div className="mb-4 h-3 rounded-full bg-slate-100">
-                  <div className="h-full rounded-full bg-emerald-500" style={{ width: `${onboardingPercent}%` }} />
-                </div>
-                <div className="grid gap-3">
-                  {onboardingItems.map((item) => (
-                    <div key={item.label} className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-3">
-                      <span className={`mt-0.5 grid h-7 w-7 place-items-center rounded-full ${item.done ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                        {item.done ? <Check className="h-4 w-4" /> : <Clock3 className="h-4 w-4" />}
-                      </span>
-                      <div>
-                        <p className="text-sm font-black text-slate-800">{item.label}</p>
-                        <p className="text-xs font-semibold text-slate-500">{item.help}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </SuperPanel>
-            </div>
-          </div>
-        ) : null}
-
-
-        {/* ═══════════════════════════════════════════════════════ */}
-        {/* TAB: FINANZAS                                           */}
-        {/* ═══════════════════════════════════════════════════════ */}
-        {activeTab === 'finanzas' ? (
-          <div className="grid gap-6">
-            {/* KPIs financieros */}
-            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <DashKpiCard label="MRR Actual" value={currency.format(totalMrr)} sub={`${activeOrgs.length} restaurantes activos`} icon={TrendingUp} color="from-emerald-500 to-teal-600" badge="Ingreso recurrente" badgeTone="up" />
-              <DashKpiCard label="Ingresos del mes" value={currency.format(Math.round(totalMrr * 1.08))} sub="Incluye cobros y activaciones" icon={DollarSign} color="from-cyan-500 to-blue-600" badge="+8% vs mes ant." badgeTone="up" />
-              <DashKpiCard label="Morosos" value={inactiveOrgs.length} sub="Con pagos pendientes o deuda" icon={AlertTriangle} color="from-rose-500 to-red-600" badge={inactiveOrgs.length > 0 ? 'Atención requerida' : 'Todo al día'} badgeTone={inactiveOrgs.length > 0 ? 'warn' : 'up'} />
-              <DashKpiCard label="Churn este mes" value="1.2%" sub="Tasa de cancelación" icon={TrendingDown} color="from-amber-500 to-orange-500" badge="Bajo riesgo" badgeTone="neutral" />
-            </section>
-
-            <section className="grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_360px]">
-              {/* Gráfico ingresos 6 meses */}
-              <SuperPanel title="Ingresos mensuales" subtitle="Historial de ingresos y MRR acumulado">
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={buildMonthlyRevenueData(totalMrr)} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                      <XAxis dataKey="mes" stroke="#64748b" fontSize={12} fontWeight={700} />
-                      <YAxis stroke="#64748b" fontSize={11} fontWeight={700} tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} />
-                      <Tooltip formatter={(v, n) => [currency.format(v), n]} contentStyle={{ borderRadius: '12px', fontSize: 12, fontWeight: 700 }} />
-                      <Bar dataKey="mrr" fill="#059669" radius={[8,8,0,0]} name="MRR" />
-                      <Bar dataKey="ingresos" fill="#0891b2" radius={[8,8,0,0]} name="Ingresos" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="mt-4 flex gap-4 text-xs font-bold text-slate-600 border-t border-slate-100 pt-4">
-                  <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />MRR</span>
-                  <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-cyan-500" />Ingresos</span>
-                </div>
-              </SuperPanel>
-
-              {/* Panel lateral conversiones */}
-              <SuperPanel title="Métricas SaaS" subtitle="Indicadores clave del negocio">
-                <div className="grid gap-3">
-                  {[
-                    { label: 'Trial → Pago', value: '68%', bar: 68, color: 'bg-emerald-500' },
-                    { label: 'Retención mensual', value: '94%', bar: 94, color: 'bg-teal-500' },
-                    { label: 'NPS estimado', value: '72', bar: 72, color: 'bg-blue-500' },
-                    { label: 'Satisfacción soporte', value: '91%', bar: 91, color: 'bg-violet-500' },
-                    { label: 'LTV promedio', value: currency.format(averageMrr * 18), bar: 70, color: 'bg-amber-500' },
-                  ].map(item => (
-                    <div key={item.label} className="grid gap-1.5">
-                      <div className="flex justify-between text-xs font-bold text-slate-700">
-                        <span>{item.label}</span>
-                        <span className="text-slate-950">{item.value}</span>
-                      </div>
-                      <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
-                        <div className={`h-full rounded-full transition-all duration-700 ${item.color}`} style={{ width: `${item.bar}%` }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </SuperPanel>
-            </section>
-
-            {/* Historial de pagos */}
-            <SuperPanel title="Historial de pagos" subtitle="Últimas transacciones de la plataforma">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-100">
-                      {['Restaurante','Plan','Monto','Fecha','Método','Estado'].map(h => (
-                        <th key={h} className="pb-3 text-left text-xs font-black uppercase tracking-wider text-slate-400">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50">
-                    {buildPaymentHistory(organizations).map((p, i) => (
-                      <tr key={i} className="hover:bg-slate-50 transition">
-                        <td className="py-3 font-black text-slate-950">{p.restaurant}</td>
-                        <td className="py-3"><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">{p.plan}</span></td>
-                        <td className="py-3 font-black text-slate-950">{currency.format(p.amount)}</td>
-                        <td className="py-3 text-xs font-bold text-slate-500">{p.date}</td>
-                        <td className="py-3 text-xs font-bold text-slate-600">{p.method}</td>
-                        <td className="py-3">
-                          <span className={`rounded-full px-2.5 py-1 text-xs font-black ${
-                            p.status === 'Aprobado' ? 'bg-emerald-100 text-emerald-700' :
-                            p.status === 'Pendiente' ? 'bg-amber-100 text-amber-700' :
-                            'bg-rose-100 text-rose-700'
-                          }`}>{p.status}</span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <div className="mt-4 flex gap-3 border-t border-slate-100 pt-4">
-                <button className="flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-xs font-black text-white hover:bg-slate-800 transition">
-                  <Download className="h-3.5 w-3.5" />Exportar Excel
-                </button>
-                <button className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-black text-slate-700 hover:bg-slate-50 transition">
-                  <Download className="h-3.5 w-3.5" />Exportar PDF
-                </button>
-              </div>
-            </SuperPanel>
-
-            {/* Morosos */}
-            {inactiveOrgs.length > 0 && (
-              <SuperPanel title="Restaurantes morosos" subtitle="Con pagos pendientes o cuenta suspendida">
-                <div className="grid gap-3">
-                  {inactiveOrgs.map(org => (
-                    <div key={org.id} className="flex items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50/50 p-4">
-                      <div className="flex items-center gap-3">
-                        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-rose-500 text-sm font-black text-white">
-                          {decodeUiText(org.name).slice(0,1)}
-                        </div>
-                        <div>
-                          <p className="font-black text-slate-950">{decodeUiText(org.name)}</p>
-                          <p className="text-xs font-bold text-slate-500">{normalizePlanLabel(org.plan)} · {currency.format(org.mrr || 0)}/mes</p>
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <span className="rounded-full bg-rose-100 px-3 py-1 text-xs font-black text-rose-700">MOROSO</span>
-                        <button onClick={() => handleImpersonate(org)} className="rounded-xl bg-slate-950 px-3 py-1.5 text-xs font-black text-white">Gestionar</button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </SuperPanel>
-            )}
-          </div>
-        ) : null}
-
-        {/* ═══════════════════════════════════════════════════════ */}
-        {/* TAB: PAGOS / MERCADOPAGO                               */}
-        {/* ═══════════════════════════════════════════════════════ */}
-        {activeTab === 'pagos' ? (
-          <div className="grid gap-6">
-            {/* Estado webhook */}
-            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <div className="relative overflow-hidden rounded-3xl border-2 border-emerald-200 bg-emerald-50 p-5">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-black uppercase tracking-widest text-emerald-600">Webhook MP</p>
-                    <p className="mt-2 text-2xl font-black text-emerald-800">Activo</p>
-                    <p className="mt-1 text-xs font-bold text-emerald-600">Recibiendo notificaciones</p>
-                  </div>
-                  <div className="grid h-12 w-12 place-items-center rounded-2xl bg-emerald-500 text-white">
-                    <Zap className="h-6 w-6" />
-                  </div>
-                </div>
-                <span className="absolute right-3 top-3 flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" /><span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-500" /></span>
-              </div>
-              <DashKpiCard label="Pagos aprobados" value="94" sub="Últimos 30 días" icon={CheckCircle2} color="from-emerald-500 to-teal-500" badge="98.2% tasa aprob." badgeTone="up" />
-              <DashKpiCard label="Pagos pendientes" value="3" sub="Requieren revisión" icon={Clock} color="from-amber-500 to-orange-500" badge="En proceso" badgeTone="neutral" />
-              <DashKpiCard label="Pagos rechazados" value="2" sub="Últimos 30 días" icon={XCircle} color="from-rose-500 to-red-600" badge="Investigar" badgeTone="warn" />
-            </section>
-
-            {/* Historial transacciones */}
-            <SuperPanel title="Historial de transacciones MercadoPago" subtitle="Pagos procesados en la plataforma">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-100">
-                      {['Payment ID','Restaurante','Monto','Fecha','Tipo','Estado','Acción'].map(h => (
-                        <th key={h} className="pb-3 text-left text-xs font-black uppercase tracking-wider text-slate-400">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50">
-                    {buildMPTransactions(organizations).map((t, i) => (
-                      <tr key={i} className="hover:bg-slate-50 transition">
-                        <td className="py-3 font-mono text-xs font-bold text-slate-600">{t.paymentId}</td>
-                        <td className="py-3 font-black text-slate-950">{t.restaurant}</td>
-                        <td className="py-3 font-black text-slate-950">{currency.format(t.amount)}</td>
-                        <td className="py-3 text-xs font-bold text-slate-500">{t.date}</td>
-                        <td className="py-3 text-xs font-bold text-slate-600">{t.type}</td>
-                        <td className="py-3">
-                          <span className={`rounded-full px-2.5 py-1 text-xs font-black ${
-                            t.status === 'approved' ? 'bg-emerald-100 text-emerald-700' :
-                            t.status === 'pending' ? 'bg-amber-100 text-amber-700' :
-                            'bg-rose-100 text-rose-700'
-                          }`}>{t.status === 'approved' ? 'Aprobado' : t.status === 'pending' ? 'Pendiente' : 'Rechazado'}</span>
-                        </td>
-                        <td className="py-3">
-                          <button className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-black text-slate-700 hover:bg-slate-50">Ver</button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </SuperPanel>
-
-            {/* Alertas MP */}
-            <section className="grid gap-4 xl:grid-cols-2">
-              <SuperPanel title="Alertas de pagos" subtitle="Situaciones que requieren atención">
-                <div className="grid gap-3">
-                  {[
-                    { level: 'medium', title: 'Webhook lento', desc: 'Respuesta de MP demorada más de 3s en los últimos intentos.' },
-                    { level: 'low', title: 'Pago duplicado detectado', desc: 'Verificar Payment ID #82904 del restaurante Bella Vista.' },
-                    { level: 'low', title: 'Nuevo plan sin cobro', desc: '2 restaurantes activaron plan pro sin pago procesado.' },
-                  ].map((a, i) => (
-                    <EnhancedAlertRow key={i} alert={{ level: a.level, title: a.title, description: a.desc }} />
-                  ))}
-                </div>
-              </SuperPanel>
-
-              <SuperPanel title="Logs MercadoPago" subtitle="Últimas notificaciones recibidas">
-                <div className="grid gap-2 font-mono text-xs max-h-64 overflow-y-auto [scrollbar-width:thin]">
-                  {buildMPLogs().map((log, i) => (
-                    <div key={i} className={`rounded-xl px-3 py-2.5 ${
-                      log.type === 'error' ? 'bg-rose-50 text-rose-700' :
-                      log.type === 'warn' ? 'bg-amber-50 text-amber-700' :
-                      'bg-slate-50 text-slate-600'
-                    }`}>
-                      <span className="font-black">[{log.time}]</span> {log.type.toUpperCase()} — {log.message}
-                    </div>
-                  ))}
-                </div>
-              </SuperPanel>
-            </section>
-          </div>
-        ) : null}
-
-        {/* ═══════════════════════════════════════════════════════ */}
-        {/* TAB: SOPORTE / TICKETS — MEJORADO                      */}
-        {/* ═══════════════════════════════════════════════════════ */}
-        {activeTab === 'soporte' ? (
-          <div className="grid gap-6">
-            {/* Header con KPIs */}
-            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <DashKpiCard label="Tickets abiertos" value={openTicketsCount} sub="Pendientes de resolución" icon={MessageSquare} color="from-rose-500 to-pink-500" badge="Atención" badgeTone="warn" />
-              <DashKpiCard label="En revisión" value="2" sub="Asignados a soporte" icon={Clock} color="from-amber-500 to-orange-500" badge="En progreso" badgeTone="neutral" />
-              <DashKpiCard label="Resueltos hoy" value="5" sub="Últimas 24 horas" icon={CheckCircle2} color="from-emerald-500 to-teal-600" badge="+67% resolución" badgeTone="up" />
-              <DashKpiCard label="Tiempo resp. prom." value="1.4h" sub="SLA objetivo: 2h" icon={Activity} color="from-violet-500 to-purple-600" badge="Dentro del SLA" badgeTone="up" />
-            </section>
-
-            <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
-              {/* Lista de tickets */}
-              <SuperPanel title="Tickets activos" subtitle="Ordenados por prioridad y tiempo abierto">
-                <div className="grid gap-3">
-                  {buildSupportTickets(organizations).map((ticket) => (
-                    <TicketCard
-                      key={ticket.id}
-                      ticket={ticket}
-                      onEnter={() => {
-                        const org = organizations.find(o => o.id === ticket.orgId)
-                        if (org) handleImpersonate(org)
-                      }}
-                    />
-                  ))}
-                  <button className="mt-2 flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-200 py-3 text-sm font-black text-slate-400 hover:border-slate-400 hover:text-slate-600 transition">
-                    <Plus className="h-4 w-4" />Crear ticket manual
-                  </button>
-                </div>
-              </SuperPanel>
-
-              {/* Panel filtros + estadísticas */}
-              <div className="grid gap-4">
-                <SuperPanel title="Filtrar tickets" subtitle="">
-                  <div className="grid gap-3">
-                    <div>
-                      <p className="mb-2 text-xs font-black text-slate-500 uppercase tracking-wider">Por prioridad</p>
-                      <div className="flex flex-wrap gap-2">
-                        {['Crítica','Alta','Media','Baja'].map((p) => (
-                          <button key={p} className={`rounded-xl px-3 py-1.5 text-xs font-black transition border ${
-                            p === 'Crítica' ? 'bg-rose-50 text-rose-700 border-rose-200' :
-                            p === 'Alta' ? 'bg-orange-50 text-orange-700 border-orange-200' :
-                            p === 'Media' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                            'bg-slate-50 text-slate-600 border-slate-200'
-                          }`}>{p}</button>
-                        ))}
-                      </div>
-                    </div>
-                    <div>
-                      <p className="mb-2 text-xs font-black text-slate-500 uppercase tracking-wider">Por categoría</p>
-                      <div className="flex flex-wrap gap-2">
-                        {['POS','Cocina','QR','Pagos','Impresoras','Usuarios'].map((c) => (
-                          <button key={c} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-600 hover:bg-slate-50">{c}</button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </SuperPanel>
-
-                <SuperPanel title="SLA por categoría" subtitle="Tiempo promedio de resolución">
-                  <div className="grid gap-2">
-                    {[
-                      { cat: 'POS / Caja', time: '0.8h', ok: true },
-                      { cat: 'QR Menú', time: '1.2h', ok: true },
-                      { cat: 'Pagos MP', time: '2.1h', ok: false },
-                      { cat: 'Cocina KDS', time: '1.5h', ok: true },
-                      { cat: 'Usuarios', time: '3.0h', ok: false },
-                    ].map(s => (
-                      <div key={s.cat} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
-                        <span className="text-xs font-black text-slate-700">{s.cat}</span>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-black text-slate-950">{s.time}</span>
-                          <span className={`h-2 w-2 rounded-full ${s.ok ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </SuperPanel>
-              </div>
-            </section>
-          </div>
-        ) : null}
-
-        {/* ═══════════════════════════════════════════════════════ */}
-        {/* TAB: MODULOS — MEJORADO                                */}
-        {/* ═══════════════════════════════════════════════════════ */}
-        {activeTab === 'modulos' ? (
-          <div className="grid gap-6">
-            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <SuperMetricCard label="Módulos activos" value="5 / 11" detail="En toda la plataforma" icon={Sparkles} tone="emerald" />
-              <SuperMetricCard label="Sin errores" value="5" detail="Módulos estables" icon={CheckCircle2} tone="teal" />
-              <SuperMetricCard label="Con errores" value="0" detail="Requieren revisión" icon={AlertTriangle} tone="rose" />
-              <SuperMetricCard label="Inactivos" value="6" detail="Disponibles para activar" icon={Package} tone="amber" />
-            </section>
-
-            {/* Matriz de módulos */}
-            <SuperPanel title="Control de módulos" subtitle="Activa o desactiva servicios por restaurante en la plataforma">
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {buildPlatformModules(state).map((mod) => (
-                  <ModuleToggleCard key={mod.key} mod={mod} />
-                ))}
-              </div>
-            </SuperPanel>
-
-            {/* Matriz global restaurantes × módulos */}
-            <SuperPanel title="Matriz de módulos por restaurante" subtitle="Vista global de qué tiene activado cada local">
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b border-slate-100">
-                      <th className="pb-3 text-left font-black text-slate-500">Restaurante</th>
-                      {['QR','POS','KDS','Delivery','Inventario','Multi-suc.','Impresoras'].map(m => (
-                        <th key={m} className="pb-3 text-center font-black text-slate-500">{m}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50">
-                    {organizations.map((org) => (
-                      <tr key={org.id} className="hover:bg-slate-50 transition">
-                        <td className="py-3 font-black text-slate-950">{decodeUiText(org.name)}</td>
-                        {[true, normalizePlanLabel(org.plan)!=='QR Básico', normalizePlanLabel(org.plan)!=='QR Básico', false, false, normalizePlanLabel(org.plan)==='Enterprise', false].map((active, i) => (
-                          <td key={i} className="py-3 text-center">
-                            <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-black ${ active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400' }`}>
-                              {active ? '✓' : '–'}
-                            </span>
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </SuperPanel>
-          </div>
-        ) : null}
-
-        {/* ═══════════════════════════════════════════════════════ */}
-        {/* TAB: MONITOREO TÉCNICO                                 */}
-        {/* ═══════════════════════════════════════════════════════ */}
-        {activeTab === 'monitoreo' ? (
-          <div className="grid gap-6">
-            {/* Estado de servicios */}
-            <SuperPanel title="Estado de servicios" subtitle="Centro de monitoreo operativo en tiempo real">
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {[
-                  { name: 'API Principal', status: 'ok', latency: '42ms', uptime: '99.98%' },
-                  { name: 'Base de datos', status: 'ok', latency: '12ms', uptime: '99.99%' },
-                  { name: 'WebSockets', status: 'ok', latency: '8ms', uptime: '99.95%' },
-                  { name: 'Cloudflare CDN', status: 'ok', latency: '18ms', uptime: '99.99%' },
-                  { name: 'Impresoras', status: 'warn', latency: '---', uptime: '97.2%' },
-                  { name: 'MercadoPago', status: 'ok', latency: '230ms', uptime: '99.8%' },
-                  { name: 'Cocina / KDS', status: 'ok', latency: '5ms', uptime: '99.9%' },
-                  { name: 'Storage', status: 'ok', latency: '95ms', uptime: '99.97%' },
-                  { name: 'Email / SMTP', status: 'warn', latency: '---', uptime: '98.5%' },
-                ].map((svc) => (
-                  <div key={svc.name} className={`flex items-center justify-between rounded-2xl border p-4 ${
-                    svc.status === 'ok' ? 'border-emerald-100 bg-emerald-50/40' : 'border-amber-200 bg-amber-50'
-                  }`}>
-                    <div className="flex items-center gap-3">
-                      <span className={`relative flex h-3 w-3`}>
-                        {svc.status === 'ok'
-                          ? <><span className="animate-ping absolute h-full w-full rounded-full bg-emerald-400 opacity-60" /><span className="relative h-3 w-3 rounded-full bg-emerald-500" /></>
-                          : <span className="h-3 w-3 rounded-full bg-amber-500" />
-                        }
-                      </span>
-                      <div>
-                        <p className="text-sm font-black text-slate-950">{svc.name}</p>
-                        <p className="text-xs font-bold text-slate-500">Uptime {svc.uptime}</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xs font-black text-slate-700">{svc.latency}</p>
-                      <p className={`text-[0.6rem] font-black uppercase ${
-                        svc.status === 'ok' ? 'text-emerald-600' : 'text-amber-600'
-                      }`}>{svc.status === 'ok' ? 'OPERATIVO' : 'DEGRADADO'}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </SuperPanel>
-
-            <section className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_360px]">
-              {/* Logs de errores */}
-              <SuperPanel title="Logs de errores recientes" subtitle="Últimas incidencias del sistema">
-                <div className="grid gap-2 max-h-80 overflow-y-auto [scrollbar-width:thin]">
-                  {buildSystemLogs().map((log, i) => (
-                    <div key={i} className={`rounded-xl px-4 py-3 font-mono text-xs ${
-                      log.level === 'error' ? 'bg-rose-50 text-rose-700' :
-                      log.level === 'warn' ? 'bg-amber-50 text-amber-700' :
-                      'bg-slate-50 text-slate-600'
-                    }`}>
-                      <div className="flex items-center gap-2">
-                        <span className={`rounded px-1.5 py-0.5 text-[0.6rem] font-black ${
-                          log.level === 'error' ? 'bg-rose-200 text-rose-800' :
-                          log.level === 'warn' ? 'bg-amber-200 text-amber-800' :
-                          'bg-slate-200 text-slate-700'
-                        }`}>{log.level.toUpperCase()}</span>
-                        <span className="text-slate-500">{log.time}</span>
-                      </div>
-                      <p className="mt-1 leading-5">{log.message}</p>
-                    </div>
-                  ))}
-                </div>
-              </SuperPanel>
-
-              {/* Consumo servidor */}
-              <SuperPanel title="Consumo servidor" subtitle="Recursos en tiempo real">
-                <div className="grid gap-4">
-                  {[
-                    { label: 'CPU', value: 23, color: 'bg-emerald-500', detail: '23% · 4 cores' },
-                    { label: 'RAM', value: 61, color: 'bg-teal-500', detail: '2.4 GB / 4 GB' },
-                    { label: 'Storage', value: 38, color: 'bg-blue-500', detail: '38 GB / 100 GB' },
-                    { label: 'Banda ancha', value: 12, color: 'bg-violet-500', detail: '120 MB/s' },
-                    { label: 'Conexiones DB', value: 45, color: 'bg-amber-500', detail: '45 / 100 max' },
-                  ].map(res => (
-                    <div key={res.label} className="grid gap-1.5">
-                      <div className="flex justify-between">
-                        <span className="text-xs font-black text-slate-700">{res.label}</span>
-                        <span className="text-xs font-bold text-slate-500">{res.detail}</span>
-                      </div>
-                      <div className="h-2.5 rounded-full bg-slate-100 overflow-hidden">
-                        <div className={`h-full rounded-full transition-all duration-700 ${res.color}`} style={{ width: `${res.value}%` }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Restaurantes offline */}
-                <div className="mt-5 border-t border-slate-100 pt-5">
-                  <p className="mb-3 text-xs font-black uppercase tracking-widest text-slate-400">Restaurantes offline</p>
-                  {inactiveOrgs.length === 0 ? (
-                    <p className="text-xs font-bold text-emerald-600">✅ Todos los locales en línea</p>
-                  ) : inactiveOrgs.map(org => (
-                    <div key={org.id} className="flex items-center gap-2 rounded-xl bg-rose-50 px-3 py-2 mb-2">
-                      <span className="h-2 w-2 rounded-full bg-rose-500" />
-                      <span className="text-xs font-black text-rose-700">{decodeUiText(org.name)}</span>
-                    </div>
-                  ))}
-                </div>
-              </SuperPanel>
-            </section>
-          </div>
-        ) : null}
-
-        {/* ═══════════════════════════════════════════════════════ */}
-        {/* TAB: SEGURIDAD                                          */}
-        {/* ═══════════════════════════════════════════════════════ */}
-        {activeTab === 'seguridad' ? (
-          <div className="grid gap-6">
-            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <DashKpiCard label="Accesos hoy" value="14" sub="Logins administrativos" icon={Lock} color="from-slate-700 to-slate-900" badge="Normal" badgeTone="neutral" />
-              <DashKpiCard label="Acciones registradas" value="87" sub="Últimas 24 horas" icon={FileText} color="from-violet-500 to-purple-600" badge="Auditado" badgeTone="up" />
-              <DashKpiCard label="IPs únicas" value="6" sub="Accesos este mes" icon={Globe} color="from-blue-500 to-indigo-600" badge="Sin anomalías" badgeTone="up" />
-              <DashKpiCard label="Alertas seguridad" value="0" sub="Incidentes detectados" icon={Shield} color="from-emerald-500 to-teal-600" badge="Sistema seguro" badgeTone="up" />
-            </section>
-
-            <section className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_340px]">
-              {/* Log de acciones */}
-              <SuperPanel title="Historial de acciones administrativas" subtitle="Registro de auditoría completo">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-slate-100">
-                        {['Usuario','Acción','Recurso','IP','Fecha','Estado'].map(h => (
-                          <th key={h} className="pb-3 text-left text-xs font-black uppercase tracking-wider text-slate-400">{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-50">
-                      {buildAdminLogs().map((log, i) => (
-                        <tr key={i} className="hover:bg-slate-50 transition">
-                          <td className="py-3">
-                            <div className="flex items-center gap-2">
-                              <div className="grid h-7 w-7 place-items-center rounded-full bg-indigo-100 text-xs font-black text-indigo-700">{log.user.slice(0,1)}</div>
-                              <span className="font-black text-slate-950 text-xs">{log.user}</span>
-                            </div>
-                          </td>
-                          <td className="py-3 text-xs font-bold text-slate-700">{log.action}</td>
-                          <td className="py-3 text-xs font-bold text-slate-600">{log.resource}</td>
-                          <td className="py-3 font-mono text-xs text-slate-500">{log.ip}</td>
-                          <td className="py-3 text-xs text-slate-500">{log.date}</td>
-                          <td className="py-3">
-                            <span className={`rounded-full px-2 py-0.5 text-[0.6rem] font-black ${
-                              log.status === 'ok' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
-                            }`}>{log.status === 'ok' ? 'OK' : 'ALERTA'}</span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </SuperPanel>
-
-              {/* Roles y permisos */}
-              <div className="grid gap-4">
-                <SuperPanel title="Roles del sistema" subtitle="Usuarios y permisos">
-                  <div className="grid gap-3">
-                    {[
-                      { role: 'Superadmin', user: currentUser?.name || 'Admin', color: 'bg-violet-100 text-violet-700', perms: 'Acceso total' },
-                      { role: 'Soporte', user: 'soporte@acrodevs.cl', color: 'bg-blue-100 text-blue-700', perms: 'Tickets + impersonar' },
-                      { role: 'Ventas', user: 'ventas@acrodevs.cl', color: 'bg-emerald-100 text-emerald-700', perms: 'Planes + finanzas' },
-                      { role: 'Técnico', user: 'devops@acrodevs.cl', color: 'bg-amber-100 text-amber-700', perms: 'Monitoreo + logs' },
-                    ].map(r => (
-                      <div key={r.role} className="flex items-center gap-3 rounded-2xl bg-slate-50 p-3">
-                        <span className={`rounded-xl px-2.5 py-1 text-xs font-black ${r.color}`}>{r.role}</span>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-xs font-black text-slate-900">{r.user}</p>
-                          <p className="text-xs font-bold text-slate-400">{r.perms}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </SuperPanel>
-
-                <SuperPanel title="Últimos accesos" subtitle="IPs registradas">
-                  <div className="grid gap-2">
-                    {[
-                      { ip: '190.41.22.8', time: 'Hace 5 min', ok: true },
-                      { ip: '200.111.8.42', time: 'Hace 1h', ok: true },
-                      { ip: '181.73.5.91', time: 'Hace 3h', ok: true },
-                      { ip: '192.168.1.1', time: 'Hace 6h', ok: true },
-                    ].map((ip, i) => (
-                      <div key={i} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
-                        <div className="flex items-center gap-2">
-                          <span className={`h-2 w-2 rounded-full ${ip.ok ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                          <span className="font-mono text-xs font-bold text-slate-700">{ip.ip}</span>
-                        </div>
-                        <span className="text-xs text-slate-400">{ip.time}</span>
-                      </div>
-                    ))}
-                  </div>
-                </SuperPanel>
-              </div>
-            </section>
-          </div>
-        ) : null}
-      </section>
-
-      {showOrgModal ? (
-        <SuperOrgModal
-          editingOrg={editingOrg}
-          form={form}
-          setForm={setForm}
-          onClose={closeOrgModal}
-          onSubmit={handleSaveOrg}
-        />
-      ) : null}
-    </main>
-  )
-}
-
-// eslint-disable-next-line no-unused-vars
-function RestaurantProfilePanel({ snapshot, onSupport }) {
-  if (!snapshot) return null
-
-  return (
-    <section className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(380px,0.8fr)]">
-      <SuperPanel title="Ficha completa del restaurante" subtitle="Información conectada al local seleccionado">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          <RestaurantInfoBlock label="Restaurante" value={snapshot.name} detail={`/${snapshot.slug}`} />
-          <RestaurantInfoBlock label="Plan" value={snapshot.plan} detail={snapshot.status} />
-          <RestaurantInfoBlock label="MRR" value={currency.format(snapshot.mrr)} detail={snapshot.rut || 'RUT pendiente'} />
-          <RestaurantInfoBlock label="WhatsApp" value={snapshot.whatsapp || 'Sin configurar'} detail="Notificaciones y soporte" />
-          <RestaurantInfoBlock label="URL base" value={snapshot.baseUrl || 'Sin dominio'} detail="QR de mesas" />
-          <RestaurantInfoBlock label="Color marca" value={snapshot.primaryColor || 'Sin color'} detail="Branding del menú" />
-        </div>
-        <div className="mt-5 flex flex-wrap gap-3">
-          <button type="button" onClick={onSupport} className="rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white">
-            Entrar como soporte
-          </button>
-          <Link to="/admin/configuracion" className="rounded-2xl bg-slate-100 px-5 py-3 text-sm font-black text-slate-700">
-            Ver configuración
-          </Link>
-          <Link to="/admin/mesas" className="rounded-2xl bg-emerald-50 px-5 py-3 text-sm font-black text-emerald-700">
-            Mesas y QR
-          </Link>
-        </div>
-      </SuperPanel>
-
-      <SuperPanel title="Resumen del local" subtitle="Operación, catálogo y equipo">
-        <div className="grid grid-cols-2 gap-3">
-          <MiniMetric label="Salud" value={`${snapshot.health}%`} />
-          <MiniMetric label="Ventas hoy" value={currency.format(snapshot.dailySales)} />
-          <MiniMetric label="Pedidos activos" value={snapshot.activeOrders} />
-          <MiniMetric label="Pendientes" value={snapshot.pendingOrders} />
-          <MiniMetric label="Listos" value={snapshot.readyOrders} />
-          <MiniMetric label="Categorías" value={snapshot.categories} />
-          <MiniMetric label="Productos activos" value={snapshot.activeProducts} />
-          <MiniMetric label="Mesas QR" value={snapshot.tables} />
-          <MiniMetric label="Usuarios" value={snapshot.staffUsers} />
-          <MiniMetric label="Reservas" value={snapshot.reservations} />
-        </div>
-      </SuperPanel>
-    </section>
-  )
-}
-
-function RestaurantInfoBlock({ label, value, detail }) {
-  return (
-    <div className="min-w-0 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-      <p className="text-[0.68rem] font-black uppercase tracking-[0.14em] text-slate-400">{label}</p>
-      <p className="mt-2 truncate text-base font-black text-slate-950">{value}</p>
-      <p className="mt-1 truncate text-xs font-bold text-slate-500">{detail}</p>
-    </div>
-  )
-}
-
-function RestaurantCompactRow({ org, onSelect, onSupport }) {
-  return (
-    <div className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 sm:grid-cols-[1fr_auto] sm:items-center">
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
-          <h4 className="truncate text-sm font-black text-slate-950">{decodeUiText(org.name)}</h4>
-          <PlanPill plan={org.plan} />
-          <AccountStatusPill status={org.status} />
-        </div>
-        <p className="mt-1 text-xs font-semibold text-slate-500">
-          /{org.slug} · {org.rut || 'RUT pendiente'} · {currency.format(org.mrr || 0)}
-        </p>
-      </div>
-      <div className="flex gap-2">
-        <button type="button" onClick={onSelect} className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-black text-slate-700">
-          Ver datos
-        </button>
-        <button type="button" onClick={onSupport} className="rounded-xl bg-emerald-500 px-3 py-2 text-xs font-black text-slate-950">
-          Entrar
-        </button>
-      </div>
-    </div>
-  )
-}
-
-// eslint-disable-next-line no-unused-vars
-function PlanDistributionRow({ row, total }) {
-  const percent = total ? Math.round((row.count / total) * 100) : 0
-
-  return (
-    <div>
-      <div className="mb-2 flex items-center justify-between gap-3 text-sm font-black text-slate-800">
-        <span>{row.label}</span>
-        <span>{row.count} · {percent}%</span>
-      </div>
-      <div className="h-3 overflow-hidden rounded-full bg-slate-100">
-        <div className={`h-full rounded-full ${row.color}`} style={{ width: `${percent}%` }} />
-      </div>
-    </div>
-  )
-}
-
-function SuperMetricCard({ label, value, detail, icon: Icon, tone }) {
-  const tones = {
-    emerald: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
-    teal: 'bg-teal-50 text-teal-700 ring-teal-100',
-    amber: 'bg-amber-50 text-amber-700 ring-amber-100',
-    rose: 'bg-rose-50 text-rose-700 ring-rose-100',
-    slate: 'bg-slate-100 text-slate-700 ring-slate-200',
-  }
-
-  return (
-    <motion.article
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="rounded-3xl border border-slate-200 bg-white p-5 shadow-soft"
-    >
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">{label}</p>
-          <strong className="mt-3 block text-3xl font-black tracking-tight text-slate-950">{value}</strong>
-          <p className="mt-2 text-sm font-semibold text-slate-500">{detail}</p>
-        </div>
-        <span className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl ring-1 ${tones[tone]}`}>
-          <Icon className="h-5 w-5" />
-        </span>
-      </div>
-    </motion.article>
-  )
-}
-
-function SuperPanel({ title, subtitle, children }) {
-  return (
-    <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-soft">
-      <div className="mb-5">
-        <h3 className="text-lg font-black text-slate-950">{title}</h3>
-        <p className="mt-1 text-sm font-semibold text-slate-500">{subtitle}</p>
-      </div>
-      {children}
-    </section>
-  )
-}
-
-function SuperSectionHeader({ eyebrow, title, description, action }) {
-  return (
-    <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-      <div>
-        <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-600">{eyebrow}</p>
-        <h2 className="mt-2 font-sans text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">{title}</h2>
-        <p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-slate-500">{description}</p>
-      </div>
-      {action}
-    </div>
-  )
-}
-
-function RestaurantTenantCard({ org, active, health, onSelect, onSupport, onEdit, onDelete }) {
-  return (
-    <article className={`rounded-[1.7rem] border bg-white p-5 shadow-soft transition hover:-translate-y-1 ${active ? 'border-emerald-300 ring-4 ring-emerald-100' : 'border-slate-200'}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-slate-950 text-lg font-black text-white">
-            {decodeUiText(org.name).slice(0, 1)}
-          </div>
-          <div className="min-w-0">
-            <h3 className="truncate text-lg font-black text-slate-950">{decodeUiText(org.name)}</h3>
-            <p className="truncate text-sm font-semibold text-slate-500">/{org.slug}</p>
-          </div>
-        </div>
-        <HealthRing value={health} small />
-      </div>
-
-      <div className="mt-4 flex flex-wrap gap-2">
-        <PlanPill plan={org.plan} />
-        <AccountStatusPill status={org.status} />
-      </div>
-
-      <div className="mt-4 grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-3">
-        <MiniMetric label="MRR" value={currency.format(org.mrr || 0)} />
-        <MiniMetric label="RUT" value={org.rut || 'Pendiente'} />
-      </div>
-
-      <div className="mt-4 grid grid-cols-2 gap-2">
-        <button type="button" onClick={onSupport} className="rounded-2xl bg-emerald-500 px-3 py-3 text-sm font-black text-slate-950">
-          Entrar soporte
-        </button>
-        <button type="button" onClick={onSelect} className="rounded-2xl bg-slate-950 px-3 py-3 text-sm font-black text-white">
-          Ver operación
-        </button>
-      </div>
-
-      <div className="mt-3 flex items-center justify-end gap-2 border-t border-slate-100 pt-3">
-        <button type="button" onClick={onEdit} className="rounded-xl bg-slate-100 p-2 text-slate-600">
-          <Pencil className="h-4 w-4" />
-        </button>
-        <button type="button" onClick={onDelete} className="rounded-xl bg-rose-50 p-2 text-rose-600">
-          <Trash2 className="h-4 w-4" />
-        </button>
-      </div>
-    </article>
-  )
-}
-
-function HealthRing({ value, small = false }) {
-  const color = value >= 80 ? 'text-emerald-600' : value >= 55 ? 'text-amber-600' : 'text-rose-600'
-  return (
-    <div className={`grid place-items-center rounded-full border-8 border-slate-100 bg-white ${small ? 'h-16 w-16' : 'h-20 w-20'}`}>
-      <strong className={`${small ? 'text-sm' : 'text-lg'} font-black ${color}`}>{value}%</strong>
-    </div>
-  )
-}
-
-function MiniMetric({ label, value }) {
-  return (
-    <div className="min-w-0">
-      <p className="text-[0.65rem] font-black uppercase tracking-[0.12em] text-slate-400">{label}</p>
-      <p className="mt-1 truncate text-sm font-black text-slate-950">{value}</p>
-    </div>
-  )
-}
-
-// eslint-disable-next-line no-unused-vars
-function SuperListRow({ index, title, detail, value }) {
-  return (
-    <div className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 p-3">
-      <div className="flex min-w-0 items-center gap-3">
-        {index ? (
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-slate-950 text-sm font-black text-white">
-            {index}
-          </span>
-        ) : null}
-        <div className="min-w-0">
-          <p className="truncate text-sm font-black text-slate-950">{title}</p>
-          <p className="truncate text-xs font-semibold text-slate-500">{detail}</p>
-        </div>
-      </div>
-      <strong className="shrink-0 text-sm font-black text-slate-950">{value}</strong>
-    </div>
-  )
-}
-
-function ModuleHealthRow({ label, description, enabled, icon: Icon }) {
-  return (
-    <div className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-3">
-      <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-2xl ${enabled ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>
-        <Icon className="h-5 w-5" />
-      </span>
-      <div>
-        <p className="text-sm font-black text-slate-950">{label}</p>
-        <p className="text-xs font-semibold leading-5 text-slate-500">{description}</p>
-      </div>
-    </div>
-  )
-}
-
-function PlanCard({ plan }) {
-  return (
-    <article className={`rounded-[1.7rem] border bg-white p-6 shadow-soft ${plan.featured ? 'border-emerald-300 ring-4 ring-emerald-100' : 'border-slate-200'}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-emerald-600">{plan.badge}</p>
-          <h3 className="mt-2 text-2xl font-black text-slate-950">{plan.name}</h3>
-        </div>
-        <span className="rounded-2xl bg-slate-950 px-3 py-2 text-sm font-black text-white">{plan.price}</span>
-      </div>
-      <p className="mt-4 text-sm font-semibold leading-6 text-slate-500">{plan.description}</p>
-      <div className="mt-5 grid gap-2">
-        {plan.features.map((feature) => (
-          <div key={feature} className="flex items-center gap-2 text-sm font-bold text-slate-700">
-            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-            {feature}
-          </div>
-        ))}
-      </div>
-    </article>
-  )
-}
-
-function SupportAlert({ item }) {
-  const tones = {
-    high: 'border-rose-200 bg-rose-50 text-rose-700',
-    medium: 'border-amber-200 bg-amber-50 text-amber-700',
-    low: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-  }
-  return (
-    <div className={`rounded-2xl border p-4 ${tones[item.level]}`}>
-      <p className="text-sm font-black">{item.title}</p>
-      <p className="mt-1 text-sm font-semibold opacity-80">{item.description}</p>
-    </div>
-  )
-}
-
-// eslint-disable-next-line no-unused-vars
-function ProductModuleCard({ module }) {
-  return (
-    <article className="rounded-[1.7rem] border border-slate-200 bg-white p-5 shadow-soft">
-      <div className="flex items-start gap-3">
-        <span className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl ${module.essential ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-          <module.icon className="h-6 w-6" />
-        </span>
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-lg font-black text-slate-950">{module.title}</h3>
-            <span className={`rounded-full px-2 py-1 text-[0.65rem] font-black ${module.essential ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>
-              {module.essential ? 'Necesario' : 'Después'}
-            </span>
-          </div>
-          <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">{module.description}</p>
-        </div>
-      </div>
-    </article>
-  )
-}
-
-function SuperOrgModal({ editingOrg, form, setForm, onClose, onSubmit }) {
-  const updateName = (value) => {
-    setForm((current) => ({
-      ...current,
-      name: value,
-      slug: editingOrg
-        ? current.slug
-        : value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
-    }))
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-4 backdrop-blur-sm">
-      <motion.form
-        initial={{ opacity: 0, y: 18, scale: 0.98 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        onSubmit={onSubmit}
-        className="w-full max-w-2xl rounded-[2rem] bg-white p-5 shadow-2xl"
-      >
-        <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
-          <div>
-            <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-600">
-              {editingOrg ? 'Editar cuenta' : 'Nuevo restaurante'}
-            </p>
-            <h3 className="mt-2 text-2xl font-black text-slate-950">
-              {editingOrg ? 'Ajustar restaurante' : 'Crear restaurante'}
-            </h3>
-          </div>
-          <button type="button" onClick={onClose} className="grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-slate-500">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        <div className="mt-5 grid gap-4 sm:grid-cols-2">
-          <SuperField label="Nombre comercial">
-            <input
-              value={form.name}
-              onChange={(event) => updateName(event.target.value)}
-              required
-              placeholder="Restaurante Centro"
-              className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-black outline-none focus:border-emerald-400 focus:bg-white"
-            />
-          </SuperField>
-          <SuperField label="Slug / URL interna">
-            <input
-              value={form.slug}
-              onChange={(event) => setForm((current) => ({ ...current, slug: event.target.value }))}
-              required
-              placeholder="restaurante-centro"
-              className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-black outline-none focus:border-emerald-400 focus:bg-white"
-            />
-          </SuperField>
-          <SuperField label="RUT">
-            <input
-              value={form.rut}
-              onChange={(event) => setForm((current) => ({ ...current, rut: event.target.value }))}
-              placeholder="76.123.456-7"
-              className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-black outline-none focus:border-emerald-400 focus:bg-white"
-            />
-          </SuperField>
-          <SuperField label="Cobro mensual">
-            <input
-              type="number"
-              value={form.mrr}
-              onChange={(event) => setForm((current) => ({ ...current, mrr: event.target.value }))}
-              placeholder="34990"
-              className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-black outline-none focus:border-emerald-400 focus:bg-white"
-            />
-          </SuperField>
-          <SuperField label="Plan">
-            <select
-              value={form.plan}
-              onChange={(event) => setForm((current) => ({ ...current, plan: normalizePlanForStorage(event.target.value) }))}
-              className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-black outline-none focus:border-emerald-400 focus:bg-white"
-            >
-              {superadminPlanOptions().map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
-          </SuperField>
-          <SuperField label="Estado">
-            <select
-              value={form.status}
-              onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}
-              className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-black outline-none focus:border-emerald-400 focus:bg-white"
-            >
-              <option value="Activo">Activo</option>
-              <option value="Inactivo">Inactivo</option>
-            </select>
-          </SuperField>
-        </div>
-
-        <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-          <button type="button" onClick={onClose} className="h-12 rounded-2xl bg-slate-100 px-5 text-sm font-black text-slate-600">
-            Cancelar
-          </button>
-          <button type="submit" className="h-12 rounded-2xl bg-emerald-500 px-5 text-sm font-black text-slate-950">
-            {editingOrg ? 'Guardar cambios' : 'Crear restaurante'}
-          </button>
-        </div>
-      </motion.form>
-    </div>
-  )
-}
-
-function SuperField({ label, children }) {
-  return (
-    <label className="grid gap-2">
-      <span className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">{label}</span>
-      {children}
-    </label>
-  )
-}
-
-function PlanPill({ plan }) {
-  const label = normalizePlanLabel(plan)
-  const classes =
-    label === 'Enterprise'
-      ? 'bg-purple-50 text-purple-700 ring-purple-100'
-      : label === 'Pago único'
-        ? 'bg-amber-50 text-amber-700 ring-amber-100'
-        : 'bg-emerald-50 text-emerald-700 ring-emerald-100'
-
-  return (
-    <span className={`inline-flex rounded-full px-3 py-1 text-xs font-black ring-1 ${classes}`}>
-      {label}
-    </span>
-  )
-}
-
-function AccountStatusPill({ status }) {
-  const cleanStatus = normalizeAccountStatus(status)
-  return (
-    <span className={`inline-flex rounded-full px-3 py-1 text-xs font-black ring-1 ${cleanStatus === 'Activo' ? 'bg-emerald-50 text-emerald-700 ring-emerald-100' : 'bg-rose-50 text-rose-700 ring-rose-100'}`}>
-      {cleanStatus}
-    </span>
-  )
-}
-
-function SuperEmptyState({ text }) {
-  return (
-    <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5 text-center text-sm font-bold text-slate-500">
-      {text}
-    </div>
-  )
-}
-
-function OrderStatusPill({ status }) {
-  const normalized = status === 'En preparaciÃ³n' ? 'En preparación' : status
-  const classes = {
-    Pendiente: 'bg-amber-50 text-amber-700 ring-amber-100',
-    'En preparación': 'bg-blue-50 text-blue-700 ring-blue-100',
-    Listo: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
-    Entregado: 'bg-slate-100 text-slate-600 ring-slate-200',
-    Cancelado: 'bg-rose-50 text-rose-700 ring-rose-100',
-  }
-  return (
-    <span className={`rounded-full px-3 py-1 text-xs font-black ring-1 ${classes[normalized] ?? classes.Entregado}`}>
-      {normalized}
-    </span>
-  )
-}
-
-function createSuperadminOrgForm(org = null) {
-  return {
-    name: org?.name ?? '',
-    slug: org?.slug ?? '',
-    plan: normalizePlanForStorage(org?.plan ?? 'BÃ¡sico'),
-    status: org?.status ?? 'Activo',
-    rut: org?.rut ?? '',
-    mrr: org?.mrr ?? 34990,
-  }
-}
-
-function superadminPlanOptions() {
-  return [
-    { value: 'BÃ¡sico', label: 'QR Básico' },
-    { value: 'Empresa', label: 'Pro Restaurante' },
-    { value: 'Venta Ãšnica', label: 'Pago único' },
-  ]
-}
-
-function normalizePlanLabel(plan = '') {
-  const clean = decodeUiText(plan)
-  if (clean.includes('Venta')) return 'Pago único'
-  if (clean.includes('Empresa')) return 'Enterprise'
-  return 'QR Básico'
-}
-
-function normalizePlanForStorage(plan = '') {
-  const clean = decodeUiText(plan)
-  if (clean.includes('Venta') || clean.includes('Pago')) return 'Venta Única'
-  if (clean.includes('Empresa') || clean.includes('Enterprise') || clean.includes('Pro')) return 'Empresa'
-  return 'Básico'
-}
-
-function normalizeAccountStatus(status = '') {
-  return decodeUiText(status) || 'Activo'
-}
-
-function decodeUiText(value = '') {
-  return String(value)
-    .replaceAll('ÃƒÂ¡', 'á')
-    .replaceAll('ÃƒÂ©', 'é')
-    .replaceAll('ÃƒÂ­', 'í')
-    .replaceAll('ÃƒÂ³', 'ó')
-    .replaceAll('ÃƒÂº', 'ú')
-    .replaceAll('ÃƒÅ¡', 'Ú')
-    .replaceAll('ÃƒÂ±', 'ñ')
-    .replaceAll('Ã¡', 'á')
-    .replaceAll('Ã©', 'é')
-    .replaceAll('Ã­', 'í')
-    .replaceAll('Ã³', 'ó')
-    .replaceAll('Ãº', 'ú')
-    .replaceAll('Ãš', 'Ú')
-    .replaceAll('Ã±', 'ñ')
-    .replaceAll('â€”', '—')
-    .replaceAll('Â·', '·')
-    .replaceAll('Â¿', '¿')
-}
-
-function calculateRestaurantHealth(org, state = {}) {
-  if (!org) return 0
-  let score = normalizeAccountStatus(org.status) === 'Activo' ? 35 : 10
-  if (org.rut) score += 12
-  if (Number(org.mrr || 0) > 0) score += 13
-  if ((state.products ?? []).length) score += 12
-  if ((state.tables ?? []).length) score += 12
-  if ((state.staffUsers ?? []).length) score += 8
-  if (state.restaurant?.whatsapp) score += 8
-  return Math.min(score, 100)
-}
-
-function calculatePlatformHealth(organizations) {
-  if (!organizations.length) return 0
-  const active = organizations.filter((org) => normalizeAccountStatus(org.status) === 'Activo').length
-  const withBilling = organizations.filter((org) => Number(org.mrr || 0) > 0).length
-  const activeScore = Math.round((active / organizations.length) * 60)
-  const billingScore = Math.round((withBilling / organizations.length) * 40)
-  return Math.min(100, activeScore + billingScore)
-}
-
-// eslint-disable-next-line no-unused-vars
-function buildPlanRows(organizations) {
-  const rows = [
-    { label: 'QR Básico', color: 'bg-emerald-500', count: 0 },
-    { label: 'Pro Restaurante', color: 'bg-purple-500', count: 0 },
-    { label: 'Pago único', color: 'bg-amber-500', count: 0 },
-  ]
-  organizations.forEach((org) => {
-    const rawPlan = decodeUiText(org.plan)
-    if (rawPlan.includes('Venta')) {
-      rows[2].count += 1
-    } else if (rawPlan.includes('Empresa')) {
-      rows[1].count += 1
-    } else {
-      rows[0].count += 1
-    }
-  })
-  return rows
-}
-
-// eslint-disable-next-line no-unused-vars
-function buildRestaurantSnapshot(org, state, metrics) {
-  if (!org) return null
-  return {
-    name: decodeUiText(org.name),
-    slug: org.slug,
-    plan: normalizePlanLabel(org.plan),
-    status: normalizeAccountStatus(org.status),
-    rut: org.rut || '',
-    mrr: Number(org.mrr || 0),
-    whatsapp: state.restaurant?.whatsapp || '',
-    baseUrl: state.restaurant?.baseUrl || '',
-    primaryColor: state.restaurant?.primaryColor || '',
-    health: metrics.currentHealth,
-    dailySales: metrics.dailySales,
-    activeOrders: metrics.activeOrders,
-    pendingOrders: metrics.pendingOrders,
-    readyOrders: metrics.readyOrders,
-    categories: state.categories?.length ?? 0,
-    products: state.products?.length ?? 0,
-    activeProducts: (state.products ?? []).filter((product) => product.available).length,
-    tables: state.tables?.length ?? 0,
-    staffUsers: state.staffUsers?.length ?? 0,
-    reservations: state.reservations?.length ?? 0,
-  }
-}
-
-function buildRestaurantModules(state) {
-  return [
-    {
-      label: 'Menú QR',
-      description: `${state.products?.length ?? 0} productos y ${state.tables?.length ?? 0} mesas configuradas.`,
-      enabled: Boolean((state.products ?? []).length && (state.tables ?? []).length),
-      icon: QrCode,
-    },
-    {
-      label: 'KDS cocina',
-      description: 'Pantalla de cocina con estados de pedido en vivo.',
-      enabled: true,
-      icon: ChefHat,
-    },
-    {
-      label: 'POS / caja',
-      description: 'Caja interna para cobro y seguimiento manual.',
-      enabled: true,
-      icon: CreditCard,
-    },
-    {
-      label: 'Equipo y PIN',
-      description: `${state.staffUsers?.length ?? 0} usuarios de staff registrados.`,
-      enabled: Boolean((state.staffUsers ?? []).length),
-      icon: Users,
-    },
-    {
-      label: 'Reservas',
-      description: 'Agenda simple para reservas por mesa.',
-      enabled: true,
-      icon: CalendarDays,
-    },
-  ]
-}
-
-function buildSuperadminSupportItems({ remoteError, inactiveOrgs, selectedOrg, state, activeOrders }) {
-  const items = []
-  if (remoteError) {
-    items.push({
-      level: 'high',
-      title: 'Supabase requiere revisión',
-      description: remoteError,
-    })
-  }
-  if (inactiveOrgs.length) {
-    items.push({
-      level: 'medium',
-      title: `${inactiveOrgs.length} local(es) inactivo(s)`,
-      description: 'Revisar cobro, onboarding o solicitud de pausa del servicio.',
-    })
-  }
-  if (selectedOrg && !state.restaurant?.whatsapp) {
-    items.push({
-      level: 'medium',
-      title: 'WhatsApp no configurado',
-      description: 'El local no tiene número de WhatsApp para notificaciones o soporte manual.',
-    })
-  }
-  if (activeOrders.length > 8) {
-    items.push({
-      level: 'medium',
-      title: 'Alta carga operativa',
-      description: 'Hay muchos pedidos activos; conviene revisar cocina o tiempos.',
-    })
-  }
-  if (!items.length) {
-    items.push({
-      level: 'low',
-      title: 'Todo se ve estable',
-      description: 'No hay alertas críticas para el local seleccionado.',
-    })
-  }
-  return items
-}
-
-function buildRestaurantOnboarding(selectedOrg, state) {
-  return [
-    {
-      label: 'Cuenta del restaurante creada',
-      help: 'Nombre, slug y estado comercial configurados.',
-      done: Boolean(selectedOrg),
-    },
-    {
-      label: 'Menú cargado',
-      help: 'Productos visibles para el cliente con QR.',
-      done: Boolean((state.products ?? []).length),
-    },
-    {
-      label: 'Mesas QR generadas',
-      help: 'Cada mesa debe tener su QR imprimible.',
-      done: Boolean((state.tables ?? []).length),
-    },
-    {
-      label: 'Equipo creado',
-      help: 'Admin, cocina, caja o garzones con acceso.',
-      done: Boolean((state.staffUsers ?? []).length),
-    },
-    {
-      label: 'WhatsApp configurado',
-      help: 'Número para enviar resumen del pedido.',
-      done: Boolean(state.restaurant?.whatsapp),
-    },
-  ]
-}
-
-function restaurantPlans() {
-  return [
-    {
-      name: 'QR Básico',
-      badge: 'Entrada',
-      price: '$24.990/mes',
-      description: 'Para locales pequeños que quieren menú QR y pedidos simples.',
-      features: ['Menú digital por mesa', 'Carrito y notas', 'Panel cocina', 'Hasta 10 mesas'],
-    },
-    {
-      name: 'Pro Restaurante',
-      badge: 'Más vendible',
-      price: '$39.990/mes',
-      featured: true,
-      description: 'Operación diaria completa: QR, cocina, caja, usuarios y reportes.',
-      features: ['Mesas ilimitadas', 'KDS cocina', 'Usuarios por rol', 'POS interno', 'Reportes diarios'],
-    },
-    {
-      name: 'Multi-local',
-      badge: 'Escala',
-      price: 'A medida',
-      description: 'Para marcas con varias sucursales y soporte centralizado.',
-      features: ['Multi sucursal', 'Soporte prioritario', 'Branding avanzado', 'Reportes consolidados'],
-    },
-  ]
-}
-
-// eslint-disable-next-line no-unused-vars
-function restaurantProductModules() {
-  return [
-    {
-      title: 'Menú QR cliente',
-      description: 'La experiencia principal: escanear, buscar, filtrar, agregar al carrito y enviar pedido.',
-      essential: true,
-      icon: Smartphone,
-    },
-    {
-      title: 'Pantalla cocina KDS',
-      description: 'Pedidos en tiempo real con estados visuales para preparar, listo y entregado.',
-      essential: true,
-      icon: ChefHat,
-    },
-    {
-      title: 'Panel del restaurante',
-      description: 'Productos, categorías, promociones, mesas QR, pedidos, usuarios y configuración.',
-      essential: true,
-      icon: Laptop,
-    },
-    {
-      title: 'Superadmin AcroDevs',
-      description: 'Control de restaurantes, planes, soporte, módulos activos y acceso por local.',
-      essential: true,
-      icon: Shield,
-    },
-    {
-      title: 'POS / caja',
-      description: 'Cobro interno y seguimiento manual para restaurantes que también venden en caja.',
-      essential: false,
-      icon: CreditCard,
-    },
-    {
-      title: 'Reservas y fidelización',
-      description: 'Agenda, clientes frecuentes, campañas y beneficios. Conviene dejarlo para segunda etapa.',
-      essential: false,
-      icon: CalendarDays,
-    },
-  ]
-}
-
-// ── Nuevos componentes UI del Dashboard ──
-
-function DashKpiCard({ label, value, sub, icon: Icon, color, badge, badgeTone }) {
-  const badgeClasses = {
-    up: 'bg-emerald-100 text-emerald-700',
-    warn: 'bg-rose-100 text-rose-700',
-    neutral: 'bg-slate-100 text-slate-600',
-  }
-  return (
-    <motion.article
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="relative overflow-hidden rounded-3xl bg-white border border-slate-200 p-5 shadow-soft"
-    >
-      <div className={`absolute -right-6 -top-6 h-20 w-20 rounded-full bg-gradient-to-br ${color} opacity-10 pointer-events-none`} />
-      <div className="flex items-start justify-between gap-3">
-        <div className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br ${color} text-white shadow-md`}>
-          <Icon className="h-5 w-5" />
-        </div>
-        <span className={`rounded-full px-2.5 py-1 text-[0.62rem] font-black leading-none ${badgeClasses[badgeTone] || badgeClasses.neutral}`}>
-          {badge}
-        </span>
-      </div>
-      <strong className="mt-4 block text-3xl font-black tracking-tight text-slate-950">{value}</strong>
-      <p className="text-[0.65rem] font-black uppercase tracking-[0.12em] text-slate-400 mt-0.5">{label}</p>
-      <p className="mt-1 text-xs font-semibold text-slate-500">{sub}</p>
-    </motion.article>
-  )
-}
-
-function EnhancedAlertRow({ alert }) {
-  const levelConfig = {
-    high: { bg: 'bg-rose-50 border-rose-200', badge: 'bg-rose-100 text-rose-700', dot: 'bg-rose-500 animate-pulse', label: 'CRÍTICO' },
-    medium: { bg: 'bg-amber-50 border-amber-200', badge: 'bg-amber-100 text-amber-700', dot: 'bg-amber-500', label: 'MEDIO' },
-    low: { bg: 'bg-emerald-50 border-emerald-200', badge: 'bg-emerald-100 text-emerald-700', dot: 'bg-emerald-500', label: 'OK' },
-  }
-  const cfg = levelConfig[alert.level] || levelConfig.low
-  return (
-    <div className={`rounded-2xl border p-4 ${cfg.bg}`}>
-      <div className="flex items-start gap-3">
-        <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${cfg.dot}`} />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <p className="text-sm font-black text-slate-900">{alert.title}</p>
-            <span className={`rounded-full px-2 py-0.5 text-[0.6rem] font-black ${cfg.badge}`}>{cfg.label}</span>
-          </div>
-          <p className="mt-1 text-xs font-semibold text-slate-600 leading-5">{alert.description}</p>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function ReviewOrgRow({ org, reason, severity, onSelect, onSupport }) {
-  const isCritical = severity === 'high'
-  return (
-    <div className={`rounded-2xl border p-3 ${isCritical ? 'border-rose-200 bg-rose-50/50' : 'border-amber-200 bg-amber-50/50'}`}>
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
-          <div className={`grid h-8 w-8 shrink-0 place-items-center rounded-xl text-xs font-black text-white ${isCritical ? 'bg-rose-500' : 'bg-amber-500'}`}>
-            {decodeUiText(org.name).slice(0, 1)}
-          </div>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-black text-slate-900">{decodeUiText(org.name)}</p>
-            <p className="truncate text-xs font-semibold text-slate-500">{reason}</p>
-          </div>
-        </div>
-        <div className="flex gap-1.5 shrink-0">
-          <button type="button" onClick={onSelect} className="rounded-xl bg-white border border-slate-200 px-2.5 py-1.5 text-xs font-black text-slate-700 hover:bg-slate-50 transition">Ver</button>
-          <button type="button" onClick={onSupport} className="rounded-xl bg-slate-950 px-2.5 py-1.5 text-xs font-black text-white hover:bg-slate-800 transition">Entrar</button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ── Nuevos helpers de datos del Dashboard ──
-
-function buildMonthlyRevenueData(currentMrr) {
-  const base = currentMrr || 50000
-  return [
-    { mes: 'Dic', mrr: Math.round(base * 0.70), ingresos: Math.round(base * 0.65) },
-    { mes: 'Ene', mrr: Math.round(base * 0.78), ingresos: Math.round(base * 0.74) },
-    { mes: 'Feb', mrr: Math.round(base * 0.83), ingresos: Math.round(base * 0.80) },
-    { mes: 'Mar', mrr: Math.round(base * 0.89), ingresos: Math.round(base * 0.85) },
-    { mes: 'Abr', mrr: Math.round(base * 0.94), ingresos: Math.round(base * 0.91) },
-    { mes: 'May', mrr: base, ingresos: Math.round(base * 0.97) },
-  ]
-}
-
-function buildPlanPieData(organizations) {
-  const basic = organizations.filter((o) => normalizePlanLabel(o.plan) === 'QR Básico').length
-  const pro = organizations.filter((o) => normalizePlanLabel(o.plan) === 'Enterprise').length
-  const unique = organizations.filter((o) => normalizePlanLabel(o.plan) === 'Pago único').length
-  return [
-    { name: 'QR Básico', value: basic || 0, color: '#10b981' },
-    { name: 'Pro Restaurante', value: pro || 0, color: '#8b5cf6' },
-    { name: 'Pago único', value: unique || 0, color: '#f59e0b' },
-  ]
-}
-
-function buildEnhancedAlerts({ remoteError, inactiveOrgs, selectedOrg, state, activeOrders, organizations }) {
-  const items = []
-  if (remoteError) {
-    items.push({ level: 'high', title: 'Error de conexión Supabase', description: remoteError })
-  }
-  if (inactiveOrgs.length > 0) {
-    items.push({
-      level: 'high',
-      title: `${inactiveOrgs.length} restaurante${inactiveOrgs.length > 1 ? 's' : ''} suspendido${inactiveOrgs.length > 1 ? 's' : ''}`,
-      description: 'Verificar estado de cuenta, pago o solicitud de pausa del servicio.',
-    })
-  }
-  if (selectedOrg && !state.restaurant?.whatsapp) {
-    items.push({
-      level: 'medium',
-      title: 'WhatsApp no configurado',
-      description: `${decodeUiText(selectedOrg.name)} no tiene número de notificaciones configurado.`,
-      orgId: selectedOrg.id,
-    })
-  }
-  if (activeOrders.length > 8) {
-    items.push({
-      level: 'medium',
-      title: 'Alta carga operativa',
-      description: `${activeOrders.length} pedidos activos simultáneos. Revisar tiempos de cocina.`,
-    })
-  }
-  const orgsWithoutRut = organizations.filter((o) => !o.rut)
-  if (orgsWithoutRut.length > 0) {
-    items.push({
-      level: 'low',
-      title: `${orgsWithoutRut.length} local${orgsWithoutRut.length > 1 ? 'es' : ''} sin RUT registrado`,
-      description: 'Completar datos comerciales para facturación y contratos.',
-    })
-  }
-  if (items.length === 0) {
-    items.push({
-      level: 'low',
-      title: 'Plataforma operando normalmente',
-      description: 'No hay alertas críticas. Todos los servicios funcionan correctamente.',
-    })
-  }
-  return items
-}
-
-function buildTopPerformers(organizations) {
-  return [...organizations]
-    .sort((a, b) => Number(b.mrr || 0) - Number(a.mrr || 0))
-    .slice(0, 4)
-}
-
-// ── Nuevos helpers de datos ──
-
-function buildPaymentHistory(organizations) {
-  const statuses = ['Aprobado', 'Aprobado', 'Aprobado', 'Pendiente', 'Rechazado']
-  const methods = ['MercadoPago', 'Transfer. bancaria', 'MercadoPago', 'MercadoPago', 'Tarjeta']
-  const dates = ['23 May 2026', '22 May 2026', '21 May 2026', '20 May 2026', '19 May 2026', '18 May 2026']
-  return organizations.flatMap((org, i) => [
-    {
-      restaurant: org.name.length > 18 ? org.name.slice(0, 18) + '…' : org.name,
-      plan: normalizePlanLabel(org.plan),
-      amount: org.mrr || 49990,
-      date: dates[i % dates.length],
-      method: methods[i % methods.length],
-      status: statuses[i % statuses.length],
-    },
-  ]).slice(0, 10)
-}
-
-function buildMPTransactions(organizations) {
-  const types = ['subscripción', 'activación', 'renovación', 'upgrade']
-  const statuses = ['approved', 'approved', 'approved', 'pending', 'rejected']
-  return organizations.map((org, i) => ({
-    paymentId: `MP-${(82000 + i * 347).toString()}`,
-    restaurant: org.name.length > 16 ? org.name.slice(0, 16) + '…' : org.name,
-    amount: org.mrr || 49990,
-    date: `${23 - i} May 2026`,
-    type: types[i % types.length],
-    status: statuses[i % statuses.length],
-  })).slice(0, 8)
-}
-
-function buildMPLogs() {
-  const now = new Date()
-  return [
-    { time: formatLogTime(now, 0), type: 'info', message: 'POST /webhook/mp → 200 OK · payment_id=82910 · approved' },
-    { time: formatLogTime(now, 3), type: 'info', message: 'POST /webhook/mp → 200 OK · payment_id=82909 · approved' },
-    { time: formatLogTime(now, 8), type: 'warn', message: 'POST /webhook/mp → timeout 3200ms · reintento 1/3' },
-    { time: formatLogTime(now, 12), type: 'info', message: 'GET /pagos/estado → 200 OK · 3 pendientes' },
-    { time: formatLogTime(now, 25), type: 'error', message: 'POST /webhook/mp → 422 payment_id=82890 duplicado' },
-    { time: formatLogTime(now, 40), type: 'info', message: 'POST /webhook/mp → 200 OK · payment_id=82880 · approved' },
-    { time: formatLogTime(now, 60), type: 'info', message: 'Webhook MP sincronizado correctamente · uptime 99.8%' },
-  ]
-}
-
-function formatLogTime(base, minutesAgo) {
-  const d = new Date(base.getTime() - minutesAgo * 60000)
-  return d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-}
-
-function buildSupportTickets(organizations) {
-  const priorities = ['crítica', 'alta', 'alta', 'media', 'baja']
-  const categories = ['POS', 'QR', 'Pagos', 'Cocina', 'Usuarios', 'Impresoras']
-  const issues = [
-    'Impresora no conecta al sistema de cobros',
-    'Menú QR no carga productos actualizados',
-    'Pago no procesado tras webhook',
-    'KDS cocina no recibe pedidos',
-    'Garzón no puede iniciar sesión',
-    'Caja no cuadra con pedidos del día',
-  ]
-  return organizations.slice(0, 5).map((org, i) => ({
-    id: `TKT-${1000 + i}`,
-    orgId: org.id,
-    restaurant: org.name.length > 20 ? org.name.slice(0, 20) + '…' : org.name,
-    title: issues[i % issues.length],
-    priority: priorities[i % priorities.length],
-    category: categories[i % categories.length],
-    status: i === 0 ? 'crítico' : i < 3 ? 'abierto' : 'en revisión',
-    openedAt: `Hace ${i * 2 + 1}h`,
-    lastReply: `Hace ${i + 1}h`,
-    sla: i < 2 ? 'Vencido' : 'En plazo',
-  }))
-}
-
-function buildPlatformModules(state) {
-  return [
-    { key: 'qr', label: 'Menú QR', ok: true, detail: `${state.tables?.length ?? 0} mesas configuradas`, version: 'v2.4.1', sync: 'Hace 2 min', errors: 0, icon: QrCode },
-    { key: 'kds', label: 'Cocina / KDS', ok: true, detail: 'Pantalla cocina activa', version: 'v1.8.3', sync: 'Hace 5 min', errors: 0, icon: ChefHat },
-    { key: 'pos', label: 'POS / Caja', ok: true, detail: 'Sistema cobros activo', version: 'v3.1.0', sync: 'Hace 1 min', errors: 0, icon: CreditCard },
-    { key: 'garzon', label: 'Garzón móvil', ok: true, detail: `${(state.staffUsers ?? []).filter(u => u.role === 'garzon').length} registrados`, version: 'v1.5.2', sync: 'Hace 3 min', errors: 0, icon: Users },
-    { key: 'reservas', label: 'Reservas', ok: Boolean(state.reservations?.length), detail: `${state.reservations?.length ?? 0} reservas`, version: 'v1.0.4', sync: 'Hace 10 min', errors: 0, icon: CalendarDays },
-    { key: 'inventario', label: 'Inventario', ok: false, detail: 'No activado', version: 'v0.9.0', sync: 'Nunca', errors: 0, icon: Package },
-    { key: 'delivery', label: 'Delivery', ok: false, detail: 'No activado', version: 'v0.8.1', sync: 'Nunca', errors: 0, icon: ShoppingBag },
-    { key: 'impresoras', label: 'Impresoras', ok: false, detail: 'Sin impresoras enlazadas', version: 'v1.2.0', sync: 'Nunca', errors: 1, icon: Printer },
-    { key: 'multilocal', label: 'Multi sucursal', ok: false, detail: 'Plan Enterprise requerido', version: 'v1.0.0', sync: 'Nunca', errors: 0, icon: Building },
-  ]
-}
-
-function buildSystemLogs() {
-  const now = new Date()
-  return [
-    { level: 'info', time: formatLogTime(now, 1), message: 'Deploy v2.4.1 completado · 0 errores · uptime 99.98%' },
-    { level: 'warn', time: formatLogTime(now, 4), message: 'Impresora offline: restaurante ID #3 · reintentando conexión' },
-    { level: 'info', time: formatLogTime(now, 7), message: 'Backup automático completado · 38 GB guardados en S3' },
-    { level: 'error', time: formatLogTime(now, 12), message: 'SMTP timeout al enviar factura a contacto@bellavista.cl' },
-    { level: 'warn', time: formatLogTime(now, 20), message: 'Uso de RAM al 78% · umbral de alerta superado' },
-    { level: 'info', time: formatLogTime(now, 35), message: 'Nueva org registrada: slug=test-local · plan=Básico' },
-    { level: 'info', time: formatLogTime(now, 55), message: 'WebSocket reconnected · 14 clientes activos' },
-    { level: 'error', time: formatLogTime(now, 90), message: 'DB query timeout 4200ms · tabla orders · retry OK' },
-  ]
-}
-
-function buildAdminLogs() {
-  return [
-    { user: 'Diego SA', action: 'Impersonar', resource: 'Bella Vista', ip: '190.41.22.8', date: 'Hoy 21:32', status: 'ok' },
-    { user: 'Diego SA', action: 'Cambiar plan', resource: 'La Pergola', ip: '190.41.22.8', date: 'Hoy 20:15', status: 'ok' },
-    { user: 'Soporte', action: 'Ver logs', resource: 'Sistema', ip: '200.111.8.42', date: 'Hoy 19:48', status: 'ok' },
-    { user: 'Diego SA', action: 'Crear org', resource: 'Rest. Nuevo', ip: '190.41.22.8', date: 'Hoy 18:22', status: 'ok' },
-    { user: 'Soporte', action: 'Reset pass', resource: 'Mesa 12 QR', ip: '200.111.8.42', date: 'Hoy 17:05', status: 'ok' },
-    { user: 'Diego SA', action: 'Suspender', resource: 'Local Prueba', ip: '190.41.22.8', date: 'Ayer 22:10', status: 'ok' },
-  ]
-}
-
-// ── Nuevos componentes UI de los nuevos tabs ──
-
-function TicketCard({ ticket, onEnter }) {
-  const priorityConfig = {
-    'crítica': { bg: 'border-rose-300 bg-rose-50/60', badge: 'bg-rose-100 text-rose-700', dot: 'bg-rose-500 animate-pulse' },
-    'alta':    { bg: 'border-orange-200 bg-orange-50/40', badge: 'bg-orange-100 text-orange-700', dot: 'bg-orange-500' },
-    'media':   { bg: 'border-amber-200 bg-amber-50/40', badge: 'bg-amber-100 text-amber-700', dot: 'bg-amber-400' },
-    'baja':    { bg: 'border-slate-200 bg-slate-50/60', badge: 'bg-slate-100 text-slate-600', dot: 'bg-slate-400' },
-  }
-  const cfg = priorityConfig[ticket.priority] || priorityConfig['baja']
-  return (
-    <div className={`rounded-2xl border p-4 transition ${cfg.bg}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-3 min-w-0">
-          <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${cfg.dot}`} />
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <p className="text-sm font-black text-slate-950">{ticket.title}</p>
-              <span className={`rounded-full px-2 py-0.5 text-[0.6rem] font-black ${cfg.badge}`}>{ticket.priority.toUpperCase()}</span>
-            </div>
-            <p className="mt-1 text-xs font-bold text-slate-500">{ticket.restaurant} · {ticket.category}</p>
-            <div className="mt-2 flex items-center gap-3 text-xs text-slate-400">
-              <span className="font-bold">⏱ {ticket.openedAt}</span>
-              <span>Resp: {ticket.lastReply}</span>
-              <span className={`font-black ${ticket.sla === 'Vencido' ? 'text-rose-600' : 'text-emerald-600'}`}>SLA: {ticket.sla}</span>
-            </div>
-          </div>
-        </div>
-        <div className="flex gap-1.5 shrink-0">
-          <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[0.65rem] font-black text-slate-500">{ticket.id}</span>
-          <button onClick={onEnter} className="rounded-xl bg-slate-950 px-2.5 py-1.5 text-xs font-black text-white hover:bg-slate-800 transition">
-            Entrar
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function ModuleToggleCard({ mod }) {
-  const [enabled, setEnabled] = useState(mod.ok)
-  return (
-    <div className={`rounded-2xl border p-4 transition ${
-      enabled ? 'border-emerald-100 bg-emerald-50/40' : 'border-slate-200 bg-slate-50'
-    }`}>
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-3">
-          <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${
-            enabled ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-400'
-          }`}>
-            <mod.icon className="h-5 w-5" />
-          </span>
-          <div>
-            <p className="text-sm font-black text-slate-950">{mod.label}</p>
-            <p className="text-xs font-bold text-slate-500">{mod.detail}</p>
-          </div>
-        </div>
-        {/* Toggle switch */}
-        <button
-          type="button"
-          onClick={() => setEnabled(e => !e)}
-          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors ${
-            enabled ? 'bg-emerald-500' : 'bg-slate-200'
-          }`}
-        >
-          <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${
-            enabled ? 'translate-x-6' : 'translate-x-1'
-          }`} />
-        </button>
-      </div>
-      <div className="mt-3 flex items-center gap-3 border-t border-slate-100/80 pt-3">
-        <span className="text-[0.65rem] font-bold text-slate-400">{mod.version}</span>
-        <span className="text-[0.65rem] font-bold text-slate-400">· sync {mod.sync}</span>
-        {mod.errors > 0 && (
-          <span className="ml-auto rounded-full bg-rose-100 px-2 py-0.5 text-[0.6rem] font-black text-rose-700">{mod.errors} error{mod.errors > 1 ? 'es' : ''}</span>
-        )}
-        {mod.errors === 0 && enabled && (
-          <span className="ml-auto rounded-full bg-emerald-100 px-2 py-0.5 text-[0.6rem] font-black text-emerald-700">OK</span>
-        )}
-      </div>
-    </div>
-  )
-}
-
-/* eslint-disable no-unused-vars */
-function SuperadminDashboard() {
-  const { state, organizations, saveOrganization, removeOrganization, impersonateTenant, logout, currentOrganizationId } = useAppStore()
-  const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState('resumen')
-  const [searchQuery, setSearchQuery] = useState('')
-  const [showAddModal, setShowAddModal] = useState(false)
-  const [showEditModal, setShowEditModal] = useState(false)
-  const [selectedOrg, setSelectedOrg] = useState(null)
-
-  // Form states
-  const [formName, setFormName] = useState('')
-  const [formSlug, setFormSlug] = useState('')
-  const [formPlan, setFormPlan] = useState('Básico')
-  const [formStatus, setFormStatus] = useState('Activo')
-  const [formRut, setFormRut] = useState('')
-  const [formMrr, setFormMrr] = useState(0)
-
-  const handleStartEdit = (org) => {
-    setSelectedOrg(org)
-    setFormName(org.name)
-    setFormSlug(org.slug)
-    setFormPlan(org.plan)
-    setFormStatus(org.status)
-    setFormRut(org.rut || '')
-    setFormMrr(org.mrr || 0)
-    setShowEditModal(true)
-  }
-
-  const handleSaveEdit = async (e) => {
-    e.preventDefault()
-    if (!formName || !formSlug) return
-    await saveOrganization({
-      id: selectedOrg.id,
-      name: formName,
-      slug: formSlug,
-      plan: formPlan,
-      status: formStatus,
-      rut: formRut,
-      mrr: Number(formMrr),
-    })
-    setShowEditModal(false)
-    setSelectedOrg(null)
-  }
-
-  const handleCreateOrg = async (e) => {
-    e.preventDefault()
-    if (!formName || !formSlug) return
-    await saveOrganization({
-      name: formName,
-      slug: formSlug,
-      plan: formPlan,
-      status: formStatus,
-      rut: formRut,
-      mrr: Number(formMrr),
-    })
-    setShowAddModal(false)
-    setFormName('')
-    setFormSlug('')
-    setFormPlan('Básico')
-    setFormStatus('Activo')
-    setFormRut('')
-    setFormMrr(0)
-  }
-
-  const handleDeleteOrg = async (id) => {
-    if (confirm('¿Estás seguro de eliminar esta empresa del sistema? Todo su contenido será eliminado permanentemente.')) {
-      await removeOrganization(id)
-    }
-  }
-
-  const handleImpersonate = (org) => {
-    impersonateTenant(org.id)
-    navigate('/admin')
-  }
-
-  const activeOrgs = organizations.filter((o) => o.status === 'Activo')
-  const totalMrr = organizations.reduce((acc, curr) => acc + (curr.mrr || 0), 0)
-  const planDistribution = {
-    Básico: organizations.filter(o => o.plan === 'Básico').length,
-    Empresa: organizations.filter(o => o.plan === 'Empresa').length,
-    'Venta Única': organizations.filter(o => o.plan === 'Venta Única').length,
-  }
-
-  const filteredOrgs = organizations.filter(
-    (o) =>
-      o.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      o.slug.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (o.rut && o.rut.includes(searchQuery)),
-  )
-
-  // Auto-select first tenant if none is selected on mount
-  useEffect(() => {
-    if (!currentOrganizationId && organizations.length > 0) {
-      const firstOrg = organizations.find((o) => o.slug !== 'empresa-jefe' && o.slug !== 'ncxo-plus' && o.slug !== 'prueba-de-cambio')
-      if (firstOrg) {
-        impersonateTenant(firstOrg.id)
-      }
-    }
-  }, [organizations, currentOrganizationId, impersonateTenant])
-
-  // Restaurant details from the state loaded (currentOrganizationId)
-  const income = state.orders.reduce((sum, order) => sum + order.total, 0)
-  const activeOrders = state.orders.filter((order) =>
-    ['Pendiente', 'En preparación', 'Listo'].includes(order.status)
-  ).length
-  const pendingOrders = state.orders.filter((order) => order.status === 'Pendiente').length
-  const readyOrders = state.orders.filter((order) => order.status === 'Listo').length
-  
-  const chartData = buildSalesChartData(state.orders)
-  const topProducts = getTopProducts(state.orders).slice(0, 5)
-  const recentActivity = state.orders.slice(0, 6)
-  const lowStockProducts = (state.products || []).filter(p => p.stock !== undefined && p.stock <= (p.minStock || 5))
-
-  const categorySales = useMemo(() => {
-    const map = new Map()
-    state.orders.forEach(o => {
-      o.items.forEach(item => {
-        const prod = state.products.find(p => p.name === item.name || p.id === item.id)
-        const cat = prod?.category || 'General'
-        const currentVal = map.get(cat) || 0
-        map.set(cat, currentVal + (item.price * item.quantity))
-      })
-    })
-    return Array.from(map.entries()).map(([name, value]) => ({ name, value }))
-  }, [state.orders, state.products])
-
-  const formattedDate = () => {
-    const options = { weekday: 'long', day: 'numeric', month: 'long' }
-    return new Date().toLocaleDateString('es-CL', options)
-  }
-
-  return (
-    <div className="min-h-screen bg-[#f8fafc] text-slate-800 antialiased font-sans">
-      <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/80 backdrop-blur px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white font-black text-xl shadow shadow-indigo-600/35">
-            S
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-black text-slate-900 tracking-tight">SaaS Portal</h1>
-              <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 text-[0.65rem] font-bold px-2 py-0.5 rounded-full border border-emerald-200">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                En vivo
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 font-medium capitalize mt-0.5">
-              {formattedDate()} · <span className="text-indigo-600 font-semibold">Empresa de Jefe</span>
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-4">
-          <div className="relative">
-            <Building className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-            <select
-              value={currentOrganizationId}
-              onChange={(e) => impersonateTenant(e.target.value)}
-              className="appearance-none bg-slate-50 border border-slate-200 rounded-lg py-1.5 pl-8 pr-8 text-xs font-semibold text-slate-700 outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
-            >
-              <option value="">Todas las Sucursales</option>
-              {organizations.map(o => (
-                <option key={o.id} value={o.id}>{o.name}</option>
-              ))}
-            </select>
-            <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+          <div className={`hidden lg:flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-bold border ${serviceAll ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
+            <span className={`h-2 w-2 rounded-full ${serviceAll ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500 animate-pulse'}`} />
+            {serviceAll ? 'Todos los servicios operativos' : 'Servicio degradado detectado'}
           </div>
 
           <div className="flex items-center gap-2">
-            <button className="relative grid h-9 w-9 place-items-center rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600">
-              <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-rose-500 border border-white" />
-              <Activity size={16} />
+            <button onClick={openCreateModal}
+              className="hidden sm:inline-flex h-9 items-center gap-1.5 rounded-xl px-4 text-xs font-black text-white shadow transition hover:-translate-y-0.5"
+              style={{ background: 'linear-gradient(135deg,#0d9488,#059669)' }}>
+              <Plus size={14} /> Nuevo restaurante
             </button>
-            <div className="flex items-center gap-2 border-l border-slate-200 pl-3">
-              <div className="grid h-9 w-9 place-items-center rounded-full bg-indigo-600 text-white font-bold text-sm shadow">
-                D
+            <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+              <div className="h-6 w-6 rounded-full bg-teal-100 flex items-center justify-center text-[10px] font-black text-teal-700">
+                {currentUser?.name?.[0] || 'S'}
               </div>
-              <div className="hidden text-left sm:block">
-                <p className="text-xs font-bold text-slate-900 leading-none">Diegol Admin</p>
-                <p className="text-[0.65rem] font-medium text-slate-400 mt-1">Superadmin</p>
-              </div>
-              <button
-                onClick={() => { logout(); navigate('/login'); }}
-                className="ml-2 text-xs font-bold text-rose-600 hover:text-rose-700 hover:underline"
-              >
-                Cerrar Sesión
-              </button>
+              <span className="text-xs font-bold text-slate-700 hidden sm:block">{currentUser?.name || 'Superadmin'}</span>
             </div>
+            <button onClick={handleLogout}
+              className="flex h-9 items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 text-xs font-bold text-rose-600 transition hover:bg-rose-100">
+              <LogOut size={14} /> <span className="hidden sm:inline">Salir</span>
+            </button>
           </div>
         </div>
+
+        <nav className="flex gap-1.5 overflow-x-auto px-4 pb-3 lg:px-8 [scrollbar-width:none]">
+          {TABS.map(({ id, label, icon: Icon, badge }) => (
+            <button key={id} type="button" onClick={() => setActiveTab(id)}
+              className={`relative inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl px-4 text-xs font-black transition-all ${activeTab === id ? 'bg-slate-900 text-white shadow-lg' : 'bg-white text-slate-500 ring-1 ring-slate-200 hover:ring-slate-300 hover:text-slate-800'}`}>
+              <Icon size={14} />{label}
+              {badge > 0 && <span className="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-black text-white">{badge}</span>}
+            </button>
+          ))}
+        </nav>
       </header>
 
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        <div className="flex border-b border-slate-200 gap-6 mb-8 overflow-x-auto pb-px">
-          {[
-            ['resumen', 'Resumen'],
-            ['empresas', 'Empresas'],
-            ['finanzas', 'Finanzas'],
-            ['pagos', 'Pagos MP'],
-            ['tickets', 'Tickets'],
-            ['invitaciones', 'Invitaciones'],
-            ['legales', 'Legales'],
-            ['sistemas', 'Sistemas en Venta'],
-          ].map(([id, label]) => {
-            const active = activeTab === id
-            return (
-              <button
-                key={id}
-                onClick={() => setActiveTab(id)}
-                className={`relative pb-3 text-sm font-semibold transition ${
-                  active ? 'text-indigo-600' : 'text-slate-500 hover:text-slate-900'
-                }`}
-              >
-                {label}
-                {active && (
-                  <span className="absolute inset-x-0 bottom-0 h-[2px] rounded-full bg-indigo-600" />
-                )}
-              </button>
-            )
-          })}
-        </div>
-
-        {activeTab === 'resumen' && (
-          <div className="space-y-6 animate-fadeIn">
-            {/* KPI Cards at top right */}
-            <div className="flex flex-wrap items-center justify-end gap-3">
-              <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 shadow-sm">
-                <DollarSign className="h-4 w-4 text-teal-600" />
-                <div>
-                  <p className="text-[0.62rem] text-slate-400 uppercase leading-none">VENTAS DE HOY</p>
-                  <p className="text-xs font-black text-slate-800 mt-1">{currency.format(income)}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 shadow-sm">
-                <ClipboardList className="h-4 w-4 text-indigo-500" />
-                <div>
-                  <p className="text-[0.62rem] text-slate-400 uppercase leading-none">TRANSACCIONES</p>
-                  <p className="text-xs font-black text-slate-800 mt-1">{state.orders.length}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 shadow-sm">
-                <Users className="h-4 w-4 text-blue-500" />
-                <div>
-                  <p className="text-[0.62rem] text-slate-400 uppercase leading-none">CLIENTES TOTALES</p>
-                  <p className="text-xs font-black text-slate-800 mt-1">{Math.max(0, state.orders.filter(o => o.customerName).length)}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 shadow-sm">
-                <Clock3 className="h-4 w-4 text-amber-500" />
-                <div>
-                  <p className="text-[0.62rem] text-slate-400 uppercase leading-none">CITAS DE HOY</p>
-                  <p className="text-xs font-black text-slate-800 mt-1">{pendingOrders}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Main content grid */}
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-              {/* Left column (8 cols) */}
-              <div className="lg:col-span-8 space-y-6">
-                {/* Ventas de la Semana Chart */}
-                <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-                  <div className="mb-4">
-                    <h3 className="text-sm font-black text-slate-900">Ventas de la Semana</h3>
-                    <p className="text-[0.7rem] font-bold text-teal-600 uppercase mt-0.5">Comparación con meta diaria</p>
-                  </div>
-                  <div className="h-[200px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={chartData.sales}>
-                        <defs>
-                          <linearGradient id="salesWeeklyGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#0d9488" stopOpacity={0.2} />
-                            <stop offset="95%" stopColor="#0d9488" stopOpacity={0.01} />
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                        <XAxis dataKey="day" stroke="#94a3b8" fontSize={9} fontWeight="bold" />
-                        <YAxis stroke="#94a3b8" fontSize={9} fontWeight="bold" />
-                        <Tooltip formatter={(value) => currency.format(value)} />
-                        <Area
-                          type="monotone"
-                          dataKey="ventas"
-                          stroke="#0d9488"
-                          strokeWidth={2}
-                          fill="url(#salesWeeklyGradient)"
-                        />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-
-                {/* Ingresos vs Gastos Chart */}
-                <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-                  <div className="mb-4">
-                    <h3 className="text-sm font-black text-slate-900">Ingresos vs Gastos</h3>
-                    <p className="text-[0.7rem] font-bold text-teal-600 uppercase mt-0.5">Últimos 3 meses</p>
-                  </div>
-                  <div className="h-[200px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={[
-                        { mes: 'Marzo', Ingresos: income * 0.8, Gastos: income * 0.5 },
-                        { mes: 'Abril', Ingresos: income * 0.95, Gastos: income * 0.6 },
-                        { mes: 'Mayo', Ingresos: income, Gastos: income * 0.55 },
-                      ]}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                        <XAxis dataKey="mes" stroke="#94a3b8" fontSize={9} fontWeight="bold" />
-                        <YAxis stroke="#94a3b8" fontSize={9} fontWeight="bold" />
-                        <Tooltip formatter={(value) => currency.format(value)} />
-                        <Bar dataKey="Ingresos" fill="#0d9488" radius={[4, 4, 0, 0]} />
-                        <Bar dataKey="Gastos" fill="#f43f5e" radius={[4, 4, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-
-                {/* Ventas Recientes */}
-                <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-                  <div className="mb-4">
-                    <h3 className="text-sm font-black text-slate-900">Ventas Recientes</h3>
-                    <p className="text-[0.7rem] font-bold text-teal-600 uppercase mt-0.5">Últimas transacciones realizadas</p>
-                  </div>
-                  <div className="overflow-y-auto space-y-2 pr-1 max-h-[220px]">
-                    {state.orders.length > 0 ? (
-                      state.orders.slice(0, 5).map(o => (
-                        <div key={o.id} className="flex items-center justify-between p-2.5 rounded-lg bg-slate-50 border border-slate-100 hover:bg-slate-100/50 transition">
-                          <div>
-                            <span className="text-xs font-bold text-slate-800">Pedido #{o.number}</span>
-                            <p className="text-[10px] text-slate-400">{o.tableLabel} · {formatTime(o.createdAt)}</p>
-                          </div>
-                          <span className="text-xs font-extrabold text-slate-800">
-                            {currency.format(o.total)}
-                          </span>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="flex flex-col items-center justify-center text-center p-4">
-                        <span className="text-xs font-bold text-slate-400">No hay ventas registradas aún</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Right column (4 cols) */}
-              <div className="lg:col-span-4 space-y-6">
-                {/* Ingresos por Categoría */}
-                <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-                  <div className="mb-4">
-                    <h3 className="text-sm font-black text-slate-900">Ingresos por Categoría</h3>
-                    <p className="text-[0.7rem] font-bold text-teal-600 uppercase mt-0.5">Distribución actual</p>
-                  </div>
-                  <div className="flex flex-col items-center justify-center gap-4 min-h-[200px]">
-                    {categorySales.length > 0 ? (
-                      <>
-                        <div className="w-full h-[120px]">
-                          <ResponsiveContainer width="100%" height="100%">
-                            <PieChart>
-                              <Pie
-                                data={categorySales}
-                                innerRadius={35}
-                                outerRadius={50}
-                                paddingAngle={3}
-                                dataKey="value"
-                              >
-                                {categorySales.map((entry, index) => (
-                                  <Cell key={`cell-${index}`} fill={['#0d9488', '#6366f1', '#f59e0b', '#ec4899', '#3b82f6'][index % 5]} />
-                                ))}
-                              </Pie>
-                              <Tooltip formatter={(value) => currency.format(value)} />
-                            </PieChart>
-                          </ResponsiveContainer>
-                        </div>
-                        <div className="w-full space-y-1.5 max-h-[120px] overflow-y-auto pr-1">
-                          {categorySales.map((entry, index) => (
-                            <div key={entry.name} className="flex items-center justify-between text-[11px]">
-                              <div className="flex items-center gap-1.5 truncate">
-                                <span className="h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: ['#0d9488', '#6366f1', '#f59e0b', '#ec4899', '#3b82f6'][index % 5] }} />
-                                <span className="font-semibold text-slate-600 truncate">{entry.name}</span>
-                              </div>
-                              <span className="font-bold text-slate-900">{currency.format(entry.value)}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </>
-                    ) : (
-                      <div className="flex flex-col items-center justify-center gap-4 py-4 w-full">
-                        <div className="relative flex h-24 w-24 items-center justify-center rounded-full border-8 border-slate-100 bg-slate-50">
-                          <span className="text-[9px] font-bold text-slate-400 uppercase">Sin datos</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="h-2 w-2 rounded-full bg-slate-300" />
-                          <span className="text-[10px] font-bold text-slate-400">Sin datos</span>
-                          <span className="text-[10px] font-bold text-slate-400 ml-4">0%</span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Alertas de Stock */}
-                <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-                  <div className="mb-4">
-                    <h3 className="text-sm font-black text-slate-900">Alertas de Stock</h3>
-                    <p className="text-[0.7rem] font-bold text-teal-600 uppercase mt-0.5">Productos por debajo del mínimo</p>
-                  </div>
-                  <div className="overflow-y-auto space-y-2 pr-1 max-h-[200px]">
-                    {lowStockProducts.length > 0 ? (
-                      lowStockProducts.map(p => (
-                        <div key={p.id} className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-100">
-                          <div className="truncate">
-                            <span className="text-xs font-bold text-slate-800 block truncate">{p.name}</span>
-                            <p className="text-[9px] text-slate-400">Mínimo: {p.minStock || 5}</p>
-                          </div>
-                          <span className="text-[10px] font-extrabold text-rose-600 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded-full flex-shrink-0">
-                            Stock: {p.stock}
-                          </span>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="flex flex-col items-center justify-center text-center py-6">
-                        <CheckCircle2 className="h-7 w-7 text-emerald-500 mb-1.5" />
-                        <span className="text-xs font-bold text-slate-400">Todos los productos tienen stock suficiente</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Citas de Hoy */}
-                <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-                  <div className="mb-4">
-                    <h3 className="text-sm font-black text-slate-900">Citas de Hoy</h3>
-                    <p className="text-[0.7rem] font-bold text-teal-600 uppercase mt-0.5">Agenda del día / Pedidos activos</p>
-                  </div>
-                  <div className="overflow-y-auto space-y-2 pr-1 max-h-[200px]">
-                    {state.orders.filter(o => ['Pendiente', 'En preparación'].includes(o.status)).length > 0 ? (
-                      state.orders.filter(o => ['Pendiente', 'En preparación'].includes(o.status)).slice(0, 5).map(o => (
-                        <div key={o.id} className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-100">
-                          <div className="truncate">
-                            <span className="text-xs font-bold text-slate-800 block truncate font-black">Pedido #{o.number} ({o.tableLabel})</span>
-                            <p className="text-[9px] text-slate-450 text-slate-400 truncate">{o.items.map(i => `${i.quantity}x ${i.name}`).join(', ')}</p>
-                          </div>
-                          <span className="text-[9px] font-bold uppercase px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-100 flex-shrink-0">
-                            {o.status}
-                          </span>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="flex flex-col items-center justify-center text-center py-6">
-                        <span className="text-xs font-bold text-slate-400">No hay citas programadas para hoy</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
+      <div className="px-4 py-6 lg:px-8 space-y-6">
+        {remoteError && (
+          <div className="flex items-center gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-700">
+            <AlertTriangle size={16} /> {remoteError}
           </div>
         )}
 
-        {activeTab === 'empresas' && (
-          <div className="space-y-6 animate-fadeIn">
-            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="relative flex-1 max-w-md">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Buscar por nombre, slug, RUT..."
-                  className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 pl-10 pr-4 text-sm font-semibold outline-none focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                />
-              </div>
-              <button
-                onClick={() => setShowAddModal(true)}
-                className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2.5 rounded-lg transition shadow"
-              >
-                <Plus size={14} />
-                Agregar Nueva Empresa
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {filteredOrgs.map((org) => (
-                <div key={org.id} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:shadow-md transition relative flex flex-col justify-between h-48">
-                  <div>
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-xl bg-indigo-50 text-indigo-700 font-bold grid place-items-center uppercase">
-                          {org.name.slice(0, 1)}
-                        </div>
-                        <div>
-                          <h3 className="font-bold text-slate-900 text-sm">{org.name}</h3>
-                          <p className="text-[0.68rem] text-slate-400">slug: {org.slug}</p>
-                        </div>
-                      </div>
-                      <span className={`px-2 py-0.5 rounded-full text-[0.62rem] font-bold uppercase ${
-                        org.plan === 'Venta Única' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
-                        org.plan === 'Empresa' ? 'bg-purple-50 text-purple-700 border border-purple-200' :
-                        'bg-indigo-50 text-indigo-700 border border-indigo-200'
-                      }`}>
-                        {org.plan}
-                      </span>
-                    </div>
-
-                    <div className="mt-4 grid grid-cols-2 gap-2 text-[0.7rem] text-slate-500 border-t border-slate-100 pt-3">
-                      <div>RUT: <span className="font-bold text-slate-700">{org.rut || '—'}</span></div>
-                      <div>MRR: <span className="font-bold text-slate-700">{currency.format(org.mrr || 0)}</span></div>
-                      <div>Estado: <span className="font-bold text-emerald-600">{org.status}</span></div>
+        {/* ── DASHBOARD ── */}
+        {activeTab === 'dashboard' && (
+          <div className="grid gap-6">
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              {[
+                { label: 'MRR Total', value: fmtCLP(totalMrr), sub: '+12% vs mes anterior', icon: TrendingUp, color: '#0d9488' },
+                { label: 'Restaurantes activos', value: activeOrgs.length, sub: inactiveOrgs.length + ' suspendidos · ' + organizations.length + ' total', icon: Building, color: '#7c3aed' },
+                { label: 'Pedidos hoy', value: todayOrders.length, sub: fmtCLP(dailySales) + ' en ventas', icon: ShoppingBag, color: '#f59e0b' },
+                { label: 'Tickets soporte', value: openTickets, sub: urgentTickets.length + ' de alta prioridad', icon: MessageSquare, color: urgentTickets.length > 0 ? '#ef4444' : '#10b981' },
+              ].map(kpi => (
+                <div key={kpi.label} className="relative overflow-hidden rounded-2xl bg-white border border-slate-200/80 p-5 shadow-sm hover:shadow-md transition">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ background: kpi.color + '18' }}>
+                      <kpi.icon size={18} style={{ color: kpi.color }} />
                     </div>
                   </div>
-
-                  <div className="flex items-center justify-between border-t border-slate-100 pt-3 mt-3">
-                    <button
-                      onClick={() => handleImpersonate(org)}
-                      className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[0.68rem] font-bold px-3 py-1.5 rounded-lg transition border border-indigo-200 flex items-center gap-1"
-                    >
-                      <LogIn size={12} />
-                      Simular Entrada
-                    </button>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => handleStartEdit(org)}
-                        className="text-slate-400 hover:text-indigo-600 p-1.5 hover:bg-slate-50 rounded"
-                      >
-                        <Pencil size={13} />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteOrg(org.id)}
-                        className="text-slate-400 hover:text-rose-600 p-1.5 hover:bg-slate-50 rounded"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
-                  </div>
+                  <div className="text-3xl font-black text-slate-900">{kpi.value}</div>
+                  <div className="mt-1 text-[11px] font-semibold text-slate-500">{kpi.label}</div>
+                  <div className="mt-0.5 text-[10px] font-medium text-slate-400">{kpi.sub}</div>
+                  <div className="absolute bottom-0 left-0 h-1 w-full rounded-b-2xl" style={{ background: kpi.color + '40' }} />
                 </div>
               ))}
             </div>
+
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+              <div className="rounded-2xl bg-white border border-slate-200/80 p-6 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h2 className="text-sm font-black text-slate-900">Ingresos Mensuales (MRR)</h2>
+                    <p className="text-[11px] text-slate-400 mt-0.5">Linea verde = meta mensual</p>
+                  </div>
+                  <span className="text-xs font-bold text-teal-600">Ultimos 6 meses</span>
+                </div>
+                <div className="h-56">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={mrrChartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="saMrrGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#0d9488" stopOpacity={0.2} />
+                          <stop offset="95%" stopColor="#0d9488" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                      <XAxis dataKey="mes" tick={{ fontSize: 11, fontWeight: 700, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={v => '$' + (v/1000).toFixed(0) + 'k'} />
+                      <Tooltip formatter={(v, n) => [fmtCLP(v), n === 'mrr' ? 'MRR' : 'Meta']} contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 24px rgba(0,0,0,0.1)', fontSize: 12 }} />
+                      <Area type="monotone" dataKey="mrr" stroke="#0d9488" strokeWidth={2.5} fill="url(#saMrrGrad)" dot={{ fill: '#0d9488', r: 4 }} name="mrr" />
+                      <Area type="monotone" dataKey="meta" stroke="#10b981" strokeWidth={1.5} fill="none" strokeDasharray="6 3" dot={false} name="meta" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {Object.entries(mrrByPlan).map(([plan, mrr]) => (
+                    <div key={plan} className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-bold ${saPlanColor(plan)}`}>
+                      {plan}: {fmtCLP(mrr)}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-2xl bg-white border border-slate-200/80 p-6 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-sm font-black text-slate-900">Restaurantes</h2>
+                  <button onClick={() => setActiveTab('restaurantes')} className="text-[11px] font-bold text-teal-600 hover:underline">Ver todos →</button>
+                </div>
+                <div className="space-y-2">
+                  {organizations.slice(0, 5).map(org => (
+                    <div key={org.id} className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 hover:bg-slate-100/80 transition">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-teal-100 text-[11px] font-black text-teal-700">
+                          {org.name[0].toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate text-xs font-bold text-slate-800">{org.name}</p>
+                          <p className="text-[10px] text-slate-400">{org.plan}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className={`h-2 w-2 rounded-full ${saStatusDot(org.status)}`} />
+                        <button onClick={() => handleImpersonate(org)} className="rounded-lg bg-white border border-slate-200 px-2 py-1 text-[10px] font-black text-slate-600 hover:border-teal-400 hover:text-teal-700 transition">Ver</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-4 xl:grid-cols-2">
+              <div className="rounded-2xl bg-white border border-slate-200/80 p-6 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-sm font-black text-slate-900">Tickets Urgentes</h2>
+                  <button onClick={() => setActiveTab('soporte')} className="text-[11px] font-bold text-rose-500 hover:underline">Ver soporte →</button>
+                </div>
+                {urgentTickets.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-8 text-slate-400">
+                    <CheckCircle2 size={28} className="text-emerald-400 mb-2" />
+                    <p className="text-xs font-semibold">Sin tickets urgentes</p>
+                  </div>
+                ) : urgentTickets.map(t => (
+                  <div key={t.id} className="rounded-xl border border-red-100 bg-red-50 p-3 mb-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-xs font-black text-slate-800">{t.subject}</p>
+                        <p className="text-[11px] font-semibold text-slate-500 mt-0.5">🏪 {t.restaurant}</p>
+                      </div>
+                      <span className="shrink-0 rounded-full bg-red-100 border border-red-200 px-2 py-0.5 text-[9px] font-black uppercase text-red-600">ALTA</span>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between">
+                      <span className="text-[10px] text-slate-400">SLA: {t.sla}h · {saFormatRelative(t.created)}</span>
+                      <button onClick={() => { setSelectedTicket(t); setActiveTab('soporte') }} className="text-[10px] font-black text-red-600 hover:underline">Atender →</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="rounded-2xl bg-white border border-slate-200/80 p-6 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-sm font-black text-slate-900">Estado de Servicios</h2>
+                  <button onClick={() => setActiveTab('monitoreo')} className="text-[11px] font-bold text-teal-600 hover:underline">Ver monitoreo →</button>
+                </div>
+                <div className="space-y-2">
+                  {SERVICE_STATUS_LIST.map(svc => (
+                    <div key={svc.name} className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <span className={`h-2 w-2 rounded-full ${svc.status === 'ok' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-400 animate-pulse'}`} />
+                        <span className="text-xs font-bold text-slate-700">{svc.name}</span>
+                      </div>
+                      <div className="flex items-center gap-3 text-[10px] font-semibold text-slate-500">
+                        <span>{svc.latency}</span>
+                        <span className={svc.status === 'ok' ? 'text-emerald-600 font-bold' : 'text-amber-600 font-bold'}>{svc.uptime}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
+        {/* ── RESTAURANTES ── */}
+        {activeTab === 'restaurantes' && (
+          <div className="space-y-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="relative flex-1 max-w-md">
+                <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="Buscar por nombre, slug, RUT..."
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-sm font-semibold outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20" />
+              </div>
+              <button onClick={openCreateModal}
+                className="sm:ml-auto flex h-10 items-center gap-1.5 rounded-xl px-4 text-xs font-black text-white shadow"
+                style={{ background: 'linear-gradient(135deg,#0d9488,#059669)' }}>
+                <Plus size={14} /> Nuevo restaurante
+              </button>
+            </div>
+            <div className="rounded-2xl bg-white border border-slate-200/80 shadow-sm overflow-hidden">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-slate-100 bg-slate-50">
+                    {['Restaurante','Plan','MRR','Estado','Acciones'].map(h => (
+                      <th key={h} className="px-5 py-3 text-left font-black text-slate-500 uppercase tracking-wider">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredOrgs.map(org => (
+                    <tr key={org.id} className="hover:bg-slate-50/60 transition">
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-lg font-black text-sm" style={{ background: '#0d948820', color: '#0d9488' }}>
+                            {org.name[0].toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="font-black text-slate-800">{org.name}</p>
+                            <p className="text-slate-400 font-medium">{org.slug}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-black ${saPlanColor(org.plan)}`}>{org.plan}</span>
+                      </td>
+                      <td className="px-4 py-3.5 font-bold text-slate-700">{fmtCLP(org.mrr || 0)}</td>
+                      <td className="px-4 py-3.5">
+                        <span className={`flex items-center gap-1.5 w-fit rounded-full border px-2.5 py-0.5 text-[10px] font-black ${(org.status||'').toLowerCase().includes('activ') ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-600 border-red-200'}`}>
+                          <span className={`h-1.5 w-1.5 rounded-full ${saStatusDot(org.status)}`} />
+                          {org.status || 'Activo'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <div className="flex items-center gap-1.5">
+                          <button onClick={() => handleImpersonate(org)} className="flex h-7 items-center gap-1 rounded-lg border border-teal-200 bg-teal-50 px-2.5 text-[10px] font-black text-teal-700 hover:bg-teal-100 transition">
+                            <LogIn size={11} /> Soporte
+                          </button>
+                          <button onClick={() => openEditModal(org)} className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:text-indigo-600 hover:border-indigo-300 transition">
+                            <Pencil size={12} />
+                          </button>
+                          <button onClick={() => handleDeleteOrg(org)} className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:text-red-500 hover:border-red-200 transition">
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {filteredOrgs.length === 0 && (
+                    <tr><td colSpan={5} className="py-12 text-center text-sm font-semibold text-slate-400">No se encontraron restaurantes</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* ── FINANZAS ── */}
         {activeTab === 'finanzas' && (
-          <div className="bg-white border border-slate-200 rounded-xl p-8 text-center max-w-xl mx-auto shadow-sm animate-fadeIn">
-            <Coins size={48} className="mx-auto text-indigo-500 mb-4" />
-            <h2 className="text-lg font-bold text-slate-900">Resumen y Proyecciones Financieras</h2>
-            <p className="text-slate-500 text-xs mt-2 leading-relaxed">
-              Realiza el seguimiento del MRR (Ingreso Mensual Recurrente), flujo de caja de suscripciones y transacciones de pasarela. Los gráficos de rendimiento y distribución se habilitarán en la siguiente versión productiva.
-            </p>
-            <div className="grid grid-cols-2 gap-4 mt-6">
-              <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl">
-                <p className="text-[0.62rem] font-bold text-slate-400">ESTIMADO ANUAL</p>
-                <p className="text-base font-black text-slate-800 mt-1">{currency.format(totalMrr * 12)}</p>
-              </div>
-              <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl">
-                <p className="text-[0.62rem] font-bold text-slate-400">COBRO PROMEDIO</p>
-                <p className="text-base font-black text-slate-800 mt-1">{currency.format(organizations.length ? Math.round(totalMrr / organizations.length) : 0)}</p>
+          <div className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              {[
+                { label: 'MRR Total', value: fmtCLP(totalMrr), trend: '+12%' },
+                { label: 'ARR Estimado', value: fmtCLP(totalMrr * 12), trend: '+12%' },
+                { label: 'Churn Rate', value: '2.4%', trend: '-0.3%' },
+                { label: 'ARPU', value: fmtCLP(organizations.length ? Math.round(totalMrr / organizations.length) : 0), trend: '+5%' },
+              ].map(k => (
+                <div key={k.label} className="rounded-2xl bg-white border border-slate-200/80 p-5 shadow-sm">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{k.label}</p>
+                  <p className="mt-2 text-2xl font-black text-slate-900">{k.value}</p>
+                  <p className="mt-1 text-[10px] font-black text-emerald-600">{k.trend}</p>
+                </div>
+              ))}
+            </div>
+            <div className="rounded-2xl bg-white border border-slate-200/80 p-6 shadow-sm">
+              <h2 className="mb-4 text-sm font-black text-slate-900">MRR por Plan</h2>
+              <div className="space-y-3">
+                {Object.entries(mrrByPlan).map(([plan, mrr]) => {
+                  const pct = totalMrr > 0 ? Math.round((mrr / totalMrr) * 100) : 0
+                  return (
+                    <div key={plan}>
+                      <div className="mb-1 flex justify-between text-xs">
+                        <span className="font-bold text-slate-700">{plan}</span>
+                        <span className="font-black text-slate-900">{fmtCLP(mrr)} <span className="text-slate-400">({pct}%)</span></span>
+                      </div>
+                      <div className="h-2.5 w-full rounded-full bg-slate-100 overflow-hidden">
+                        <div className="h-full rounded-full" style={{ width: pct + '%', background: plan.includes('Empresa') || plan.includes('Pro') ? '#7c3aed' : plan.includes('nica') ? '#f59e0b' : '#0d9488' }} />
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             </div>
           </div>
         )}
 
-        {activeTab === 'sistemas' && (
-          <div className="space-y-6 animate-fadeIn">
-            <div className="text-center max-w-xl mx-auto mb-8">
-              <Sparkles size={32} className="mx-auto text-indigo-500 mb-3" />
-              <h2 className="text-lg font-black text-slate-900">Catálogo de Sistemas y Productos SaaS</h2>
-              <p className="text-xs text-slate-500 mt-1">
-                Explora el ecosistema de aplicaciones que vendemos y gestionamos de forma centralizada.
-              </p>
+        {/* ── SOPORTE ── */}
+        {activeTab === 'soporte' && (
+          <div className="grid gap-4 lg:grid-cols-[360px_minmax(0,1fr)]">
+            <div className="space-y-2">
+              <h2 className="text-sm font-black text-slate-900">Tickets ({DEMO_TICKETS.length})</h2>
+              {DEMO_TICKETS.map(t => (
+                <button key={t.id} onClick={() => setSelectedTicket(t)}
+                  className={`w-full text-left rounded-xl border p-4 transition hover:shadow-md ${selectedTicket?.id === t.id ? 'border-teal-400 bg-teal-50 shadow-md' : 'border-slate-200 bg-white'}`}>
+                  <div className="flex items-start gap-2 justify-between">
+                    <p className="text-xs font-black text-slate-800 leading-tight">{t.subject}</p>
+                    <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-black uppercase ${t.priority === 'alta' ? 'bg-red-50 border-red-200 text-red-600' : 'bg-amber-50 border-amber-200 text-amber-600'}`}>{t.priority}</span>
+                  </div>
+                  <p className="mt-1.5 text-[11px] font-semibold text-slate-500">🏪 {t.restaurant}</p>
+                  <div className="mt-2 flex items-center justify-between">
+                    <span className={`rounded-full border px-2 py-0.5 text-[9px] font-black ${t.status === 'abierto' ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-amber-50 text-amber-600 border-amber-200'}`}>
+                      {t.status === 'abierto' ? 'Abierto' : 'En progreso'}
+                    </span>
+                    <span className="text-[10px] text-slate-400">{saFormatRelative(t.created)}</span>
+                  </div>
+                </button>
+              ))}
             </div>
-
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-              <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col justify-between hover:shadow-md transition">
-                <div>
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="grid h-12 w-12 place-items-center rounded-2xl bg-indigo-50 text-indigo-600">
-                      <ShoppingBag size={24} />
-                    </div>
-                    <div>
-                      <h3 className="text-base font-black text-slate-900">Nexo+</h3>
-                      <p className="text-[0.65rem] font-semibold text-indigo-600">Administración Comercial & Ventas</p>
-                    </div>
-                  </div>
-                  <p className="text-xs text-slate-500 leading-relaxed mb-4">
-                    Gestión integral de ventas, control de inventario en tiempo real, facturación electrónica para comercios locales e independientes. Optimiza bodegas y cajas rápidas en segundos.
-                  </p>
-                  <div className="flex flex-wrap gap-1.5 mb-6">
-                    {['Boleta Electrónica', 'Control Stock', 'Reportes Ventas'].map(b => (
-                      <span key={b} className="bg-slate-50 text-slate-600 text-[0.62rem] font-bold px-2 py-0.5 rounded border border-slate-200">{b}</span>
-                    ))}
-                  </div>
+            {selectedTicket ? (
+              <div className="rounded-2xl bg-white border border-slate-200/80 shadow-sm flex flex-col" style={{ minHeight: 480 }}>
+                <div className="border-b border-slate-100 px-6 py-4">
+                  <h2 className="text-base font-black text-slate-900">{selectedTicket.subject}</h2>
+                  <p className="text-[11px] text-slate-500 mt-0.5">🏪 {selectedTicket.restaurant} · Asignado: <strong>{selectedTicket.assignee}</strong> · SLA: {selectedTicket.sla}h</p>
                 </div>
-                <div className="flex items-center justify-between border-t border-slate-100 pt-4">
-                  <div>
-                    <p className="text-[0.62rem] font-bold text-slate-400">PLAN BASE</p>
-                    <p className="text-base font-black text-slate-800">$19.990 <span className="text-[0.62rem] text-slate-400 font-medium">/ mes</span></p>
-                  </div>
-                  <button className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow transition">
-                    Entrar al Sistema
-                  </button>
+                <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3" style={{ maxHeight: 280 }}>
+                  {(ticketChats[selectedTicket.id] || []).length === 0 && (
+                    <p className="text-center text-xs text-slate-400 mt-8">No hay mensajes. Inicia la conversacion.</p>
+                  )}
+                  {(ticketChats[selectedTicket.id] || []).map((msg, i) => (
+                    <div key={i} className={`flex ${msg.from === 'superadmin' ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`max-w-xs rounded-2xl px-4 py-2.5 text-xs font-semibold ${msg.from === 'superadmin' ? 'bg-teal-600 text-white' : 'bg-slate-100 text-slate-700'}`}>
+                        <p>{msg.msg}</p>
+                        <p className={`mt-1 text-[10px] ${msg.from === 'superadmin' ? 'text-teal-200' : 'text-slate-400'}`}>{saFormatRelative(msg.ts)}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="border-t border-slate-100 px-6 py-4 flex gap-2">
+                  <input type="text" value={ticketMsg} onChange={e => setTicketMsg(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') sendTicketMsg(selectedTicket.id) }}
+                    placeholder="Respuesta interna..."
+                    className="flex-1 h-10 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold outline-none focus:border-teal-500" />
+                  <button onClick={() => sendTicketMsg(selectedTicket.id)}
+                    className="h-10 px-4 rounded-xl font-black text-white text-xs shadow"
+                    style={{ background: 'linear-gradient(135deg,#0d9488,#059669)' }}>Enviar</button>
                 </div>
               </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white py-20 text-slate-400">
+                <MessageSquare size={32} className="mb-3 text-slate-300" />
+                <p className="text-sm font-semibold">Selecciona un ticket</p>
+              </div>
+            )}
+          </div>
+        )}
 
-              <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col justify-between hover:shadow-md transition">
-                <div>
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="grid h-12 w-12 place-items-center rounded-2xl bg-emerald-50 text-emerald-600">
-                      <ChefHat size={24} />
+        {/* ── MODULOS ── */}
+        {activeTab === 'modulos' && (
+          <div className="space-y-4">
+            <div className="rounded-2xl bg-white border border-slate-200/80 p-6 shadow-sm">
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-sm font-black text-slate-900">Modulos por restaurante</h2>
+                <select value={modulesOrgId} onChange={e => setModulesOrgId(e.target.value)}
+                  className="h-9 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-bold text-slate-700 outline-none">
+                  <option value="">— Seleccionar —</option>
+                  {organizations.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+                </select>
+              </div>
+              {modulesOrgId ? (
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  {getOrgModules(modulesOrgId).map(mod => (
+                    <div key={mod.id} className={`rounded-xl border p-4 transition-all ${mod.enabled ? 'border-teal-200 bg-teal-50' : 'border-slate-200 bg-slate-50'}`}>
+                      <div className="flex items-start justify-between mb-3">
+                        <span className="text-2xl">{mod.icon}</span>
+                        <button onClick={() => toggleModule(modulesOrgId, mod.id)}
+                          className={`relative h-5 w-9 rounded-full transition-all ${mod.enabled ? 'bg-teal-500' : 'bg-slate-300'}`}>
+                          <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${mod.enabled ? 'left-4' : 'left-0.5'}`} />
+                        </button>
+                      </div>
+                      <p className="text-xs font-black text-slate-800">{mod.name}</p>
+                      <p className="mt-0.5 text-[10px] text-slate-500">{mod.desc}</p>
+                      <p className={`mt-2 text-[9px] font-black uppercase ${mod.enabled ? 'text-teal-600' : 'text-slate-400'}`}>{mod.enabled ? '✓ Activo' : '○ Inactivo'}</p>
                     </div>
-                    <div>
-                      <h3 className="text-base font-black text-slate-900">AppRestaurante</h3>
-                      <p className="text-[0.65rem] font-semibold text-emerald-600">Gestión Gastronómica Integral</p>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+                  <Sparkles size={32} className="mb-3 text-slate-300" />
+                  <p className="text-sm font-semibold">Selecciona un restaurante</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── MONITOREO ── */}
+        {activeTab === 'monitoreo' && (
+          <div className="space-y-4">
+            <div className="rounded-2xl bg-white border border-slate-200/80 p-6 shadow-sm">
+              <h2 className="mb-4 text-sm font-black text-slate-900">Estado de Servicios en Tiempo Real</h2>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {SERVICE_STATUS_LIST.map(svc => (
+                  <div key={svc.name} className={`rounded-xl border p-4 ${svc.status === 'ok' ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-black text-slate-800">{svc.name}</span>
+                      <span className={`h-2.5 w-2.5 rounded-full animate-pulse ${svc.status === 'ok' ? 'bg-emerald-500' : 'bg-amber-400'}`} />
                     </div>
+                    <div className="grid grid-cols-2 gap-2 text-[10px]">
+                      <div className="rounded-lg bg-white px-2 py-1.5 text-center">
+                        <p className="font-black text-slate-900">{svc.uptime}</p>
+                        <p className="text-slate-400">Uptime</p>
+                      </div>
+                      <div className="rounded-lg bg-white px-2 py-1.5 text-center">
+                        <p className="font-black text-slate-900">{svc.latency}</p>
+                        <p className="text-slate-400">Latencia</p>
+                      </div>
+                    </div>
+                    <p className={`mt-2 text-[10px] font-black text-center ${svc.status === 'ok' ? 'text-emerald-600' : 'text-amber-600'}`}>
+                      {svc.status === 'ok' ? '✓ Operativo' : '⚠ Degradado'}
+                    </p>
                   </div>
-                  <p className="text-xs text-slate-500 leading-relaxed mb-4">
-                    Control absoluto de mesas, comandas digitales para garzones, visualización interactiva de pedidos mediante códigos QR en mesa, analíticas y panel KDS para agilizar la cocina.
-                  </p>
-                  <div className="flex flex-wrap gap-1.5 mb-6">
-                    {['Comandas QR', 'Mesas Interactivas', 'Panel KDS Cocina'].map(b => (
-                      <span key={b} className="bg-slate-50 text-slate-600 text-[0.62rem] font-bold px-2 py-0.5 rounded border border-slate-200">{b}</span>
-                    ))}
-                  </div>
-                </div>
-                <div className="flex items-center justify-between border-t border-slate-100 pt-4">
-                  <div>
-                    <p className="text-[0.62rem] font-bold text-slate-400">PLAN BASE</p>
-                    <p className="text-base font-black text-slate-800">$34.990 <span className="text-[0.62rem] text-slate-400 font-medium">/ mes</span></p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      const defaultRest = organizations.find(o => o.slug === 'guaton-xii') || organizations[0]
-                      if (defaultRest) handleImpersonate(defaultRest)
-                    }}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow transition"
-                  >
-                    Entrar al Sistema
-                  </button>
-                </div>
+                ))}
               </div>
             </div>
           </div>
         )}
 
-        {(activeTab === 'tickets' || activeTab === 'invitaciones' || activeTab === 'legales') && (
-          <div className="bg-white border border-slate-200 rounded-xl p-8 text-center max-w-xl mx-auto shadow-sm animate-fadeIn">
-            <Building size={36} className="mx-auto text-slate-400 mb-3" />
-            <h3 className="text-sm font-bold text-slate-800 capitalize">Sección de {activeTab}</h3>
-            <p className="text-xs text-slate-400 mt-2 leading-relaxed">
-              Este apartado está reservado para la administración avanzada del portal. Puedes gestionar los tickets de soporte, las invitaciones de registro para nuevos restaurantes y la documentación legal en las próximas actualizaciones.
-            </p>
+        {/* ── SEGURIDAD ── */}
+        {activeTab === 'seguridad' && (
+          <div className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-3">
+              {[
+                { label: 'Sesiones activas', value: '2', icon: '🟢', sub: 'Superadmin + Admin Guaton' },
+                { label: 'Intentos fallidos hoy', value: '1', icon: '⚠️', sub: 'Bloqueada 60s automaticamente' },
+                { label: 'Ultimo acceso superadmin', value: 'Hace 5min', icon: '🔐', sub: currentUser?.email || '' },
+              ].map(k => (
+                <div key={k.label} className="rounded-2xl bg-white border border-slate-200/80 p-5 shadow-sm">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xl">{k.icon}</span>
+                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{k.label}</p>
+                  </div>
+                  <p className="text-2xl font-black text-slate-900">{k.value}</p>
+                  <p className="mt-1 text-[10px] text-slate-500 font-medium">{k.sub}</p>
+                </div>
+              ))}
+            </div>
+            <div className="rounded-2xl bg-white border border-slate-200/80 shadow-sm overflow-hidden">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+                <h2 className="text-sm font-black text-slate-900">Log de Auditoria</h2>
+              </div>
+              <div className="divide-y divide-slate-100">
+                {DEMO_AUDIT.map(entry => (
+                  <div key={entry.id} className="flex items-start gap-4 px-6 py-4 hover:bg-slate-50/60 transition">
+                    <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${entry.level === 'success' ? 'bg-emerald-500' : entry.level === 'warn' ? 'bg-amber-400' : 'bg-blue-400'}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold text-slate-800 truncate">{entry.action}</p>
+                      <p className="text-[11px] text-slate-500 mt-0.5 truncate">{entry.user}</p>
+                    </div>
+                    <span className="shrink-0 text-[10px] font-semibold text-slate-400">{saFormatRelative(entry.ts)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         )}
       </div>
 
-      {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
-          >
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
-              <h3 className="text-base font-bold text-slate-900">Registrar Nueva Empresa</h3>
-              <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-600">
-                <X size={18} />
-              </button>
-            </div>
-            <form onSubmit={handleCreateOrg} className="space-y-4 text-xs font-medium text-slate-700">
-              <div>
-                <label className="block text-slate-500 mb-1">Nombre Comercial</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Restaurante Ejemplo"
-                  value={formName}
-                  onChange={(e) => {
-                    setFormName(e.target.value)
-                    setFormSlug(e.target.value.toLowerCase().replaceAll(' ', '-').replace(/[^\w-]/g, ''))
-                  }}
-                  className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-slate-50 outline-none focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-xs font-semibold"
-                />
+      {/* ── Modal org ── */}
+      <AnimatePresence>
+        {showOrgModal && (
+          <motion.div key="samodal" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ background: 'rgba(15,23,42,0.7)', backdropFilter: 'blur(6px)' }}>
+            <motion.div initial={{ scale: 0.92 }} animate={{ scale: 1 }} exit={{ scale: 0.92 }}
+              className="w-full max-w-md rounded-2xl bg-white shadow-2xl">
+              <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+                <h3 className="text-base font-black text-slate-900">{editingOrg ? 'Editar Restaurante' : 'Nuevo Restaurante'}</h3>
+                <button onClick={() => setShowOrgModal(false)} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
               </div>
-
-              <div>
-                <label className="block text-slate-500 mb-1">Identificador Slug (URL)</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="restaurante-ejemplo"
-                  value={formSlug}
-                  onChange={(e) => setFormSlug(e.target.value)}
-                  className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-slate-50 outline-none focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-xs font-semibold"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-slate-500 mb-1">RUT Empresa</label>
-                  <input
-                    type="text"
-                    placeholder="76.123.456-7"
-                    value={formRut}
-                    onChange={(e) => setFormRut(e.target.value)}
-                    className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-slate-50 outline-none focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-xs font-semibold"
-                  />
+              <form onSubmit={handleSaveOrg} className="px-6 py-5 space-y-4">
+                {orgError && <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-2.5 text-xs font-bold text-red-600">{orgError}</div>}
+                {[
+                  { label: 'Nombre comercial *', key: 'name', placeholder: 'Restaurante La Parilla' },
+                  { label: 'Slug (URL) *', key: 'slug', placeholder: 'la-parilla' },
+                  { label: 'RUT empresa', key: 'rut', placeholder: '76.123.456-7' },
+                ].map(f => (
+                  <div key={f.key}>
+                    <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wider text-slate-400">{f.label}</label>
+                    <input type="text" value={orgForm[f.key]} placeholder={f.placeholder}
+                      onChange={e => setOrgForm(p => ({ ...p, [f.key]: e.target.value }))}
+                      className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20" />
+                  </div>
+                ))}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wider text-slate-400">MRR (CLP)</label>
+                    <input type="number" value={orgForm.mrr} onChange={e => setOrgForm(p => ({ ...p, mrr: e.target.value }))}
+                      className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20" />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wider text-slate-400">Plan</label>
+                    <select value={orgForm.plan} onChange={e => setOrgForm(p => ({ ...p, plan: e.target.value }))}
+                      className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold outline-none focus:border-teal-500">
+                      <option>Basico</option><option>Empresa</option><option>Venta Unica</option>
+                    </select>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-slate-500 mb-1">MRR Mensual (CLP)</label>
-                  <input
-                    type="number"
-                    placeholder="25000"
-                    value={formMrr}
-                    onChange={(e) => setFormMrr(e.target.value)}
-                    className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-slate-50 outline-none focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-xs font-semibold"
-                  />
+                <div className="flex gap-3 pt-2">
+                  <button type="button" onClick={() => setShowOrgModal(false)}
+                    className="flex-1 h-10 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50">Cancelar</button>
+                  <button type="submit" disabled={orgSaving}
+                    className="flex-1 h-10 rounded-xl text-sm font-black text-white shadow disabled:opacity-50"
+                    style={{ background: 'linear-gradient(135deg,#0d9488,#059669)' }}>
+                    {orgSaving ? 'Guardando...' : editingOrg ? 'Guardar' : 'Crear'}
+                  </button>
                 </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-slate-500 mb-1">Plan Contratado</label>
-                  <select
-                    value={formPlan}
-                    onChange={(e) => setFormPlan(e.target.value)}
-                    className="w-full h-10 px-2 rounded-lg border border-slate-200 bg-slate-50 outline-none focus:bg-white focus:border-indigo-500 text-xs font-semibold"
-                  >
-                    <option value="Básico">Básico</option>
-                    <option value="Empresa">Empresa</option>
-                    <option value="Venta Única">Venta Única</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-slate-500 mb-1">Estado de Cuenta</label>
-                  <select
-                    value={formStatus}
-                    onChange={(e) => setFormStatus(e.target.value)}
-                    className="w-full h-10 px-2 rounded-lg border border-slate-200 bg-slate-50 outline-none focus:bg-white focus:border-indigo-500 text-xs font-semibold"
-                  >
-                    <option value="Activo">Activo</option>
-                    <option value="Inactivo">Inactivo</option>
-                  </select>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                className="w-full h-10 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition mt-4 shadow"
-              >
-                Crear Registro
-              </button>
-            </form>
+              </form>
+            </motion.div>
           </motion.div>
-        </div>
-      )}
-
-      {showEditModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
-          >
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
-              <h3 className="text-base font-bold text-slate-900">Editar Empresa</h3>
-              <button onClick={() => setShowEditModal(false)} className="text-slate-400 hover:text-slate-600">
-                <X size={18} />
-              </button>
-            </div>
-            <form onSubmit={handleSaveEdit} className="space-y-4 text-xs font-medium text-slate-700">
-              <div>
-                <label className="block text-slate-500 mb-1">Nombre Comercial</label>
-                <input
-                  type="text"
-                  required
-                  value={formName}
-                  onChange={(e) => setFormName(e.target.value)}
-                  className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-slate-50 outline-none focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-xs font-semibold"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-500 mb-1">Identificador Slug (URL)</label>
-                <input
-                  type="text"
-                  required
-                  value={formSlug}
-                  onChange={(e) => setFormSlug(e.target.value)}
-                  className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-slate-50 outline-none focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-xs font-semibold"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-slate-500 mb-1">RUT Empresa</label>
-                  <input
-                    type="text"
-                    value={formRut}
-                    onChange={(e) => setFormRut(e.target.value)}
-                    className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-slate-50 outline-none focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-xs font-semibold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-500 mb-1">MRR Mensual (CLP)</label>
-                  <input
-                    type="number"
-                    value={formMrr}
-                    onChange={(e) => setFormMrr(e.target.value)}
-                    className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-slate-50 outline-none focus:bg-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-xs font-semibold"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-slate-500 mb-1">Plan Contratado</label>
-                  <select
-                    value={formPlan}
-                    onChange={(e) => setFormPlan(e.target.value)}
-                    className="w-full h-10 px-2 rounded-lg border border-slate-200 bg-slate-50 outline-none focus:bg-white focus:border-indigo-500 text-xs font-semibold"
-                  >
-                    <option value="Básico">Básico</option>
-                    <option value="Empresa">Empresa</option>
-                    <option value="Venta Única">Venta Única</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-slate-500 mb-1">Estado de Cuenta</label>
-                  <select
-                    value={formStatus}
-                    onChange={(e) => setFormStatus(e.target.value)}
-                    className="w-full h-10 px-2 rounded-lg border border-slate-200 bg-slate-50 outline-none focus:bg-white focus:border-indigo-500 text-xs font-semibold"
-                  >
-                    <option value="Activo">Activo</option>
-                    <option value="Inactivo">Inactivo</option>
-                  </select>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                className="w-full h-10 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition mt-4 shadow"
-              >
-                Guardar Cambios
-              </button>
-            </form>
-          </motion.div>
-        </div>
-      )}
-    </div>
+        )}
+      </AnimatePresence>
+    </main>
   )
 }
-/* eslint-enable no-unused-vars */
 
 function CajeroLayout() {
   const { state, currentUser, logout } = useAppStore()
