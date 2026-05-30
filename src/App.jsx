@@ -86,13 +86,20 @@ import {
   useParams,
 } from 'react-router-dom'
 import { useAppStore } from './store/AppStore.jsx'
-
-const currency = new Intl.NumberFormat('es-CL', {
-  style: 'currency',
-  currency: 'CLP',
-  maximumFractionDigits: 0,
-})
-
+import { MenuPage } from './pages/MenuPage.jsx'
+import {
+  currency,
+  formatTime,
+  elapsedMinutes,
+  slugify,
+  formatTableName,
+  getKitchenBorderClass,
+  buildSalesChartData,
+  getTopProducts,
+  createBlankProductForm,
+} from './lib/format.js'
+import { usePageTitle } from './hooks/usePageTitle.js'
+import { SyncBanner } from './components/ui/SyncBanner.jsx'
 
 function CustomSelect({
   value,
@@ -372,9 +379,9 @@ function NexoLogo({ className = "h-20 w-20 text-white" }) {
       <line x1="50" y1="15" x2="50" y2="95" className="stroke-current opacity-30" />
       <line x1="15" y1="35" x2="50" y2="55" className="stroke-current opacity-30" />
       <line x1="85" y1="35" x2="50" y2="55" className="stroke-current opacity-30" />
-      <path d="M30,65 L45,50 L60,58 L75,38" className="stroke-teal-200" strokeWidth="3" />
+      <path d="M30,65 L45,50 L60,58 L75,38" className="stroke-brand-200" strokeWidth="3" />
       <circle cx="75" cy="38" r="3" fill="currentColor" />
-      <polyline points="68,38 75,38 75,45" className="stroke-teal-200" strokeWidth="3" />
+      <polyline points="68,38 75,38 75,45" className="stroke-brand-200" strokeWidth="3" />
     </svg>
   )
 }
@@ -399,15 +406,15 @@ class SuperadminErrorBoundary extends Component {
     }
 
     return (
-      <main className="grid min-h-screen place-items-center bg-slate-50 p-4">
+      <main className="grid min-h-screen place-items-center bg-stone-50 p-4">
         <section className="w-full max-w-xl rounded-[2rem] border border-rose-200 bg-white p-6 text-center shadow-soft">
           <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-rose-50 text-rose-600">
             <Shield className="h-7 w-7" />
           </div>
-          <h1 className="mt-4 font-sans text-2xl font-black text-slate-950">
+          <h1 className="mt-4 font-sans text-2xl font-black text-stone-950">
             El superadmin tuvo un problema temporal
           </h1>
-          <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">
+          <p className="mt-2 text-sm font-semibold leading-6 text-stone-500">
             La pantalla no quedará en blanco. Revisa el registro creado o recarga para volver al panel.
           </p>
           <p className="mt-3 rounded-2xl bg-rose-50 p-3 text-xs font-bold text-rose-700">
@@ -416,7 +423,7 @@ class SuperadminErrorBoundary extends Component {
           <button
             type="button"
             onClick={() => window.location.reload()}
-            className="mt-5 rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white"
+            className="mt-5 rounded-2xl bg-stone-950 px-5 py-3 text-sm font-black text-white"
           >
             Recargar superadmin
           </button>
@@ -598,9 +605,9 @@ function LoginPage({ initialMode = 'email' }) {
   const activeOrg = organizations.find((o) => o.id === currentOrganizationId)
 
   return (
-    <div className="flex min-h-screen bg-slate-50 font-sans">
+    <div className="flex min-h-screen bg-stone-50 font-sans">
       {/* LEFT PANEL: Branding (Teal Gradient / Nexo style) */}
-      <div className="relative hidden w-1/2 flex-col justify-between bg-teal-800 p-12 text-white lg:flex overflow-hidden">
+      <div className="relative hidden w-1/2 flex-col justify-between bg-brand-900 p-12 text-white lg:flex overflow-hidden">
         {/* Background wave decorative pattern */}
         <div className="absolute inset-0 opacity-[0.08] pointer-events-none">
           <svg className="h-full w-full" xmlns="http://www.w3.org/2000/svg">
@@ -612,7 +619,7 @@ function LoginPage({ initialMode = 'email' }) {
             <rect width="100%" height="100%" fill="url(#grid)" />
           </svg>
         </div>
-        <div className="absolute -right-32 -bottom-32 h-[450px] w-[450px] rounded-full bg-teal-600/30 blur-[100px]" />
+        <div className="absolute -right-32 -bottom-32 h-[450px] w-[450px] rounded-full bg-brand-600/30 blur-[100px]" />
         
         {/* Top brand indicator */}
         <div className="z-10 flex items-center gap-2">
@@ -627,24 +634,24 @@ function LoginPage({ initialMode = 'email' }) {
             transition={{ duration: 0.5 }}
             className="mb-8"
           >
-            <NexoLogo className="h-28 w-28 text-teal-200 drop-shadow-xl animate-pulse" />
+            <NexoLogo className="h-28 w-28 text-brand-200 drop-shadow-xl animate-pulse" />
           </motion.div>
 
           <h2 className="text-4xl font-extrabold tracking-tight text-white drop-shadow-md">
             Empresa de Jefe
           </h2>
-          <p className="mt-3 text-lg font-medium text-teal-100 opacity-90">
+          <p className="mt-3 text-lg font-medium text-brand-100 opacity-90">
             Sistema Inteligente de Gestión
           </p>
 
-          <div className="mt-8 flex items-center gap-1.5 rounded-full border border-teal-400/30 bg-teal-900/30 px-4 py-1.5 text-sm font-bold text-teal-200">
-            <CheckCircle2 size={16} className="text-teal-300" />
+          <div className="mt-8 flex items-center gap-1.5 rounded-full border border-brand-400/30 bg-brand-900/30 px-4 py-1.5 text-sm font-bold text-brand-200">
+            <CheckCircle2 size={16} className="text-brand-300" />
             <span>Empresa verificada ✓</span>
           </div>
         </div>
 
         {/* Footer legal */}
-        <div className="z-10 flex justify-between text-xs text-teal-200/60">
+        <div className="z-10 flex justify-between text-xs text-brand-200/60">
           <span>AcroDevs · Sistema de Ventas</span>
           <div className="flex gap-4">
             <a href="#" className="hover:underline">Términos</a>
@@ -658,27 +665,27 @@ function LoginPage({ initialMode = 'email' }) {
       <div className="flex w-full flex-col justify-between bg-white px-6 py-12 lg:w-1/2 md:px-16 lg:px-24">
         {/* Responsive Header for Mobile/Tablet */}
         <div className="flex justify-between items-center lg:hidden">
-          <div className="flex items-center gap-2 text-teal-700">
-            <NexoLogo className="h-10 w-10 text-teal-600" />
+          <div className="flex items-center gap-2 text-brand-700">
+            <NexoLogo className="h-10 w-10 text-brand-600" />
             <span className="font-extrabold text-lg">Empresa de Jefe</span>
           </div>
-          <span className="text-xs bg-teal-50 border border-teal-200 px-2 py-0.5 rounded text-teal-700 font-bold">✓ Verificado</span>
+          <span className="text-xs bg-brand-50 border border-brand-200 px-2 py-0.5 rounded text-brand-700 font-bold">✓ Verificado</span>
         </div>
 
         <div className="my-auto mx-auto w-full max-w-md">
           {/* Lock/Security Icon Badge */}
           <div className="mb-6 flex justify-center lg:justify-start">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-teal-50 text-teal-600 border border-teal-100">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-50 text-brand-600 border border-brand-100">
               <Lock size={20} />
             </div>
           </div>
 
           {/* Heading */}
           <div className="text-center lg:text-left">
-            <h1 className="text-2xl font-black text-slate-800">
+            <h1 className="text-2xl font-black text-stone-800">
               {loginMode === 'email' ? 'Administración' : 'Personal de Local'}
             </h1>
-            <p className="mt-1.5 text-sm text-slate-500 font-semibold">
+            <p className="mt-1.5 text-sm text-stone-500 font-semibold">
               {loginMode === 'email' 
                 ? 'Ingresa las credenciales de tu empresa' 
                 : 'Selecciona tu sucursal e ingresa tu PIN de acceso'}
@@ -700,43 +707,43 @@ function LoginPage({ initialMode = 'email' }) {
           {loginMode === 'email' ? (
             <form onSubmit={handleEmailSubmit} className="mt-6 space-y-4">
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                <label className="block text-xs font-bold uppercase tracking-wider text-stone-500 mb-1.5">
                   Correo electrónico
                 </label>
                 <div className="relative">
-                  <User className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <User className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
                   <input
                     type="email"
                     value={email}
                     onChange={(e) => { setEmail(e.target.value); setError(''); }}
                     placeholder="ejemplo@empresa.com"
-                    className="h-12 w-full rounded-lg border border-slate-200 bg-slate-50/50 pl-11 pr-4 text-sm font-semibold text-slate-800 outline-none transition focus:border-teal-500 focus:bg-white focus:ring-1 focus:ring-teal-500"
+                    className="h-12 w-full rounded-lg border border-stone-200 bg-stone-50/50 pl-11 pr-4 text-sm font-semibold text-stone-800 outline-none transition focus:border-brand-500 focus:bg-white focus:ring-1 focus:ring-brand-500"
                   />
                 </div>
               </div>
 
               <div>
                 <div className="flex justify-between items-center mb-1.5">
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-stone-500">
                     Contraseña
                   </label>
-                  <button type="button" className="text-xs font-bold text-teal-600 hover:underline">
+                  <button type="button" className="text-xs font-bold text-brand-600 hover:underline">
                     ¿Olvidaste tu contraseña?
                   </button>
                 </div>
                 <div className="relative">
-                  <Lock className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <Lock className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
                   <input
                     type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={(e) => { setPassword(e.target.value); setError(''); }}
                     placeholder="••••••••"
-                    className="h-12 w-full rounded-lg border border-slate-200 bg-slate-50/50 pl-11 pr-12 text-sm font-semibold text-slate-800 outline-none transition focus:border-teal-500 focus:bg-white focus:ring-1 focus:ring-teal-500"
+                    className="h-12 w-full rounded-lg border border-stone-200 bg-stone-50/50 pl-11 pr-12 text-sm font-semibold text-stone-800 outline-none transition focus:border-brand-500 focus:bg-white focus:ring-1 focus:ring-brand-500"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition"
+                    className="absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400 hover:text-stone-600 transition"
                   >
                     {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
@@ -746,7 +753,7 @@ function LoginPage({ initialMode = 'email' }) {
               <motion.button
                 whileTap={{ scale: 0.98 }}
                 type="submit"
-                className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-[#0d9488] hover:bg-[#0f766e] text-sm font-bold text-white shadow-md shadow-teal-700/10 transition"
+                className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-[#c2553d] hover:bg-[#9a3f2c] text-sm font-bold text-white shadow-md shadow-brand-700/10 transition"
               >
                 <span>Iniciar Sesión</span>
               </motion.button>
@@ -755,13 +762,13 @@ function LoginPage({ initialMode = 'email' }) {
             /* PIN Staff Login Form */
             <form onSubmit={(e) => e.preventDefault()} className="mt-6 space-y-4">
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                <label className="block text-xs font-bold uppercase tracking-wider text-stone-500 mb-1.5">
                   Sucursal / Restaurante
                 </label>
                 {activeOrg ? (
-                  <div className="flex h-12 w-full items-center justify-between rounded-lg border border-teal-200 bg-teal-50/50 px-4 text-sm font-semibold text-teal-800">
+                  <div className="flex h-12 w-full items-center justify-between rounded-lg border border-brand-200 bg-brand-50/50 px-4 text-sm font-semibold text-brand-900">
                     <div className="flex items-center gap-2">
-                      <Building className="h-4 w-4 text-teal-600" />
+                      <Building className="h-4 w-4 text-brand-600" />
                       <span>{activeOrg.name}</span>
                     </div>
                     <button
@@ -772,7 +779,7 @@ function LoginPage({ initialMode = 'email' }) {
                         setOrgSearchError('')
                         setPin('')
                       }}
-                      className="text-xs font-bold text-teal-600 hover:text-teal-800 hover:underline transition"
+                      className="text-xs font-bold text-brand-600 hover:text-brand-900 hover:underline transition"
                     >
                       Cambiar
                     </button>
@@ -780,7 +787,7 @@ function LoginPage({ initialMode = 'email' }) {
                 ) : (
                   <div className="space-y-2">
                     <div className="relative">
-                      <Building className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                      <Building className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
                       <input
                         type="text"
                         placeholder="Escribe el nombre o código de tu sucursal"
@@ -795,13 +802,13 @@ function LoginPage({ initialMode = 'email' }) {
                             handleVerifyOrg()
                           }
                         }}
-                        className="h-12 w-full rounded-lg border border-slate-200 bg-slate-50/50 pl-11 pr-4 text-sm font-semibold text-slate-800 outline-none transition focus:border-teal-500 focus:bg-white focus:ring-1 focus:ring-teal-500 placeholder:text-slate-400"
+                        className="h-12 w-full rounded-lg border border-stone-200 bg-stone-50/50 pl-11 pr-4 text-sm font-semibold text-stone-800 outline-none transition focus:border-brand-500 focus:bg-white focus:ring-1 focus:ring-brand-500 placeholder:text-stone-400"
                       />
                     </div>
                     <button
                       type="button"
                       onClick={handleVerifyOrg}
-                      className="h-10 w-full rounded-lg bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 shadow"
+                      className="h-10 w-full rounded-lg bg-stone-800 hover:bg-stone-900 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 shadow"
                     >
                       Verificar Sucursal
                     </button>
@@ -815,12 +822,12 @@ function LoginPage({ initialMode = 'email' }) {
               {activeOrg && (
                 <>
                   <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-stone-500 mb-1.5">
                       PIN de acceso (4 dígitos)
                     </label>
                     <motion.div animate={shake ? { x: [-10, 10, -6, 6, -3, 3, 0] } : {}} transition={{ duration: 0.4 }}>
                       <div className="relative">
-                        <Lock className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                        <Lock className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
                         <input
                           ref={inputRef}
                           type="password"
@@ -830,7 +837,7 @@ function LoginPage({ initialMode = 'email' }) {
                           value={pin}
                           onChange={(e) => handlePinChange(e.target.value)}
                           placeholder="••••"
-                          className="h-12 w-full rounded-lg border border-slate-200 bg-slate-50/50 pl-11 text-center text-xl font-bold tracking-[0.5em] text-slate-800 outline-none transition focus:border-teal-500 focus:bg-white focus:ring-1 focus:ring-teal-500 placeholder:tracking-[0.2em] placeholder:text-slate-300"
+                          className="h-12 w-full rounded-lg border border-stone-200 bg-stone-50/50 pl-11 text-center text-xl font-bold tracking-[0.5em] text-stone-800 outline-none transition focus:border-brand-500 focus:bg-white focus:ring-1 focus:ring-brand-500 placeholder:tracking-[0.2em] placeholder:text-stone-300"
                         />
                       </div>
                     </motion.div>
@@ -841,7 +848,7 @@ function LoginPage({ initialMode = 'email' }) {
                       <div
                         key={i}
                         className={`h-2.5 w-2.5 rounded-full border transition-all ${
-                          pin.length > i ? 'bg-teal-600 border-teal-600 scale-110' : 'border-slate-300 bg-slate-100'
+                          pin.length > i ? 'bg-brand-600 border-brand-600 scale-110' : 'border-stone-300 bg-stone-100'
                         }`}
                       />
                     ))}
@@ -857,7 +864,7 @@ function LoginPage({ initialMode = 'email' }) {
               <button
                 type="button"
                 onClick={() => setShowRegisterModal(true)}
-                className="text-xs font-extrabold text-teal-600 hover:text-teal-700 hover:underline transition"
+                className="text-xs font-extrabold text-brand-600 hover:text-brand-700 hover:underline transition"
               >
                 Registrar nueva empresa
               </button>
@@ -866,32 +873,32 @@ function LoginPage({ initialMode = 'email' }) {
         </div>
 
         {/* Footer brand info */}
-        <div className="mt-12 text-center text-xs text-slate-400 font-medium">
-          Desarrollado por <span className="font-extrabold text-teal-600">AcroDevs</span> · Todos los derechos reservados
+        <div className="mt-12 text-center text-xs text-stone-400 font-medium">
+          Desarrollado por <span className="font-extrabold text-brand-600">AcroDevs</span> · Todos los derechos reservados
         </div>
       </div>
 
       {/* REGISTER RESTAURANT MODAL */}
       <AnimatePresence>
         {showRegisterModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/60 p-4 backdrop-blur-sm">
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="relative w-full max-w-md overflow-hidden rounded-2xl bg-white p-6 shadow-2xl border border-slate-100"
+              className="relative w-full max-w-md overflow-hidden rounded-2xl bg-white p-6 shadow-2xl border border-stone-100"
             >
               {/* Close Button */}
               <button
                 onClick={() => setShowRegisterModal(false)}
-                className="absolute right-4 top-4 text-slate-400 hover:text-slate-600 transition"
+                className="absolute right-4 top-4 text-stone-400 hover:text-stone-600 transition"
               >
                 <X size={18} />
               </button>
 
               <div className="mb-4">
-                <h3 className="text-lg font-black text-slate-800">Registrar Nueva Empresa</h3>
-                <p className="text-xs text-slate-500 font-semibold mt-0.5">
+                <h3 className="text-lg font-black text-stone-800">Registrar Nueva Empresa</h3>
+                <p className="text-xs text-stone-500 font-semibold mt-0.5">
                   Crea tu local en el sistema e ingresa las credenciales administrativas.
                 </p>
               </div>
@@ -910,7 +917,7 @@ function LoginPage({ initialMode = 'email' }) {
 
               <form onSubmit={handleRegisterSubmit} className="space-y-3.5">
                 <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-stone-400 mb-1">
                     Nombre del Restaurante / Empresa
                   </label>
                   <input
@@ -919,12 +926,12 @@ function LoginPage({ initialMode = 'email' }) {
                     value={regCompanyName}
                     onChange={(e) => setRegCompanyName(e.target.value)}
                     placeholder="Ej. Restaurante Guaton XII"
-                    className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-semibold outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 text-slate-800"
+                    className="h-10 w-full rounded-lg border border-stone-200 px-3 text-sm font-semibold outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 text-stone-800"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-stone-400 mb-1">
                     Nombre del Administrador
                   </label>
                   <input
@@ -933,12 +940,12 @@ function LoginPage({ initialMode = 'email' }) {
                     value={regAdminName}
                     onChange={(e) => setRegAdminName(e.target.value)}
                     placeholder="Ej. Diego Henríquez"
-                    className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-semibold outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 text-slate-800"
+                    className="h-10 w-full rounded-lg border border-stone-200 px-3 text-sm font-semibold outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 text-stone-800"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-stone-400 mb-1">
                     Correo electrónico del Administrador
                   </label>
                   <input
@@ -947,12 +954,12 @@ function LoginPage({ initialMode = 'email' }) {
                     value={regEmail}
                     onChange={(e) => setRegEmail(e.target.value)}
                     placeholder="ejemplo@correo.com"
-                    className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-semibold outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 text-slate-800"
+                    className="h-10 w-full rounded-lg border border-stone-200 px-3 text-sm font-semibold outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 text-stone-800"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-stone-400 mb-1">
                     Contraseña del Administrador
                   </label>
                   <input
@@ -962,7 +969,7 @@ function LoginPage({ initialMode = 'email' }) {
                     onChange={(e) => setRegPassword(e.target.value)}
                     placeholder="Mínimo 6 caracteres"
                     minLength={6}
-                    className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-semibold outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 text-slate-800"
+                    className="h-10 w-full rounded-lg border border-stone-200 px-3 text-sm font-semibold outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 text-stone-800"
                   />
                 </div>
 
@@ -970,14 +977,14 @@ function LoginPage({ initialMode = 'email' }) {
                   <button
                     type="button"
                     onClick={() => setShowRegisterModal(false)}
-                    className="h-10 rounded-lg px-4 text-sm font-bold text-slate-500 hover:bg-slate-50 transition"
+                    className="h-10 rounded-lg px-4 text-sm font-bold text-stone-500 hover:bg-stone-50 transition"
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
                     disabled={regLoading || regSuccess}
-                    className="h-10 rounded-lg bg-teal-600 hover:bg-teal-700 disabled:bg-teal-400 text-white px-5 text-sm font-bold shadow transition flex items-center justify-center"
+                    className="h-10 rounded-lg bg-brand-600 hover:bg-brand-700 disabled:bg-brand-400 text-white px-5 text-sm font-bold shadow transition flex items-center justify-center"
                   >
                     {regLoading ? 'Registrando...' : 'Registrar Empresa'}
                   </button>
@@ -1039,14 +1046,14 @@ function saPlanColor(plan) {
   const p = plan || ''
   if (p.includes('Empresa') || p.includes('Pro')) return 'bg-purple-50 text-purple-700 border-purple-200'
   if (p.includes('Unica') || p.includes('Única')) return 'bg-amber-50 text-amber-700 border-amber-200'
-  return 'bg-teal-50 text-teal-700 border-teal-200'
+  return 'bg-brand-50 text-brand-700 border-brand-200'
 }
 
 function saStatusDot(status) {
   const s = (status || '').toLowerCase()
   if (s === 'activo') return 'bg-emerald-500'
   if (s === 'inactivo') return 'bg-red-400'
-  return 'bg-slate-300'
+  return 'bg-stone-300'
 }
 
 function RestaurantSuperadmin() {
@@ -1176,17 +1183,17 @@ function RestaurantSuperadmin() {
   const fmtCLP = v => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(v)
 
   return (
-    <main className="min-h-screen w-full bg-[#f0f2f7] text-slate-950">
+    <main className="min-h-screen w-full bg-[#faf6f0] text-stone-950">
       {/* HEADER */}
-      <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/95 backdrop-blur-xl shadow-sm">
+      <header className="sticky top-0 z-40 border-b border-stone-200/80 bg-white/95 backdrop-blur-xl shadow-sm">
         <div className="flex items-center justify-between gap-4 px-4 py-3 lg:px-8">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl shadow-lg" style={{ background: 'linear-gradient(135deg,#0d9488,#059669)' }}>
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl shadow-lg" style={{ background: 'linear-gradient(135deg,#c2553d,#9a3f2c)' }}>
               <span className="text-base font-black text-white">A</span>
             </div>
             <div className="hidden sm:block min-w-0">
-              <h1 className="text-base font-black text-slate-900 leading-none">AcroDevs SV</h1>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">Panel Superadmin</p>
+              <h1 className="text-base font-black text-stone-900 leading-none">AcroDevs SV</h1>
+              <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mt-0.5">Panel Superadmin</p>
             </div>
           </div>
 
@@ -1198,14 +1205,14 @@ function RestaurantSuperadmin() {
           <div className="flex items-center gap-2">
             <button onClick={openCreateModal}
               className="hidden sm:inline-flex h-9 items-center gap-1.5 rounded-xl px-4 text-xs font-black text-white shadow transition hover:-translate-y-0.5"
-              style={{ background: 'linear-gradient(135deg,#0d9488,#059669)' }}>
+              style={{ background: 'linear-gradient(135deg,#c2553d,#9a3f2c)' }}>
               <Plus size={14} /> Nuevo restaurante
             </button>
-            <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-              <div className="h-6 w-6 rounded-full bg-teal-100 flex items-center justify-center text-[10px] font-black text-teal-700">
+            <div className="flex items-center gap-1.5 rounded-xl border border-stone-200 bg-stone-50 px-3 py-2">
+              <div className="h-6 w-6 rounded-full bg-brand-100 flex items-center justify-center text-[10px] font-black text-brand-700">
                 {currentUser?.name?.[0] || 'S'}
               </div>
-              <span className="text-xs font-bold text-slate-700 hidden sm:block">{currentUser?.name || 'Superadmin'}</span>
+              <span className="text-xs font-bold text-stone-700 hidden sm:block">{currentUser?.name || 'Superadmin'}</span>
             </div>
             <button onClick={handleLogout}
               className="flex h-9 items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 text-xs font-bold text-rose-600 transition hover:bg-rose-100">
@@ -1217,7 +1224,7 @@ function RestaurantSuperadmin() {
         <nav className="flex gap-1.5 overflow-x-auto px-4 pb-3 lg:px-8 [scrollbar-width:none]">
           {TABS.map(({ id, label, icon: Icon, badge }) => (
             <button key={id} type="button" onClick={() => setActiveTab(id)}
-              className={`relative inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl px-4 text-xs font-black transition-all ${activeTab === id ? 'bg-slate-900 text-white shadow-lg' : 'bg-white text-slate-500 ring-1 ring-slate-200 hover:ring-slate-300 hover:text-slate-800'}`}>
+              className={`relative inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl px-4 text-xs font-black transition-all ${activeTab === id ? 'bg-stone-900 text-white shadow-lg' : 'bg-white text-stone-500 ring-1 ring-stone-200 hover:ring-stone-300 hover:text-stone-800'}`}>
               <Icon size={14} />{label}
               {badge > 0 && <span className="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-black text-white">{badge}</span>}
             </button>
@@ -1237,49 +1244,49 @@ function RestaurantSuperadmin() {
           <div className="grid gap-6">
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               {[
-                { label: 'MRR Total', value: fmtCLP(totalMrr), sub: '+12% vs mes anterior', icon: TrendingUp, color: '#0d9488' },
+                { label: 'MRR Total', value: fmtCLP(totalMrr), sub: '+12% vs mes anterior', icon: TrendingUp, color: '#c2553d' },
                 { label: 'Restaurantes activos', value: activeOrgs.length, sub: inactiveOrgs.length + ' suspendidos · ' + organizations.length + ' total', icon: Building, color: '#7c3aed' },
                 { label: 'Pedidos hoy', value: todayOrders.length, sub: fmtCLP(dailySales) + ' en ventas', icon: ShoppingBag, color: '#f59e0b' },
-                { label: 'Tickets soporte', value: openTickets, sub: urgentTickets.length + ' de alta prioridad', icon: MessageSquare, color: urgentTickets.length > 0 ? '#ef4444' : '#10b981' },
+                { label: 'Tickets soporte', value: openTickets, sub: urgentTickets.length + ' de alta prioridad', icon: MessageSquare, color: urgentTickets.length > 0 ? '#ef4444' : '#c2553d' },
               ].map(kpi => (
-                <div key={kpi.label} className="relative overflow-hidden rounded-2xl bg-white border border-slate-200/80 p-5 shadow-sm hover:shadow-md transition">
+                <div key={kpi.label} className="relative overflow-hidden rounded-2xl bg-white border border-stone-200/80 p-5 shadow-sm hover:shadow-md transition">
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ background: kpi.color + '18' }}>
                       <kpi.icon size={18} style={{ color: kpi.color }} />
                     </div>
                   </div>
-                  <div className="text-3xl font-black text-slate-900">{kpi.value}</div>
-                  <div className="mt-1 text-[11px] font-semibold text-slate-500">{kpi.label}</div>
-                  <div className="mt-0.5 text-[10px] font-medium text-slate-400">{kpi.sub}</div>
+                  <div className="text-3xl font-black text-stone-900">{kpi.value}</div>
+                  <div className="mt-1 text-[11px] font-semibold text-stone-500">{kpi.label}</div>
+                  <div className="mt-0.5 text-[10px] font-medium text-stone-400">{kpi.sub}</div>
                   <div className="absolute bottom-0 left-0 h-1 w-full rounded-b-2xl" style={{ background: kpi.color + '40' }} />
                 </div>
               ))}
             </div>
 
             <div className="grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-              <div className="rounded-2xl bg-white border border-slate-200/80 p-6 shadow-sm">
+              <div className="rounded-2xl bg-white border border-stone-200/80 p-6 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
                   <div>
-                    <h2 className="text-sm font-black text-slate-900">Ingresos Mensuales (MRR)</h2>
-                    <p className="text-[11px] text-slate-400 mt-0.5">Linea verde = meta mensual</p>
+                    <h2 className="text-sm font-black text-stone-900">Ingresos Mensuales (MRR)</h2>
+                    <p className="text-[11px] text-stone-400 mt-0.5">Linea verde = meta mensual</p>
                   </div>
-                  <span className="text-xs font-bold text-teal-600">Ultimos 6 meses</span>
+                  <span className="text-xs font-bold text-brand-600">Ultimos 6 meses</span>
                 </div>
                 <div className="h-56">
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={mrrChartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
                       <defs>
                         <linearGradient id="saMrrGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#0d9488" stopOpacity={0.2} />
-                          <stop offset="95%" stopColor="#0d9488" stopOpacity={0} />
+                          <stop offset="5%" stopColor="#c2553d" stopOpacity={0.2} />
+                          <stop offset="95%" stopColor="#c2553d" stopOpacity={0} />
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                       <XAxis dataKey="mes" tick={{ fontSize: 11, fontWeight: 700, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
                       <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={v => '$' + (v/1000).toFixed(0) + 'k'} />
                       <Tooltip formatter={(v, n) => [fmtCLP(v), n === 'mrr' ? 'MRR' : 'Meta']} contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 24px rgba(0,0,0,0.1)', fontSize: 12 }} />
-                      <Area type="monotone" dataKey="mrr" stroke="#0d9488" strokeWidth={2.5} fill="url(#saMrrGrad)" dot={{ fill: '#0d9488', r: 4 }} name="mrr" />
-                      <Area type="monotone" dataKey="meta" stroke="#10b981" strokeWidth={1.5} fill="none" strokeDasharray="6 3" dot={false} name="meta" />
+                      <Area type="monotone" dataKey="mrr" stroke="#c2553d" strokeWidth={2.5} fill="url(#saMrrGrad)" dot={{ fill: '#c2553d', r: 4 }} name="mrr" />
+                      <Area type="monotone" dataKey="meta" stroke="#c2553d" strokeWidth={1.5} fill="none" strokeDasharray="6 3" dot={false} name="meta" />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
@@ -1292,26 +1299,26 @@ function RestaurantSuperadmin() {
                 </div>
               </div>
 
-              <div className="rounded-2xl bg-white border border-slate-200/80 p-6 shadow-sm">
+              <div className="rounded-2xl bg-white border border-stone-200/80 p-6 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-sm font-black text-slate-900">Restaurantes</h2>
-                  <button onClick={() => setActiveTab('restaurantes')} className="text-[11px] font-bold text-teal-600 hover:underline">Ver todos →</button>
+                  <h2 className="text-sm font-black text-stone-900">Restaurantes</h2>
+                  <button onClick={() => setActiveTab('restaurantes')} className="text-[11px] font-bold text-brand-600 hover:underline">Ver todos →</button>
                 </div>
                 <div className="space-y-2">
                   {organizations.slice(0, 5).map(org => (
-                    <div key={org.id} className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 hover:bg-slate-100/80 transition">
+                    <div key={org.id} className="flex items-center justify-between rounded-xl border border-stone-100 bg-stone-50 px-3 py-2.5 hover:bg-stone-100/80 transition">
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-teal-100 text-[11px] font-black text-teal-700">
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-brand-100 text-[11px] font-black text-brand-700">
                           {org.name[0].toUpperCase()}
                         </div>
                         <div className="min-w-0">
-                          <p className="truncate text-xs font-bold text-slate-800">{org.name}</p>
-                          <p className="text-[10px] text-slate-400">{org.plan}</p>
+                          <p className="truncate text-xs font-bold text-stone-800">{org.name}</p>
+                          <p className="text-[10px] text-stone-400">{org.plan}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <span className={`h-2 w-2 rounded-full ${saStatusDot(org.status)}`} />
-                        <button onClick={() => handleImpersonate(org)} className="rounded-lg bg-white border border-slate-200 px-2 py-1 text-[10px] font-black text-slate-600 hover:border-teal-400 hover:text-teal-700 transition">Ver</button>
+                        <button onClick={() => handleImpersonate(org)} className="rounded-lg bg-white border border-stone-200 px-2 py-1 text-[10px] font-black text-stone-600 hover:border-brand-400 hover:text-brand-700 transition">Ver</button>
                       </div>
                     </div>
                   ))}
@@ -1320,13 +1327,13 @@ function RestaurantSuperadmin() {
             </div>
 
             <div className="grid gap-4 xl:grid-cols-2">
-              <div className="rounded-2xl bg-white border border-slate-200/80 p-6 shadow-sm">
+              <div className="rounded-2xl bg-white border border-stone-200/80 p-6 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-sm font-black text-slate-900">Tickets Urgentes</h2>
+                  <h2 className="text-sm font-black text-stone-900">Tickets Urgentes</h2>
                   <button onClick={() => setActiveTab('soporte')} className="text-[11px] font-bold text-rose-500 hover:underline">Ver soporte →</button>
                 </div>
                 {urgentTickets.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-8 text-slate-400">
+                  <div className="flex flex-col items-center justify-center py-8 text-stone-400">
                     <CheckCircle2 size={28} className="text-emerald-400 mb-2" />
                     <p className="text-xs font-semibold">Sin tickets urgentes</p>
                   </div>
@@ -1334,32 +1341,32 @@ function RestaurantSuperadmin() {
                   <div key={t.id} className="rounded-xl border border-red-100 bg-red-50 p-3 mb-2">
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <p className="text-xs font-black text-slate-800">{t.subject}</p>
-                        <p className="text-[11px] font-semibold text-slate-500 mt-0.5">🏪 {t.restaurant}</p>
+                        <p className="text-xs font-black text-stone-800">{t.subject}</p>
+                        <p className="text-[11px] font-semibold text-stone-500 mt-0.5">🏪 {t.restaurant}</p>
                       </div>
                       <span className="shrink-0 rounded-full bg-red-100 border border-red-200 px-2 py-0.5 text-[9px] font-black uppercase text-red-600">ALTA</span>
                     </div>
                     <div className="mt-2 flex items-center justify-between">
-                      <span className="text-[10px] text-slate-400">SLA: {t.sla}h · {saFormatRelative(t.created)}</span>
+                      <span className="text-[10px] text-stone-400">SLA: {t.sla}h · {saFormatRelative(t.created)}</span>
                       <button onClick={() => { setSelectedTicket(t); setActiveTab('soporte') }} className="text-[10px] font-black text-red-600 hover:underline">Atender →</button>
                     </div>
                   </div>
                 ))}
               </div>
 
-              <div className="rounded-2xl bg-white border border-slate-200/80 p-6 shadow-sm">
+              <div className="rounded-2xl bg-white border border-stone-200/80 p-6 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-sm font-black text-slate-900">Estado de Servicios</h2>
-                  <button onClick={() => setActiveTab('monitoreo')} className="text-[11px] font-bold text-teal-600 hover:underline">Ver monitoreo →</button>
+                  <h2 className="text-sm font-black text-stone-900">Estado de Servicios</h2>
+                  <button onClick={() => setActiveTab('monitoreo')} className="text-[11px] font-bold text-brand-600 hover:underline">Ver monitoreo →</button>
                 </div>
                 <div className="space-y-2">
                   {SERVICE_STATUS_LIST.map(svc => (
-                    <div key={svc.name} className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+                    <div key={svc.name} className="flex items-center justify-between rounded-lg border border-stone-100 bg-stone-50 px-3 py-2">
                       <div className="flex items-center gap-2">
                         <span className={`h-2 w-2 rounded-full ${svc.status === 'ok' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-400 animate-pulse'}`} />
-                        <span className="text-xs font-bold text-slate-700">{svc.name}</span>
+                        <span className="text-xs font-bold text-stone-700">{svc.name}</span>
                       </div>
-                      <div className="flex items-center gap-3 text-[10px] font-semibold text-slate-500">
+                      <div className="flex items-center gap-3 text-[10px] font-semibold text-stone-500">
                         <span>{svc.latency}</span>
                         <span className={svc.status === 'ok' ? 'text-emerald-600 font-bold' : 'text-amber-600 font-bold'}>{svc.uptime}</span>
                       </div>
@@ -1376,44 +1383,44 @@ function RestaurantSuperadmin() {
           <div className="space-y-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <div className="relative flex-1 max-w-md">
-                <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
                 <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
                   placeholder="Buscar por nombre, slug, RUT..."
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-sm font-semibold outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20" />
+                  className="h-10 w-full rounded-xl border border-stone-200 bg-white pl-10 pr-4 text-sm font-semibold outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20" />
               </div>
               <button onClick={openCreateModal}
                 className="sm:ml-auto flex h-10 items-center gap-1.5 rounded-xl px-4 text-xs font-black text-white shadow"
-                style={{ background: 'linear-gradient(135deg,#0d9488,#059669)' }}>
+                style={{ background: 'linear-gradient(135deg,#c2553d,#9a3f2c)' }}>
                 <Plus size={14} /> Nuevo restaurante
               </button>
             </div>
-            <div className="rounded-2xl bg-white border border-slate-200/80 shadow-sm overflow-hidden">
+            <div className="rounded-2xl bg-white border border-stone-200/80 shadow-sm overflow-hidden">
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="border-b border-slate-100 bg-slate-50">
+                  <tr className="border-b border-stone-100 bg-stone-50">
                     {['Restaurante','Plan','MRR','Estado','Acciones'].map(h => (
-                      <th key={h} className="px-5 py-3 text-left font-black text-slate-500 uppercase tracking-wider">{h}</th>
+                      <th key={h} className="px-5 py-3 text-left font-black text-stone-500 uppercase tracking-wider">{h}</th>
                     ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-stone-100">
                   {filteredOrgs.map(org => (
-                    <tr key={org.id} className="hover:bg-slate-50/60 transition">
+                    <tr key={org.id} className="hover:bg-stone-50/60 transition">
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-3">
-                          <div className="flex h-8 w-8 items-center justify-center rounded-lg font-black text-sm" style={{ background: '#0d948820', color: '#0d9488' }}>
+                          <div className="flex h-8 w-8 items-center justify-center rounded-lg font-black text-sm" style={{ background: '#c2553d20', color: '#c2553d' }}>
                             {org.name[0].toUpperCase()}
                           </div>
                           <div>
-                            <p className="font-black text-slate-800">{org.name}</p>
-                            <p className="text-slate-400 font-medium">{org.slug}</p>
+                            <p className="font-black text-stone-800">{org.name}</p>
+                            <p className="text-stone-400 font-medium">{org.slug}</p>
                           </div>
                         </div>
                       </td>
                       <td className="px-4 py-3.5">
                         <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-black ${saPlanColor(org.plan)}`}>{org.plan}</span>
                       </td>
-                      <td className="px-4 py-3.5 font-bold text-slate-700">{fmtCLP(org.mrr || 0)}</td>
+                      <td className="px-4 py-3.5 font-bold text-stone-700">{fmtCLP(org.mrr || 0)}</td>
                       <td className="px-4 py-3.5">
                         <span className={`flex items-center gap-1.5 w-fit rounded-full border px-2.5 py-0.5 text-[10px] font-black ${(org.status||'').toLowerCase().includes('activ') ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-600 border-red-200'}`}>
                           <span className={`h-1.5 w-1.5 rounded-full ${saStatusDot(org.status)}`} />
@@ -1422,13 +1429,13 @@ function RestaurantSuperadmin() {
                       </td>
                       <td className="px-4 py-3.5">
                         <div className="flex items-center gap-1.5">
-                          <button onClick={() => handleImpersonate(org)} className="flex h-7 items-center gap-1 rounded-lg border border-teal-200 bg-teal-50 px-2.5 text-[10px] font-black text-teal-700 hover:bg-teal-100 transition">
+                          <button onClick={() => handleImpersonate(org)} className="flex h-7 items-center gap-1 rounded-lg border border-brand-200 bg-brand-50 px-2.5 text-[10px] font-black text-brand-700 hover:bg-brand-100 transition">
                             <LogIn size={11} /> Soporte
                           </button>
-                          <button onClick={() => openEditModal(org)} className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:text-indigo-600 hover:border-indigo-300 transition">
+                          <button onClick={() => openEditModal(org)} className="flex h-7 w-7 items-center justify-center rounded-lg border border-stone-200 text-stone-400 hover:text-indigo-600 hover:border-indigo-300 transition">
                             <Pencil size={12} />
                           </button>
-                          <button onClick={() => handleDeleteOrg(org)} className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:text-red-500 hover:border-red-200 transition">
+                          <button onClick={() => handleDeleteOrg(org)} className="flex h-7 w-7 items-center justify-center rounded-lg border border-stone-200 text-stone-400 hover:text-red-500 hover:border-red-200 transition">
                             <Trash2 size={12} />
                           </button>
                         </div>
@@ -1436,7 +1443,7 @@ function RestaurantSuperadmin() {
                     </tr>
                   ))}
                   {filteredOrgs.length === 0 && (
-                    <tr><td colSpan={5} className="py-12 text-center text-sm font-semibold text-slate-400">No se encontraron restaurantes</td></tr>
+                    <tr><td colSpan={5} className="py-12 text-center text-sm font-semibold text-stone-400">No se encontraron restaurantes</td></tr>
                   )}
                 </tbody>
               </table>
@@ -1454,26 +1461,26 @@ function RestaurantSuperadmin() {
                 { label: 'Churn Rate', value: '2.4%', trend: '-0.3%' },
                 { label: 'ARPU', value: fmtCLP(organizations.length ? Math.round(totalMrr / organizations.length) : 0), trend: '+5%' },
               ].map(k => (
-                <div key={k.label} className="rounded-2xl bg-white border border-slate-200/80 p-5 shadow-sm">
-                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{k.label}</p>
-                  <p className="mt-2 text-2xl font-black text-slate-900">{k.value}</p>
+                <div key={k.label} className="rounded-2xl bg-white border border-stone-200/80 p-5 shadow-sm">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-stone-400">{k.label}</p>
+                  <p className="mt-2 text-2xl font-black text-stone-900">{k.value}</p>
                   <p className="mt-1 text-[10px] font-black text-emerald-600">{k.trend}</p>
                 </div>
               ))}
             </div>
-            <div className="rounded-2xl bg-white border border-slate-200/80 p-6 shadow-sm">
-              <h2 className="mb-4 text-sm font-black text-slate-900">MRR por Plan</h2>
+            <div className="rounded-2xl bg-white border border-stone-200/80 p-6 shadow-sm">
+              <h2 className="mb-4 text-sm font-black text-stone-900">MRR por Plan</h2>
               <div className="space-y-3">
                 {Object.entries(mrrByPlan).map(([plan, mrr]) => {
                   const pct = totalMrr > 0 ? Math.round((mrr / totalMrr) * 100) : 0
                   return (
                     <div key={plan}>
                       <div className="mb-1 flex justify-between text-xs">
-                        <span className="font-bold text-slate-700">{plan}</span>
-                        <span className="font-black text-slate-900">{fmtCLP(mrr)} <span className="text-slate-400">({pct}%)</span></span>
+                        <span className="font-bold text-stone-700">{plan}</span>
+                        <span className="font-black text-stone-900">{fmtCLP(mrr)} <span className="text-stone-400">({pct}%)</span></span>
                       </div>
-                      <div className="h-2.5 w-full rounded-full bg-slate-100 overflow-hidden">
-                        <div className="h-full rounded-full" style={{ width: pct + '%', background: plan.includes('Empresa') || plan.includes('Pro') ? '#7c3aed' : plan.includes('nica') ? '#f59e0b' : '#0d9488' }} />
+                      <div className="h-2.5 w-full rounded-full bg-stone-100 overflow-hidden">
+                        <div className="h-full rounded-full" style={{ width: pct + '%', background: plan.includes('Empresa') || plan.includes('Pro') ? '#7c3aed' : plan.includes('nica') ? '#f59e0b' : '#c2553d' }} />
                       </div>
                     </div>
                   )
@@ -1487,56 +1494,56 @@ function RestaurantSuperadmin() {
         {activeTab === 'soporte' && (
           <div className="grid gap-4 lg:grid-cols-[360px_minmax(0,1fr)]">
             <div className="space-y-2">
-              <h2 className="text-sm font-black text-slate-900">Tickets ({DEMO_TICKETS.length})</h2>
+              <h2 className="text-sm font-black text-stone-900">Tickets ({DEMO_TICKETS.length})</h2>
               {DEMO_TICKETS.map(t => (
                 <button key={t.id} onClick={() => setSelectedTicket(t)}
-                  className={`w-full text-left rounded-xl border p-4 transition hover:shadow-md ${selectedTicket?.id === t.id ? 'border-teal-400 bg-teal-50 shadow-md' : 'border-slate-200 bg-white'}`}>
+                  className={`w-full text-left rounded-xl border p-4 transition hover:shadow-md ${selectedTicket?.id === t.id ? 'border-brand-400 bg-brand-50 shadow-md' : 'border-stone-200 bg-white'}`}>
                   <div className="flex items-start gap-2 justify-between">
-                    <p className="text-xs font-black text-slate-800 leading-tight">{t.subject}</p>
+                    <p className="text-xs font-black text-stone-800 leading-tight">{t.subject}</p>
                     <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-black uppercase ${t.priority === 'alta' ? 'bg-red-50 border-red-200 text-red-600' : 'bg-amber-50 border-amber-200 text-amber-600'}`}>{t.priority}</span>
                   </div>
-                  <p className="mt-1.5 text-[11px] font-semibold text-slate-500">🏪 {t.restaurant}</p>
+                  <p className="mt-1.5 text-[11px] font-semibold text-stone-500">🏪 {t.restaurant}</p>
                   <div className="mt-2 flex items-center justify-between">
                     <span className={`rounded-full border px-2 py-0.5 text-[9px] font-black ${t.status === 'abierto' ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-amber-50 text-amber-600 border-amber-200'}`}>
                       {t.status === 'abierto' ? 'Abierto' : 'En progreso'}
                     </span>
-                    <span className="text-[10px] text-slate-400">{saFormatRelative(t.created)}</span>
+                    <span className="text-[10px] text-stone-400">{saFormatRelative(t.created)}</span>
                   </div>
                 </button>
               ))}
             </div>
             {selectedTicket ? (
-              <div className="rounded-2xl bg-white border border-slate-200/80 shadow-sm flex flex-col" style={{ minHeight: 480 }}>
-                <div className="border-b border-slate-100 px-6 py-4">
-                  <h2 className="text-base font-black text-slate-900">{selectedTicket.subject}</h2>
-                  <p className="text-[11px] text-slate-500 mt-0.5">🏪 {selectedTicket.restaurant} · Asignado: <strong>{selectedTicket.assignee}</strong> · SLA: {selectedTicket.sla}h</p>
+              <div className="rounded-2xl bg-white border border-stone-200/80 shadow-sm flex flex-col" style={{ minHeight: 480 }}>
+                <div className="border-b border-stone-100 px-6 py-4">
+                  <h2 className="text-base font-black text-stone-900">{selectedTicket.subject}</h2>
+                  <p className="text-[11px] text-stone-500 mt-0.5">🏪 {selectedTicket.restaurant} · Asignado: <strong>{selectedTicket.assignee}</strong> · SLA: {selectedTicket.sla}h</p>
                 </div>
                 <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3" style={{ maxHeight: 280 }}>
                   {(ticketChats[selectedTicket.id] || []).length === 0 && (
-                    <p className="text-center text-xs text-slate-400 mt-8">No hay mensajes. Inicia la conversacion.</p>
+                    <p className="text-center text-xs text-stone-400 mt-8">No hay mensajes. Inicia la conversacion.</p>
                   )}
                   {(ticketChats[selectedTicket.id] || []).map((msg, i) => (
                     <div key={i} className={`flex ${msg.from === 'superadmin' ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`max-w-xs rounded-2xl px-4 py-2.5 text-xs font-semibold ${msg.from === 'superadmin' ? 'bg-teal-600 text-white' : 'bg-slate-100 text-slate-700'}`}>
+                      <div className={`max-w-xs rounded-2xl px-4 py-2.5 text-xs font-semibold ${msg.from === 'superadmin' ? 'bg-brand-600 text-white' : 'bg-stone-100 text-stone-700'}`}>
                         <p>{msg.msg}</p>
-                        <p className={`mt-1 text-[10px] ${msg.from === 'superadmin' ? 'text-teal-200' : 'text-slate-400'}`}>{saFormatRelative(msg.ts)}</p>
+                        <p className={`mt-1 text-[10px] ${msg.from === 'superadmin' ? 'text-brand-200' : 'text-stone-400'}`}>{saFormatRelative(msg.ts)}</p>
                       </div>
                     </div>
                   ))}
                 </div>
-                <div className="border-t border-slate-100 px-6 py-4 flex gap-2">
+                <div className="border-t border-stone-100 px-6 py-4 flex gap-2">
                   <input type="text" value={ticketMsg} onChange={e => setTicketMsg(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') sendTicketMsg(selectedTicket.id) }}
                     placeholder="Respuesta interna..."
-                    className="flex-1 h-10 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold outline-none focus:border-teal-500" />
+                    className="flex-1 h-10 rounded-xl border border-stone-200 bg-stone-50 px-4 text-sm font-semibold outline-none focus:border-brand-500" />
                   <button onClick={() => sendTicketMsg(selectedTicket.id)}
                     className="h-10 px-4 rounded-xl font-black text-white text-xs shadow"
-                    style={{ background: 'linear-gradient(135deg,#0d9488,#059669)' }}>Enviar</button>
+                    style={{ background: 'linear-gradient(135deg,#c2553d,#9a3f2c)' }}>Enviar</button>
                 </div>
               </div>
             ) : (
-              <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white py-20 text-slate-400">
-                <MessageSquare size={32} className="mb-3 text-slate-300" />
+              <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-stone-300 bg-white py-20 text-stone-400">
+                <MessageSquare size={32} className="mb-3 text-stone-300" />
                 <p className="text-sm font-semibold">Selecciona un ticket</p>
               </div>
             )}
@@ -1546,11 +1553,11 @@ function RestaurantSuperadmin() {
         {/* ── MODULOS ── */}
         {activeTab === 'modulos' && (
           <div className="space-y-4">
-            <div className="rounded-2xl bg-white border border-slate-200/80 p-6 shadow-sm">
+            <div className="rounded-2xl bg-white border border-stone-200/80 p-6 shadow-sm">
               <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-sm font-black text-slate-900">Modulos por restaurante</h2>
+                <h2 className="text-sm font-black text-stone-900">Modulos por restaurante</h2>
                 <select value={modulesOrgId} onChange={e => setModulesOrgId(e.target.value)}
-                  className="h-9 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-bold text-slate-700 outline-none">
+                  className="h-9 rounded-xl border border-stone-200 bg-stone-50 px-3 text-xs font-bold text-stone-700 outline-none">
                   <option value="">— Seleccionar —</option>
                   {organizations.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
                 </select>
@@ -1558,23 +1565,23 @@ function RestaurantSuperadmin() {
               {modulesOrgId ? (
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   {getOrgModules(modulesOrgId).map(mod => (
-                    <div key={mod.id} className={`rounded-xl border p-4 transition-all ${mod.enabled ? 'border-teal-200 bg-teal-50' : 'border-slate-200 bg-slate-50'}`}>
+                    <div key={mod.id} className={`rounded-xl border p-4 transition-all ${mod.enabled ? 'border-brand-200 bg-brand-50' : 'border-stone-200 bg-stone-50'}`}>
                       <div className="flex items-start justify-between mb-3">
                         <span className="text-2xl">{mod.icon}</span>
                         <button onClick={() => toggleModule(modulesOrgId, mod.id)}
-                          className={`relative h-5 w-9 rounded-full transition-all ${mod.enabled ? 'bg-teal-500' : 'bg-slate-300'}`}>
+                          className={`relative h-5 w-9 rounded-full transition-all ${mod.enabled ? 'bg-brand-500' : 'bg-stone-300'}`}>
                           <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${mod.enabled ? 'left-4' : 'left-0.5'}`} />
                         </button>
                       </div>
-                      <p className="text-xs font-black text-slate-800">{mod.name}</p>
-                      <p className="mt-0.5 text-[10px] text-slate-500">{mod.desc}</p>
-                      <p className={`mt-2 text-[9px] font-black uppercase ${mod.enabled ? 'text-teal-600' : 'text-slate-400'}`}>{mod.enabled ? '✓ Activo' : '○ Inactivo'}</p>
+                      <p className="text-xs font-black text-stone-800">{mod.name}</p>
+                      <p className="mt-0.5 text-[10px] text-stone-500">{mod.desc}</p>
+                      <p className={`mt-2 text-[9px] font-black uppercase ${mod.enabled ? 'text-brand-600' : 'text-stone-400'}`}>{mod.enabled ? '✓ Activo' : '○ Inactivo'}</p>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center py-16 text-slate-400">
-                  <Sparkles size={32} className="mb-3 text-slate-300" />
+                <div className="flex flex-col items-center justify-center py-16 text-stone-400">
+                  <Sparkles size={32} className="mb-3 text-stone-300" />
                   <p className="text-sm font-semibold">Selecciona un restaurante</p>
                 </div>
               )}
@@ -1585,23 +1592,23 @@ function RestaurantSuperadmin() {
         {/* ── MONITOREO ── */}
         {activeTab === 'monitoreo' && (
           <div className="space-y-4">
-            <div className="rounded-2xl bg-white border border-slate-200/80 p-6 shadow-sm">
-              <h2 className="mb-4 text-sm font-black text-slate-900">Estado de Servicios en Tiempo Real</h2>
+            <div className="rounded-2xl bg-white border border-stone-200/80 p-6 shadow-sm">
+              <h2 className="mb-4 text-sm font-black text-stone-900">Estado de Servicios en Tiempo Real</h2>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {SERVICE_STATUS_LIST.map(svc => (
                   <div key={svc.name} className={`rounded-xl border p-4 ${svc.status === 'ok' ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-black text-slate-800">{svc.name}</span>
+                      <span className="text-xs font-black text-stone-800">{svc.name}</span>
                       <span className={`h-2.5 w-2.5 rounded-full animate-pulse ${svc.status === 'ok' ? 'bg-emerald-500' : 'bg-amber-400'}`} />
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-[10px]">
                       <div className="rounded-lg bg-white px-2 py-1.5 text-center">
-                        <p className="font-black text-slate-900">{svc.uptime}</p>
-                        <p className="text-slate-400">Uptime</p>
+                        <p className="font-black text-stone-900">{svc.uptime}</p>
+                        <p className="text-stone-400">Uptime</p>
                       </div>
                       <div className="rounded-lg bg-white px-2 py-1.5 text-center">
-                        <p className="font-black text-slate-900">{svc.latency}</p>
-                        <p className="text-slate-400">Latencia</p>
+                        <p className="font-black text-stone-900">{svc.latency}</p>
+                        <p className="text-stone-400">Latencia</p>
                       </div>
                     </div>
                     <p className={`mt-2 text-[10px] font-black text-center ${svc.status === 'ok' ? 'text-emerald-600' : 'text-amber-600'}`}>
@@ -1623,29 +1630,29 @@ function RestaurantSuperadmin() {
                 { label: 'Intentos fallidos hoy', value: '1', icon: '⚠️', sub: 'Bloqueada 60s automaticamente' },
                 { label: 'Ultimo acceso superadmin', value: 'Hace 5min', icon: '🔐', sub: currentUser?.email || '' },
               ].map(k => (
-                <div key={k.label} className="rounded-2xl bg-white border border-slate-200/80 p-5 shadow-sm">
+                <div key={k.label} className="rounded-2xl bg-white border border-stone-200/80 p-5 shadow-sm">
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-xl">{k.icon}</span>
-                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{k.label}</p>
+                    <p className="text-[10px] font-black uppercase tracking-wider text-stone-400">{k.label}</p>
                   </div>
-                  <p className="text-2xl font-black text-slate-900">{k.value}</p>
-                  <p className="mt-1 text-[10px] text-slate-500 font-medium">{k.sub}</p>
+                  <p className="text-2xl font-black text-stone-900">{k.value}</p>
+                  <p className="mt-1 text-[10px] text-stone-500 font-medium">{k.sub}</p>
                 </div>
               ))}
             </div>
-            <div className="rounded-2xl bg-white border border-slate-200/80 shadow-sm overflow-hidden">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-                <h2 className="text-sm font-black text-slate-900">Log de Auditoria</h2>
+            <div className="rounded-2xl bg-white border border-stone-200/80 shadow-sm overflow-hidden">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-stone-100">
+                <h2 className="text-sm font-black text-stone-900">Log de Auditoria</h2>
               </div>
-              <div className="divide-y divide-slate-100">
+              <div className="divide-y divide-stone-100">
                 {DEMO_AUDIT.map(entry => (
-                  <div key={entry.id} className="flex items-start gap-4 px-6 py-4 hover:bg-slate-50/60 transition">
+                  <div key={entry.id} className="flex items-start gap-4 px-6 py-4 hover:bg-stone-50/60 transition">
                     <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${entry.level === 'success' ? 'bg-emerald-500' : entry.level === 'warn' ? 'bg-amber-400' : 'bg-blue-400'}`} />
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-bold text-slate-800 truncate">{entry.action}</p>
-                      <p className="text-[11px] text-slate-500 mt-0.5 truncate">{entry.user}</p>
+                      <p className="text-xs font-bold text-stone-800 truncate">{entry.action}</p>
+                      <p className="text-[11px] text-stone-500 mt-0.5 truncate">{entry.user}</p>
                     </div>
-                    <span className="shrink-0 text-[10px] font-semibold text-slate-400">{saFormatRelative(entry.ts)}</span>
+                    <span className="shrink-0 text-[10px] font-semibold text-stone-400">{saFormatRelative(entry.ts)}</span>
                   </div>
                 ))}
               </div>
@@ -1662,9 +1669,9 @@ function RestaurantSuperadmin() {
             style={{ background: 'rgba(15,23,42,0.7)', backdropFilter: 'blur(6px)' }}>
             <motion.div initial={{ scale: 0.92 }} animate={{ scale: 1 }} exit={{ scale: 0.92 }}
               className="w-full max-w-md rounded-2xl bg-white shadow-2xl">
-              <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
-                <h3 className="text-base font-black text-slate-900">{editingOrg ? 'Editar Restaurante' : 'Nuevo Restaurante'}</h3>
-                <button onClick={() => setShowOrgModal(false)} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
+              <div className="flex items-center justify-between border-b border-stone-100 px-6 py-4">
+                <h3 className="text-base font-black text-stone-900">{editingOrg ? 'Editar Restaurante' : 'Nuevo Restaurante'}</h3>
+                <button onClick={() => setShowOrgModal(false)} className="text-stone-400 hover:text-stone-600"><X size={18} /></button>
               </div>
               <form onSubmit={handleSaveOrg} className="px-6 py-5 space-y-4">
                 {orgError && <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-2.5 text-xs font-bold text-red-600">{orgError}</div>}
@@ -1674,32 +1681,32 @@ function RestaurantSuperadmin() {
                   { label: 'RUT empresa', key: 'rut', placeholder: '76.123.456-7' },
                 ].map(f => (
                   <div key={f.key}>
-                    <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wider text-slate-400">{f.label}</label>
+                    <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wider text-stone-400">{f.label}</label>
                     <input type="text" value={orgForm[f.key]} placeholder={f.placeholder}
                       onChange={e => setOrgForm(p => ({ ...p, [f.key]: e.target.value }))}
-                      className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20" />
+                      className="h-10 w-full rounded-xl border border-stone-200 bg-stone-50 px-4 text-sm font-semibold outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20" />
                   </div>
                 ))}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wider text-slate-400">MRR (CLP)</label>
+                    <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wider text-stone-400">MRR (CLP)</label>
                     <input type="number" value={orgForm.mrr} onChange={e => setOrgForm(p => ({ ...p, mrr: e.target.value }))}
-                      className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20" />
+                      className="h-10 w-full rounded-xl border border-stone-200 bg-stone-50 px-4 text-sm font-semibold outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20" />
                   </div>
                   <div>
-                    <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wider text-slate-400">Plan</label>
+                    <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wider text-stone-400">Plan</label>
                     <select value={orgForm.plan} onChange={e => setOrgForm(p => ({ ...p, plan: e.target.value }))}
-                      className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold outline-none focus:border-teal-500">
+                      className="h-10 w-full rounded-xl border border-stone-200 bg-stone-50 px-3 text-sm font-semibold outline-none focus:border-brand-500">
                       <option>Basico</option><option>Empresa</option><option>Venta Unica</option>
                     </select>
                   </div>
                 </div>
                 <div className="flex gap-3 pt-2">
                   <button type="button" onClick={() => setShowOrgModal(false)}
-                    className="flex-1 h-10 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:bg-slate-50">Cancelar</button>
+                    className="flex-1 h-10 rounded-xl border border-stone-200 text-sm font-bold text-stone-600 hover:bg-stone-50">Cancelar</button>
                   <button type="submit" disabled={orgSaving}
                     className="flex-1 h-10 rounded-xl text-sm font-black text-white shadow disabled:opacity-50"
-                    style={{ background: 'linear-gradient(135deg,#0d9488,#059669)' }}>
+                    style={{ background: 'linear-gradient(135deg,#c2553d,#9a3f2c)' }}>
                     {orgSaving ? 'Guardando...' : editingOrg ? 'Guardar' : 'Crear'}
                   </button>
                 </div>
@@ -1976,10 +1983,10 @@ function GarzonTableCard({ table, currentUser }) {
               ? 'bg-emerald-100 text-emerald-700'
               : isOccupied
                 ? 'bg-rose-100 text-rose-700'
-                : 'bg-orange-50 text-orange-700'
+                : 'bg-brand-50 text-brand-700'
           }`}>
             <span className={`h-2 w-2 rounded-full ${
-              isMine ? 'bg-emerald-500 animate-pulse' : isOccupied ? 'bg-rose-500 animate-pulse' : 'bg-orange-500'
+              isMine ? 'bg-emerald-500 animate-pulse' : isOccupied ? 'bg-rose-500 animate-pulse' : 'bg-brand-500'
             }`} />
             {isMine ? 'Mi mesa' : isOccupied ? `Ocupada (${tableWaiter || 'otro'})` : 'Libre'}
           </div>
@@ -2000,7 +2007,7 @@ function GarzonTableCard({ table, currentUser }) {
       </div>
 
       {isOccupied && elapsed ? (
-        <div className="flex items-center gap-3 rounded-xl border border-rose-200 bg-gradient-to-r from-rose-50 to-orange-50 p-2.5">
+        <div className="flex items-center gap-3 rounded-xl border border-rose-200 bg-gradient-to-r from-rose-50 to-brand-50 p-2.5">
           <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-rose-500 text-white shadow-md shadow-rose-200">
             <Timer size={18} />
           </div>
@@ -2030,885 +2037,6 @@ function GarzonTableCard({ table, currentUser }) {
         Tomar pedido de {table.label}
       </Link>
     </article>
-  )
-}
-
-function MenuPage({ isGarzon }) {
-  const {
-    state,
-    remoteError,
-    isHydrating,
-    createOrder,
-    getCartForTable,
-    updateCartItem,
-    removeFromCart,
-    clearCart,
-    setCartNote,
-    setCartItemNote,
-    setCartTip,
-    currentUser,
-  } = useAppStore()
-  const { mesaId = 'mesa-01' } = useParams()
-  const cart = getCartForTable(mesaId)
-  usePageTitle(`Menu ${formatTableName(mesaId)} | ${state.restaurant.name}`)
-  const [search, setSearch] = useState('')
-  const [category, setCategory] = useState('Todos')
-  const [tag, setTag] = useState('todos')
-  const [customerNote, setCustomerNote] = useState('')
-  const [customerName, setCustomerName] = useState('')
-  const [guestCount, setGuestCount] = useState(2)
-  const [cartOpen, setCartOpen] = useState(false)
-  const [toast, setToast] = useState('')
-
-  const categories = ['Todos', ...state.categories.map((item) => item.name)]
-  const itemCount = cart.items.reduce((sum, item) => sum + item.quantity, 0)
-  const featuredProducts = state.products
-    .filter((product) => product.available && product.featured)
-    .slice(0, 5)
-  const promoProducts = state.products
-    .filter((product) => product.available && product.category === 'Promociones')
-    .slice(0, 4)
-  const filteredProducts = state.products.filter((product) => {
-    if (!product.available) return false
-    if (
-      search &&
-      !`${product.name} ${product.description}`
-        .toLowerCase()
-        .includes(search.toLowerCase())
-    ) {
-      return false
-    }
-    if (category !== 'Todos' && product.category !== category) {
-      return false
-    }
-    if (tag === 'vegetariano' && !product.vegetarian) {
-      return false
-    }
-    if (tag === 'destacado' && !product.featured) {
-      return false
-    }
-    return true
-  })
-
-  const subtotal = cart.items.reduce(
-    (sum, item) => sum + item.price * item.quantity,
-    0,
-  )
-  const discount =
-    subtotal <= 0
-      ? 0
-      : subtotal >= 25000
-        ? Math.round(subtotal * 0.1)
-        : state.promotions[0]?.active
-          ? Math.min(state.promotions[0].discountAmount, subtotal)
-          : 0
-  const payableBase = Math.max(0, subtotal - discount)
-  const tipAmount = Math.round(payableBase * ((cart.tipPercent ?? 10) / 100))
-  const total = payableBase + tipAmount
-  const activeOrders = state.orders.filter(
-    (order) => order.tableId === mesaId && !['Entregado', 'Cancelado'].includes(order.status),
-  )
-
-  const handleAddProduct = (product) => {
-    updateCartItem(mesaId, product, 1)
-    setToast(`${product.name} agregado`)
-    window.clearTimeout(window.__lasthitToast)
-    window.__lasthitToast = window.setTimeout(() => setToast(''), 1800)
-  }
-
-  const handleSubmitOrder = async () => {
-    if (!cart.items.length) return
-    const details = [
-      customerName ? `Cliente: ${customerName}` : '',
-      guestCount ? `Personas: ${guestCount}` : '',
-      customerNote ? `Nota: ${customerNote}` : '',
-    ]
-      .filter(Boolean)
-      .join('\n')
-    setCartNote(mesaId, details)
-    await createOrder({
-      mesaId,
-      items: cart.items,
-      note: details,
-      subtotal,
-      discount,
-      tipAmount,
-      total,
-      orderType: 'Comer en el local',
-      waiterId: isGarzon && currentUser ? currentUser.id : undefined,
-      waiterName: isGarzon && currentUser ? currentUser.name : undefined,
-    })
-    clearCart(mesaId)
-    setCustomerNote('')
-    setCustomerName('')
-    setCartOpen(false)
-  }
-
-  return (
-    <main className="min-h-screen bg-stone-50 pb-28 text-stone-950 lg:pb-8">
-      {isHydrating ? <SyncBanner text="Conectando con Supabase..." /> : null}
-      {remoteError ? (
-        <SyncBanner text={`Supabase no disponible: ${remoteError}`} warning />
-      ) : null}
-
-      {isGarzon && currentUser ? (
-        <div className="flex items-center justify-between gap-3 bg-emerald-600 px-4 py-2 text-white">
-          <div className="flex items-center gap-2">
-            <User size={16} />
-            <span className="text-sm font-black">Garzón: {currentUser.name}</span>
-            <span className="rounded bg-emerald-800 px-2 py-0.5 text-[0.6rem] font-black">
-              Pedidos de esta mesa se registran a tu nombre
-            </span>
-          </div>
-          <Link to="/garzon" className="inline-flex items-center gap-1 rounded-lg bg-white/20 px-3 py-1.5 text-xs font-black transition hover:bg-white/30">
-            ← Volver a mesas
-          </Link>
-        </div>
-      ) : null}
-
-      <MenuHeader restaurant={state.restaurant} mesaId={mesaId} />
-
-      <section className="sticky top-0 z-30 border-b border-stone-200 bg-stone-50/95 px-4 py-3 backdrop-blur lg:px-8">
-        <div className="mx-auto grid max-w-7xl gap-3">
-          <SearchBar value={search} onChange={setSearch} />
-          <CategoryChips categories={categories} active={category} onChange={setCategory} />
-          <FilterChips active={tag} onChange={setTag} />
-        </div>
-      </section>
-
-      <div className="mx-auto grid max-w-7xl gap-6 px-4 py-5 lg:grid-cols-[minmax(0,1fr)_380px] lg:px-8">
-        <section className="grid gap-7">
-          {activeOrders.map((order) => (
-            <OrderStatus key={order.id} order={order} />
-          ))}
-          {promoProducts.length ? (
-            <section className="grid gap-3">
-              <SectionTitle title="Promociones" subtitle="Combos y ofertas de hoy" />
-              <div className="flex gap-3 overflow-x-auto pb-1 [scrollbar-width:none]">
-                {promoProducts.map((product) => (
-                  <PromoBanner key={product.id} product={product} onAdd={handleAddProduct} />
-                ))}
-              </div>
-            </section>
-          ) : null}
-
-          {featuredProducts.length ? (
-            <section className="grid gap-3">
-              <SectionTitle title="Más pedidos" subtitle="Favoritos de la casa" />
-              <div className="flex gap-3 overflow-x-auto pb-1 [scrollbar-width:none]">
-                {featuredProducts.map((product) => (
-                  <RecommendedCard
-                    key={product.id}
-                    product={product}
-                    onAdd={handleAddProduct}
-                  />
-                ))}
-              </div>
-            </section>
-          ) : null}
-
-          <section className="grid gap-3">
-            <SectionTitle title="Menu" subtitle={`${filteredProducts.length} productos disponibles`} />
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {filteredProducts.map((product) => (
-                <ProductCard
-                  key={product.id}
-                  product={product}
-                  quantity={cart.items.find((item) => item.id === product.id)?.quantity ?? 0}
-                  onAdd={handleAddProduct}
-                />
-              ))}
-            </div>
-          </section>
-        </section>
-
-        <aside className="hidden lg:block">
-          <div className="sticky top-32 max-h-[calc(100vh-9rem)] overflow-y-auto overscroll-contain rounded-2xl border border-stone-200 bg-white p-4 shadow-soft [scrollbar-width:thin]">
-            <CartContent
-              mesaId={mesaId}
-              cart={cart}
-              customerName={customerName}
-              setCustomerName={setCustomerName}
-              guestCount={guestCount}
-              setGuestCount={setGuestCount}
-              customerNote={customerNote}
-              setCustomerNote={setCustomerNote}
-              subtotal={subtotal}
-              discount={discount}
-              tipAmount={tipAmount}
-              total={total}
-              updateCartItem={updateCartItem}
-              removeFromCart={removeFromCart}
-              setCartItemNote={setCartItemNote}
-              setCartTip={setCartTip}
-              onSubmit={handleSubmitOrder}
-            />
-          </div>
-        </aside>
-      </div>
-
-      <FloatingCartButton
-        count={itemCount}
-        total={total}
-        onClick={() => setCartOpen(true)}
-      />
-
-      <CartDrawer open={cartOpen} onClose={() => setCartOpen(false)}>
-        <CartContent
-          mesaId={mesaId}
-          cart={cart}
-          customerName={customerName}
-          setCustomerName={setCustomerName}
-          guestCount={guestCount}
-          setGuestCount={setGuestCount}
-          customerNote={customerNote}
-          setCustomerNote={setCustomerNote}
-          subtotal={subtotal}
-          discount={discount}
-          tipAmount={tipAmount}
-          total={total}
-          updateCartItem={updateCartItem}
-          removeFromCart={removeFromCart}
-          setCartItemNote={setCartItemNote}
-          setCartTip={setCartTip}
-          onSubmit={handleSubmitOrder}
-        />
-      </CartDrawer>
-
-      {toast ? <ToastNotification text={toast} /> : null}
-    </main>
-  )
-}
-
-function MenuHeader({ restaurant, mesaId }) {
-  return (
-    <header className="bg-white">
-      <div className="mx-auto max-w-7xl px-4 pb-4 pt-4 lg:px-8 lg:pt-8">
-        <div
-          className="relative overflow-hidden rounded-[2rem] bg-stone-950 p-5 text-white shadow-soft sm:p-7 lg:p-9"
-          style={{
-            background:
-              'radial-gradient(circle at 12% 20%, rgba(194,85,61,0.32), transparent 28%), radial-gradient(circle at 88% 8%, rgba(217,150,65,0.28), transparent 32%), linear-gradient(135deg, #1c1410 0%, #2a201a 55%, #2f2620 100%)',
-          }}
-        >
-          <div className="absolute -right-16 -top-20 h-44 w-44 rounded-full bg-white/10 blur-sm" />
-          <div className="absolute bottom-4 right-4 hidden h-32 w-32 rounded-[2rem] bg-gradient-to-br from-rose-400 to-orange-300 opacity-80 shadow-2xl sm:block" />
-          <div className="relative grid gap-8 lg:grid-cols-[1fr_360px] lg:items-end">
-            <div>
-              <div className="flex items-center gap-3">
-                <div className="grid h-14 w-14 place-items-center rounded-2xl bg-orange-400 text-xl font-black text-stone-950 shadow-lg shadow-orange-950/30">
-                  A
-                </div>
-                <div>
-                  <p className="text-xs font-black uppercase tracking-[0.22em] text-orange-300">
-                    AcroDevs Restaurant
-                  </p>
-                  <h1 className="text-2xl font-black leading-tight sm:text-4xl">
-                    {restaurant.name}
-                  </h1>
-                </div>
-              </div>
-              <p className="mt-5 max-w-xl text-lg font-semibold text-white">
-                Haz tu pedido desde la mesa
-              </p>
-              <p className="mt-2 max-w-xl text-sm leading-6 text-stone-300 sm:text-base">
-                Escoge, agrega notas y envia tu orden directo a cocina.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-3 gap-2 rounded-3xl border border-white/10 bg-white/10 p-2 backdrop-blur">
-              <MenuHeaderStat label="Mesa" value={formatTableName(mesaId).replace('Mesa ', '')} />
-              <MenuHeaderStat label="Estado" value="Abierto" />
-              <MenuHeaderStat label="Tiempo" value="15-20" suffix="min" />
-            </div>
-          </div>
-        </div>
-      </div>
-    </header>
-  )
-}
-
-function MenuHeaderStat({ label, value, suffix }) {
-  return (
-    <div className="rounded-2xl bg-white/10 p-3 text-center ring-1 ring-white/10">
-      <p className="text-[0.65rem] font-black uppercase tracking-[0.14em] text-stone-300">
-        {label}
-      </p>
-      <p className="mt-1 text-lg font-black text-white">
-        {value}
-        {suffix ? <span className="ml-1 text-xs font-bold text-stone-300">{suffix}</span> : null}
-      </p>
-    </div>
-  )
-}
-
-function SearchBar({ value, onChange }) {
-  return (
-    <label className="relative block">
-      <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-stone-400" />
-      <input
-        className="h-14 w-full rounded-2xl border border-stone-200 bg-white pl-12 pr-4 text-base font-semibold text-stone-950 shadow-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
-        type="search"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder="Buscar comida, bebida o promoción..."
-        aria-label="Buscar productos"
-      />
-    </label>
-  )
-}
-
-function CategoryChips({ categories, active, onChange }) {
-  return (
-    <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] lg:mx-0 lg:px-0">
-      {categories.map((item) => (
-        <button
-          key={item}
-          type="button"
-          onClick={() => onChange(item)}
-          className={`shrink-0 rounded-full px-5 py-3 text-sm font-black transition ${
-            active === item
-              ? 'bg-stone-950 text-white shadow-lg shadow-stone-300'
-              : 'border border-stone-200 bg-white text-stone-600 shadow-sm'
-          }`}
-        >
-          {item}
-        </button>
-      ))}
-    </div>
-  )
-}
-
-function FilterChips({ active, onChange }) {
-  const filters = [
-    { id: 'todos', label: 'Todo' },
-    { id: 'vegetariano', label: 'Vegetariano' },
-    { id: 'destacado', label: 'Destacado' },
-  ]
-
-  return (
-    <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none]">
-      {filters.map((filter) => (
-        <button
-          key={filter.id}
-          type="button"
-          onClick={() => onChange(filter.id)}
-          className={`shrink-0 rounded-full px-4 py-2 text-sm font-black transition ${
-            active === filter.id
-              ? 'bg-orange-500 text-stone-950 shadow-md shadow-orange-100'
-              : 'bg-white text-stone-500 ring-1 ring-stone-200'
-          }`}
-        >
-          {filter.label}
-        </button>
-      ))}
-    </div>
-  )
-}
-
-function SectionTitle({ title, subtitle }) {
-  return (
-    <div className="flex items-end justify-between gap-3">
-      <div>
-        <h2 className="text-xl font-black text-stone-950 sm:text-2xl">{title}</h2>
-        <p className="text-sm font-semibold text-stone-500">{subtitle}</p>
-      </div>
-    </div>
-  )
-}
-
-function PromoBanner({ product, onAdd }) {
-  return (
-    <motion.article
-      whileTap={{ scale: 0.98 }}
-      className="grid min-w-[285px] grid-cols-[1fr_112px] overflow-hidden rounded-3xl bg-stone-950 text-white shadow-soft sm:min-w-[360px]"
-    >
-      <div className="grid gap-3 p-4">
-        <span className="w-fit rounded-full bg-rose-500 px-3 py-1 text-xs font-black uppercase tracking-[0.12em]">
-          Promo
-        </span>
-        <div>
-          <h3 className="text-xl font-black leading-tight">{product.name}</h3>
-          <p className="mt-1 line-clamp-2 text-sm text-stone-300">{product.description}</p>
-        </div>
-        <div className="flex items-center justify-between gap-2">
-          <strong className="text-lg">{currency.format(product.price)}</strong>
-          <button
-            type="button"
-            onClick={() => onAdd(product)}
-            className="rounded-full bg-orange-400 px-4 py-2 text-sm font-black text-stone-950"
-          >
-            Agregar
-          </button>
-        </div>
-      </div>
-      <div
-        className="bg-cover bg-center"
-        style={{ backgroundImage: `url("${product.image}")` }}
-        aria-hidden="true"
-      />
-    </motion.article>
-  )
-}
-
-function RecommendedCard({ product, onAdd }) {
-  return (
-    <motion.article
-      whileTap={{ scale: 0.98 }}
-      className="min-w-[235px] overflow-hidden rounded-3xl border border-stone-200 bg-white shadow-sm"
-    >
-      <div
-        className="h-32 bg-stone-200 bg-cover bg-center"
-        style={{ backgroundImage: `url("${product.image}")` }}
-      />
-      <div className="grid gap-2 p-4">
-        <div className="flex items-center gap-1 text-xs font-black uppercase tracking-[0.12em] text-orange-500">
-          <Flame className="h-4 w-4" />
-          Más pedido
-        </div>
-        <h3 className="line-clamp-1 text-lg font-black text-stone-950">{product.name}</h3>
-        <div className="flex items-center justify-between">
-          <strong>{currency.format(product.price)}</strong>
-          <button
-            type="button"
-            onClick={() => onAdd(product)}
-            className="grid h-10 w-10 place-items-center rounded-full bg-stone-950 text-white"
-            aria-label={`Agregar ${product.name}`}
-          >
-            <Plus className="h-5 w-5" />
-          </button>
-        </div>
-      </div>
-    </motion.article>
-  )
-}
-
-function ProductCard({ product, quantity, onAdd }) {
-  return (
-    <motion.article
-      whileHover={{ y: -3 }}
-      whileTap={{ scale: 0.99 }}
-      className="overflow-hidden rounded-[1.7rem] border border-stone-200 bg-white shadow-sm transition hover:shadow-soft"
-    >
-      <div className="relative">
-        <div
-          className="h-48 bg-stone-200 bg-cover bg-center sm:h-44"
-          style={{ backgroundImage: `url("${product.image}")` }}
-        />
-        {quantity ? (
-          <span className="absolute right-3 top-3 rounded-full bg-stone-950 px-3 py-1 text-sm font-black text-white shadow-lg">
-            {quantity} en pedido
-          </span>
-        ) : null}
-      </div>
-      <div className="grid gap-3 p-4">
-        <div className="flex flex-wrap gap-2">
-          {product.featured ? <ProductBadge label="Destacado" tone="amber" /> : null}
-          {product.vegetarian ? <ProductBadge label="Vegetariano" tone="green" /> : null}
-          {product.category === 'Promociones' ? <ProductBadge label="Promo" tone="rose" /> : null}
-        </div>
-        <div>
-          <h3 className="text-xl font-black leading-tight text-stone-950">{product.name}</h3>
-          <p className="mt-1 line-clamp-2 min-h-[2.5rem] text-sm leading-5 text-stone-500">
-            {product.description}
-          </p>
-        </div>
-        <div className="flex items-center justify-between text-sm font-bold text-stone-400">
-          <span>{product.category}</span>
-          <span className="inline-flex items-center gap-1">
-            <Clock3 className="h-4 w-4" />
-            {product.prepTime} min
-          </span>
-        </div>
-        <div className="flex items-center justify-between gap-3">
-          <strong className="text-xl font-black text-stone-950">
-            {currency.format(product.price)}
-          </strong>
-          <button
-            type="button"
-            onClick={() => onAdd(product)}
-            className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-orange-500 px-5 text-sm font-black text-stone-950 shadow-lg shadow-orange-100 transition hover:bg-orange-400"
-          >
-            <Plus className="h-5 w-5" />
-            Agregar
-          </button>
-        </div>
-      </div>
-    </motion.article>
-  )
-}
-
-function ProductBadge({ label, tone }) {
-  const tones = {
-    amber: 'bg-amber-50 text-amber-700',
-    green: 'bg-orange-50 text-orange-700',
-    rose: 'bg-rose-50 text-rose-700',
-  }
-  return (
-    <span className={`rounded-full px-3 py-1 text-xs font-black ${tones[tone]}`}>
-      {label}
-    </span>
-  )
-}
-
-function FloatingCartButton({ count, total, onClick }) {
-  if (!count) return null
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="fixed inset-x-4 bottom-4 z-40 flex h-16 items-center justify-between rounded-2xl bg-stone-950 px-5 text-left text-white shadow-2xl shadow-stone-400/40 lg:hidden"
-    >
-      <span className="inline-flex items-center gap-3">
-        <span className="grid h-10 w-10 place-items-center rounded-full bg-orange-400 text-stone-950">
-          <ShoppingBag className="h-5 w-5" />
-        </span>
-        <span>
-          <span className="block text-sm font-black">Ver pedido</span>
-          <span className="text-xs text-stone-300">{count} productos</span>
-        </span>
-      </span>
-      <strong className="text-lg">{currency.format(total)}</strong>
-    </button>
-  )
-}
-
-function CartDrawer({ open, onClose, children }) {
-  if (!open) return null
-
-  return (
-    <div className="fixed inset-0 z-50 lg:hidden">
-      <button
-        type="button"
-        className="absolute inset-0 bg-stone-950/55 backdrop-blur-sm"
-        onClick={onClose}
-        aria-label="Cerrar pedido"
-      />
-      <motion.div
-        initial={{ y: '100%' }}
-        animate={{ y: 0 }}
-        exit={{ y: '100%' }}
-        className="absolute inset-x-0 bottom-0 max-h-[88vh] overflow-y-auto rounded-t-[2rem] bg-white p-4 shadow-2xl"
-      >
-        <div className="mb-3 flex items-center justify-between">
-          <strong className="text-lg font-black text-stone-950">Tu pedido</strong>
-          <button
-            type="button"
-            onClick={onClose}
-            className="grid h-10 w-10 place-items-center rounded-full bg-stone-100 text-stone-600"
-            aria-label="Cerrar"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-        {children}
-      </motion.div>
-    </div>
-  )
-}
-
-function CartContent({
-  mesaId,
-  cart,
-  customerName,
-  setCustomerName,
-  guestCount,
-  setGuestCount,
-  customerNote,
-  setCustomerNote,
-  subtotal,
-  discount,
-  tipAmount,
-  total,
-  updateCartItem,
-  removeFromCart,
-  setCartItemNote,
-  setCartTip,
-  onSubmit,
-}) {
-  return (
-    <div className="grid gap-4">
-      <div className="rounded-2xl bg-stone-950 p-4 text-white">
-        <p className="text-xs font-black uppercase tracking-[0.16em] text-orange-300">
-          Pedido mesa
-        </p>
-        <div className="mt-2 flex items-center justify-between">
-          <strong className="text-2xl font-black">{formatTableName(mesaId)}</strong>
-          <span className="rounded-full bg-white/10 px-3 py-1 text-sm font-bold">
-            {cart.items.length} items
-          </span>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-[1fr_110px] gap-2">
-        <label className="grid gap-1">
-          <span className="text-xs font-black uppercase tracking-[0.12em] text-stone-400">
-            Nombre opcional
-          </span>
-          <span className="relative">
-            <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
-            <input
-              className="h-12 w-full rounded-2xl border border-stone-200 bg-stone-50 pl-9 pr-3 font-semibold outline-none focus:border-orange-400"
-              value={customerName}
-              onChange={(event) => setCustomerName(event.target.value)}
-              placeholder="Tu nombre"
-            />
-          </span>
-        </label>
-        <label className="grid gap-1">
-          <span className="text-xs font-black uppercase tracking-[0.12em] text-stone-400">
-            Personas
-          </span>
-          <span className="relative">
-            <Users className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
-            <input
-              className="h-12 w-full rounded-2xl border border-stone-200 bg-stone-50 pl-9 pr-2 font-semibold outline-none focus:border-orange-400"
-              type="number"
-              min="1"
-              value={guestCount}
-              onChange={(event) => setGuestCount(Number(event.target.value))}
-            />
-          </span>
-        </label>
-      </div>
-
-      <div className="grid gap-3">
-        {cart.items.length ? (
-          cart.items.map((item) => (
-            <div key={item.id} className="rounded-2xl border border-stone-200 bg-white p-3">
-              <div className="grid grid-cols-[58px_1fr_auto] gap-3">
-                <div
-                  className="h-14 w-14 rounded-2xl bg-stone-200 bg-cover bg-center"
-                  style={{ backgroundImage: `url("${item.image}")` }}
-                />
-                <div>
-                  <strong className="line-clamp-1 text-sm font-black text-stone-950">
-                    {item.name}
-                  </strong>
-                  <p className="mt-1 text-sm font-bold text-stone-500">
-                    {currency.format(item.price)}
-                  </p>
-                </div>
-                <div className="flex items-center gap-1">
-                  <CartQuantityButton
-                    label="Restar"
-                    onClick={() => updateCartItem(mesaId, item, -1)}
-                  >
-                    <Minus className="h-4 w-4" />
-                  </CartQuantityButton>
-                  <span className="w-7 text-center text-sm font-black">{item.quantity}</span>
-                  <CartQuantityButton
-                    label="Sumar"
-                    onClick={() => updateCartItem(mesaId, item, 1)}
-                  >
-                    <Plus className="h-4 w-4" />
-                  </CartQuantityButton>
-                </div>
-              </div>
-              <div className="mt-3 grid gap-2">
-                <input
-                  className="h-11 rounded-2xl border border-stone-200 bg-stone-50 px-3 text-sm font-semibold outline-none focus:border-orange-400"
-                  value={item.notes ?? ''}
-                  onChange={(event) => setCartItemNote(mesaId, item.id, event.target.value)}
-                  placeholder="Nota: sin mayo, sin cebolla..."
-                />
-                <button
-                  type="button"
-                  onClick={() => removeFromCart(mesaId, item.id)}
-                  className="inline-flex w-fit items-center gap-2 text-sm font-black text-rose-600"
-                >
-                  <Trash2 className="h-4 w-4" />
-                  Quitar
-                </button>
-              </div>
-            </div>
-          ))
-        ) : (
-          <div className="rounded-2xl border border-dashed border-stone-300 bg-stone-50 p-5 text-center">
-            <ShoppingBag className="mx-auto h-8 w-8 text-stone-300" />
-            <p className="mt-2 font-black text-stone-950">Tu pedido esta vacio</p>
-            <p className="text-sm text-stone-500">Agrega productos del menu para comenzar.</p>
-          </div>
-        )}
-      </div>
-
-      <label className="grid gap-2">
-        <span className="inline-flex items-center gap-2 text-sm font-black text-stone-700">
-          <MessageSquare className="h-4 w-4" />
-          Nota general
-        </span>
-        <textarea
-          className="min-h-24 rounded-2xl border border-stone-200 bg-stone-50 p-3 text-sm font-semibold outline-none focus:border-orange-400"
-          value={customerNote}
-          onChange={(event) => setCustomerNote(event.target.value)}
-          placeholder="Ej: una bebida sin hielo, traer cubiertos..."
-        />
-      </label>
-
-      <div className="grid gap-2 rounded-2xl bg-stone-50 p-3">
-        <p className="text-sm font-black text-stone-700">Propina sugerida</p>
-        <div className="grid grid-cols-3 gap-2">
-          {[0, 10, 15].map((tip) => (
-            <button
-              key={tip}
-              type="button"
-              onClick={() => setCartTip(mesaId, tip)}
-              className={`rounded-2xl px-3 py-2 text-sm font-black ${
-                (cart.tipPercent ?? 10) === tip
-                  ? 'bg-stone-950 text-white'
-                  : 'bg-white text-stone-600 ring-1 ring-stone-200'
-              }`}
-            >
-              {tip}%
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="grid gap-2 rounded-2xl border border-stone-200 p-4 text-sm font-bold text-stone-500">
-        <CartTotalLine label="Subtotal" value={subtotal} />
-        <CartTotalLine label="Descuento" value={-discount} />
-        <CartTotalLine label="Propina" value={tipAmount} />
-        <div className="mt-2 flex items-center justify-between border-t border-stone-200 pt-3 text-lg font-black text-stone-950">
-          <span>Total</span>
-          <span>{currency.format(total)}</span>
-        </div>
-      </div>
-
-      <button
-        type="button"
-        onClick={onSubmit}
-        disabled={!cart.items.length}
-        className="h-14 rounded-2xl bg-orange-500 text-base font-black text-stone-950 shadow-lg shadow-orange-100 transition hover:bg-orange-400 disabled:cursor-not-allowed disabled:bg-stone-200 disabled:text-stone-400"
-      >
-        Enviar pedido
-      </button>
-    </div>
-  )
-}
-
-function CartQuantityButton({ label, onClick, children }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="grid h-8 w-8 place-items-center rounded-full bg-stone-100 text-stone-700"
-      aria-label={label}
-    >
-      {children}
-    </button>
-  )
-}
-
-function CartTotalLine({ label, value }) {
-  return (
-    <div className="flex items-center justify-between">
-      <span>{label}</span>
-      <span>{currency.format(value)}</span>
-    </div>
-  )
-}
-
-function OrderStatus({ order }) {
-  const steps = [
-    { key: 'Pendiente', label: 'Pedido recibido', icon: ClipboardList, description: 'Tu pedido fue enviado a cocina' },
-    { key: 'En preparación', label: 'Preparando', icon: ChefHat, description: 'El chef está preparando tu orden' },
-    { key: 'Listo', label: '¡Listo!', icon: CheckCircle2, description: 'Tu pedido está listo para servir' },
-    { key: 'Entregado', label: 'Entregado', icon: ShoppingBag, description: '¡Buen provecho!' },
-  ]
-  const normalizedStatus = order.status === 'En preparaciÃ³n' ? 'En preparación' : order.status
-  const activeIndex = Math.max(0, steps.findIndex((s) => s.key === normalizedStatus))
-  const ActiveIcon = steps[activeIndex].icon
-
-  return (
-    <motion.section
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="overflow-hidden rounded-3xl border-2 border-orange-200 bg-gradient-to-br from-orange-50 via-white to-orange-50/80 p-5 shadow-lg shadow-orange-100/40"
-    >
-      <div className="mb-5 flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-orange-700">
-            Seguimiento en vivo
-          </p>
-          <h2 className="mt-1 text-2xl font-black text-stone-950">
-            Pedido #{order.number}
-          </h2>
-          <p className="mt-1 text-sm text-stone-500">
-            {order.tableLabel} · {formatTime(order.createdAt)}
-          </p>
-        </div>
-        <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-orange-500 text-white shadow-lg shadow-orange-200">
-          <ActiveIcon size={24} />
-        </div>
-      </div>
-
-      <div className="relative mb-5">
-        <div className="h-2.5 rounded-full bg-stone-200">
-          <motion.div
-            className="h-2.5 rounded-full bg-gradient-to-r from-orange-400 to-orange-600"
-            initial={{ width: '0%' }}
-            animate={{ width: `${((activeIndex + 1) / steps.length) * 100}%` }}
-            transition={{ duration: 0.8, ease: 'easeOut' }}
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-4 gap-1">
-        {steps.map((step, index) => {
-          const Icon = step.icon
-          const isActive = index === activeIndex
-          const isCompleted = index < activeIndex
-
-          return (
-            <div key={step.key} className="flex flex-col items-center gap-2 text-center">
-              <div
-                className={`relative grid h-11 w-11 place-items-center rounded-xl transition-all duration-500 ${
-                  isCompleted
-                    ? 'bg-orange-500 text-white shadow-md shadow-orange-200'
-                    : isActive
-                      ? 'bg-orange-500 text-white shadow-lg shadow-orange-200 ring-4 ring-orange-100'
-                      : 'bg-stone-100 text-stone-400'
-                }`}
-              >
-                <Icon size={20} />
-                {isActive ? (
-                  <span className="absolute -right-1 -top-1 h-3.5 w-3.5 animate-pulse rounded-full border-2 border-white bg-orange-400" />
-                ) : null}
-              </div>
-              <div>
-                <p
-                  className={`text-xs font-black leading-tight ${
-                    isCompleted || isActive ? 'text-orange-800' : 'text-stone-400'
-                  }`}
-                >
-                  {step.label}
-                </p>
-                {isActive ? (
-                  <p className="mt-0.5 text-[0.65rem] font-semibold leading-tight text-orange-600">
-                    {step.description}
-                  </p>
-                ) : null}
-              </div>
-            </div>
-          )
-        })}
-      </div>
-    </motion.section>
-  )
-}
-
-function ToastNotification({ text }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 18 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="fixed left-1/2 top-4 z-[60] flex -translate-x-1/2 items-center gap-2 rounded-full bg-stone-950 px-4 py-3 text-sm font-black text-white shadow-2xl"
-    >
-      <CheckCircle2 className="h-5 w-5 text-orange-400" />
-      {text}
-    </motion.div>
   )
 }
 
@@ -3027,7 +2155,7 @@ function KitchenPage() {
 
       <section className="flex flex-col justify-between gap-4 rounded-xl border border-stone-200 bg-white p-5 shadow-soft sm:flex-row sm:items-center">
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-orange-600">KDS</p>
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-brand-600">KDS</p>
           <h1 className="mt-2 text-3xl font-black text-stone-950">Cocina en tiempo real</h1>
         </div>
         <div className="grid grid-cols-2 gap-2 sm:flex">
@@ -3084,7 +2212,7 @@ function KitchenPage() {
                 key={order.id}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className={`grid gap-4 rounded-xl border bg-white p-4 shadow-soft xl:grid-cols-[210px_minmax(260px,1fr)_minmax(220px,0.8fr)_260px] xl:items-center transition-all duration-700 ${getKitchenBorderClass(order.status)} ${fadingOrders.has(order.id) ? 'scale-95 opacity-40 bg-orange-50 border-orange-400' : ''}`}
+                className={`grid gap-4 rounded-xl border bg-white p-4 shadow-soft xl:grid-cols-[210px_minmax(260px,1fr)_minmax(220px,0.8fr)_260px] xl:items-center transition-all duration-700 ${getKitchenBorderClass(order.status)} ${fadingOrders.has(order.id) ? 'scale-95 opacity-40 bg-brand-50 border-brand-400' : ''}`}
               >
                 <div className="grid gap-2">
                   <div>
@@ -3153,14 +2281,14 @@ function KitchenPage() {
                   {order.status === 'Pendiente' || order.status === 'En preparación' ? (
                     <button
                       type="button"
-                      className="rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 font-black text-orange-700"
+                      className="rounded-lg border border-brand-200 bg-brand-50 px-4 py-3 font-black text-brand-700"
                       onClick={() => handleMarkReady(order.id)}
                     >
                       Listo
                     </button>
                   ) : null}
                   {fadingOrders.has(order.id) ? (
-                    <div className="flex items-center justify-center gap-2 rounded-lg bg-orange-500 px-4 py-3 font-black text-white">
+                    <div className="flex items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-3 font-black text-white">
                       <CheckCircle2 size={18} />
                       Moviendo a pedidos de hoy...
                     </div>
@@ -3169,10 +2297,10 @@ function KitchenPage() {
               </motion.article>
             ))
           ) : (
-            <div className="rounded-xl border-2 border-dashed border-orange-300 bg-orange-50 p-10 text-center">
-              <CheckCircle2 className="mx-auto h-14 w-14 text-orange-400" />
-              <strong className="mt-4 block text-xl text-orange-800">¡Todo al día!</strong>
-              <p className="mt-1 text-orange-600">No hay pedidos pendientes en cocina.</p>
+            <div className="rounded-xl border-2 border-dashed border-brand-300 bg-brand-50 p-10 text-center">
+              <CheckCircle2 className="mx-auto h-14 w-14 text-brand-400" />
+              <strong className="mt-4 block text-xl text-brand-900">¡Todo al día!</strong>
+              <p className="mt-1 text-brand-600">No hay pedidos pendientes en cocina.</p>
             </div>
           )}
         </section>
@@ -3486,7 +2614,7 @@ function AdminDashboard() {
     <div className="grid gap-5 w-full">
       <section className="flex flex-col justify-between gap-4 rounded-xl border border-stone-200 bg-white p-5 shadow-soft sm:flex-row sm:items-center">
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-orange-600">
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-brand-600">
             Panel administrador
           </p>
           <h1 className="mt-2 text-3xl font-black tracking-normal text-stone-950 sm:text-4xl">
@@ -3496,7 +2624,7 @@ function AdminDashboard() {
             Ventas, cocina, pedidos y catalogo en una vista de operacion diaria.
           </p>
         </div>
-        <div className="flex items-center gap-2 rounded-lg border border-orange-100 bg-orange-50 px-3 py-2 text-sm font-bold text-orange-700">
+        <div className="flex items-center gap-2 rounded-lg border border-brand-100 bg-brand-50 px-3 py-2 text-sm font-bold text-brand-700">
           <CheckCircle2 size={18} />
           {remoteMode ? 'Supabase conectado' : 'Modo local'}
         </div>
@@ -3566,7 +2694,7 @@ function AdminDashboard() {
                       <p className="text-sm text-stone-500">{item.quantity} vendidos</p>
                     </div>
                   </div>
-                  <span className="text-sm font-black text-orange-600">
+                  <span className="text-sm font-black text-brand-600">
                     {currency.format(item.total)}
                   </span>
                 </div>
@@ -3660,14 +2788,14 @@ function AdminProductsPage() {
         >
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.16em] text-orange-600">
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-brand-600">
                 Editor
               </p>
               <h2 className="text-xl font-black">
                 {form.id ? 'Editar producto' : 'Nuevo producto'}
               </h2>
             </div>
-            <Package className="text-orange-600" size={24} />
+            <Package className="text-brand-600" size={24} />
           </div>
 
           <div className="grid gap-3">
@@ -3766,7 +2894,7 @@ function AdminProductsPage() {
             <label className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" size={18} />
               <input
-                className="w-full rounded-lg border border-stone-200 bg-stone-50 py-3 pl-10 pr-3 outline-none focus:border-orange-500"
+                className="w-full rounded-lg border border-stone-200 bg-stone-50 py-3 pl-10 pr-3 outline-none focus:border-brand-500"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Buscar producto..."
@@ -3878,7 +3006,7 @@ function AdminCategoriesPage() {
             {state.categories.map((category) => (
               <div key={category.id} className="min-w-0 rounded-lg border border-stone-200 bg-stone-50 p-4">
                 <div className="flex items-center gap-3">
-                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-orange-100 text-orange-700">
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-brand-100 text-brand-700">
                     <Tags size={19} />
                   </span>
                   <div className="min-w-0">
@@ -3947,7 +3075,7 @@ function AdminPromotionsPage() {
             <h2 className="text-xl font-black text-stone-950">
               {promo.id ? 'Editar promocion' : 'Nueva promocion'}
             </h2>
-            <BadgePercent className="text-orange-600" size={26} />
+            <BadgePercent className="text-brand-600" size={26} />
           </div>
           <div className="grid gap-3">
             <label className="field">
@@ -4010,7 +3138,7 @@ function AdminPromotionsPage() {
               <h2 className="text-xl font-black text-stone-950">Promociones visibles</h2>
               <p className="text-sm text-stone-500">Esto es lo que aparece al cliente en el menu.</p>
             </div>
-            <span className="rounded-full bg-orange-50 px-3 py-1 text-sm font-black text-orange-700">
+            <span className="rounded-full bg-brand-50 px-3 py-1 text-sm font-black text-brand-700">
               {promoProducts.length} activas
             </span>
           </div>
@@ -4214,10 +3342,10 @@ function AdminReservationsPage() {
         <form className="rounded-xl border border-stone-200 bg-white p-5 shadow-soft" onSubmit={handleSubmit}>
           <div className="mb-4 flex items-center justify-between">
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.16em] text-orange-600">Nueva</p>
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-brand-600">Nueva</p>
               <h2 className="text-xl font-black text-stone-950">Crear reserva</h2>
             </div>
-            <CalendarDays className="text-orange-600" size={24} />
+            <CalendarDays className="text-brand-600" size={24} />
           </div>
           <div className="grid gap-3">
             <label className="field">
@@ -4476,10 +3604,10 @@ function AdminUsersPage() {
         <form className="rounded-xl border border-stone-200 bg-white p-5 shadow-soft" onSubmit={handleSubmit}>
           <div className="mb-4 flex items-center justify-between">
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.16em] text-orange-600">Nuevo</p>
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-brand-600">Nuevo</p>
               <h2 className="text-xl font-black text-stone-950">Crear usuario</h2>
             </div>
-            <UserPlus className="text-orange-600" size={24} />
+            <UserPlus className="text-brand-600" size={24} />
           </div>
           <div className="grid gap-3">
             <label className="field">
@@ -4859,7 +3987,7 @@ function AdminReportsPage() {
             <MetricLine label="Ventas totales" value={currency.format(state.orders.reduce((sum, order) => sum + order.total, 0))} />
             <MetricLine label="Pedidos" value={state.orders.length} />
             <MetricLine label="Ticket promedio" value={currency.format(state.orders.length ? state.orders.reduce((sum, order) => sum + order.total, 0) / state.orders.length : 0)} />
-            <MetricLine label="Tendencia" value={<span className="inline-flex items-center gap-1 text-orange-600"><TrendingUp size={16} /> Operativa</span>} />
+            <MetricLine label="Tendencia" value={<span className="inline-flex items-center gap-1 text-brand-600"><TrendingUp size={16} /> Operativa</span>} />
           </div>
         </DashboardPanel>
       </section>
@@ -5067,9 +4195,9 @@ function QrTableCard({ table }) {
           <div className={`mb-2 inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-black uppercase tracking-[0.12em] ${
             isOccupied
               ? 'bg-rose-50 text-rose-700'
-              : 'bg-orange-50 text-orange-700'
+              : 'bg-brand-50 text-brand-700'
           }`}>
-            <span className={`h-2 w-2 rounded-full ${isOccupied ? 'bg-rose-500 animate-pulse' : 'bg-orange-500'}`} />
+            <span className={`h-2 w-2 rounded-full ${isOccupied ? 'bg-rose-500 animate-pulse' : 'bg-brand-500'}`} />
             {isOccupied ? `Ocupada · ${tableActiveOrders.length} pedido${tableActiveOrders.length > 1 ? 's' : ''}` : 'Libre'}
           </div>
           <h2 className="text-xl font-black text-stone-950">{table.label}</h2>
@@ -5086,7 +4214,7 @@ function QrTableCard({ table }) {
 
       {/* Waiter badge - prominent */}
       {tableWaiter ? (
-        <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-teal-50 p-3">
+        <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-brand-50 p-3">
           <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-emerald-500 text-white shadow-md shadow-emerald-200">
             <User size={20} />
           </div>
@@ -5112,7 +4240,7 @@ function QrTableCard({ table }) {
       ) : null}
 
       {isOccupied && elapsed ? (
-        <div className="flex items-center gap-3 rounded-xl border border-rose-200 bg-gradient-to-r from-rose-50 to-orange-50 p-3">
+        <div className="flex items-center gap-3 rounded-xl border border-rose-200 bg-gradient-to-r from-rose-50 to-brand-50 p-3">
           <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-rose-500 text-white shadow-md shadow-rose-200">
             <Timer size={20} />
           </div>
@@ -5176,7 +4304,7 @@ function AdminPageHeader({ eyebrow, title, description, action }) {
   return (
     <section className="flex flex-col justify-between gap-4 rounded-xl border border-stone-200 bg-white p-5 shadow-soft sm:flex-row sm:items-center">
       <div>
-        <p className="text-xs font-black uppercase tracking-[0.18em] text-orange-600">
+        <p className="text-xs font-black uppercase tracking-[0.18em] text-brand-600">
           {eyebrow}
         </p>
         <h1 className="mt-2 text-3xl font-black text-stone-950 sm:text-4xl">{title}</h1>
@@ -5205,10 +4333,10 @@ function DashboardPanel({ title, action, children }) {
 
 function MetricCard({ icon: Icon, label, value, tone }) {
   const tones = {
-    emerald: 'bg-orange-50 text-orange-700',
+    emerald: 'bg-brand-50 text-brand-700',
     blue: 'bg-amber-50 text-amber-700',
     amber: 'bg-amber-50 text-amber-700',
-    green: 'bg-orange-50 text-orange-700',
+    green: 'bg-brand-50 text-brand-700',
   }
 
   return (
@@ -5255,7 +4383,7 @@ function ProductTableRow({ product, onEdit, onToggle, onDelete }) {
         <button
           type="button"
           className={`rounded-full px-3 py-1 text-sm font-black ${
-            product.available ? 'bg-orange-50 text-orange-700' : 'bg-rose-50 text-rose-700'
+            product.available ? 'bg-brand-50 text-brand-700' : 'bg-rose-50 text-rose-700'
           }`}
           onClick={() => void onToggle(product.id)}
         >
@@ -5289,7 +4417,7 @@ function ProductAdminCard({ product, onEdit, onToggle, onDelete }) {
           <button
             type="button"
             className={`rounded-full px-3 py-1 text-sm font-black ${
-              product.available ? 'bg-orange-50 text-orange-700' : 'bg-rose-50 text-rose-700'
+              product.available ? 'bg-brand-50 text-brand-700' : 'bg-rose-50 text-rose-700'
             }`}
             onClick={() => void onToggle(product.id)}
           >
@@ -5364,111 +4492,6 @@ function StatCard({ label, value }) {
       <strong>{value}</strong>
     </article>
   )
-}
-
-function SyncBanner({ text, warning = false }) {
-  return <div className={warning ? 'sync-banner sync-banner-warning' : 'sync-banner'}>{text}</div>
-}
-
-function formatTime(dateValue) {
-  return new Date(dateValue).toLocaleTimeString('es-CL', {
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
-function elapsedMinutes(dateValue) {
-  return Math.max(0, Math.floor((Date.now() - new Date(dateValue).getTime()) / 60000))
-}
-
-function slugify(value) {
-  return value
-    .toLowerCase()
-    .replaceAll(' ', '-')
-    .replaceAll('ó', 'o')
-    .replaceAll('í', 'i')
-}
-
-function getKitchenBorderClass(status) {
-  const classes = {
-    Pendiente: 'border-amber-300 shadow-amber-100',
-    'En preparación': 'border-amber-300 shadow-amber-100',
-    Listo: 'border-orange-300 shadow-orange-100',
-    Entregado: 'border-stone-200',
-    Cancelado: 'border-rose-300 shadow-rose-100',
-  }
-  return classes[status] ?? 'border-stone-200'
-}
-
-function buildSalesChartData(orders) {
-  const dayFormatter = new Intl.DateTimeFormat('es-CL', { weekday: 'short' })
-  const days = Array.from({ length: 7 }, (_, index) => {
-    const date = new Date()
-    date.setDate(date.getDate() - (6 - index))
-    return {
-      key: date.toISOString().slice(0, 10),
-      day: dayFormatter.format(date).replace('.', ''),
-      ventas: 0,
-    }
-  })
-  const byDay = new Map(days.map((day) => [day.key, day]))
-
-  orders.forEach((order) => {
-    const key = new Date(order.createdAt).toISOString().slice(0, 10)
-    if (byDay.has(key)) {
-      byDay.get(key).ventas += order.total
-    }
-  })
-
-  const statuses = ['Pendiente', 'En preparación', 'Listo', 'Entregado', 'Cancelado']
-  return {
-    sales: days,
-    status: statuses.map((status) => ({
-      estado: status === 'En preparación' ? 'Prep.' : status,
-      pedidos: orders.filter((order) => order.status === status).length,
-    })),
-  }
-}
-
-function getTopProducts(orders) {
-  const totals = new Map()
-  orders.forEach((order) => {
-    order.items.forEach((item) => {
-      const current = totals.get(item.name) ?? { name: item.name, quantity: 0, total: 0 }
-      current.quantity += item.quantity
-      current.total += item.quantity * item.price
-      totals.set(item.name, current)
-    })
-  })
-  return [...totals.values()].sort((left, right) => right.quantity - left.quantity)
-}
-
-function usePageTitle(title) {
-  const location = useLocation()
-
-  useEffect(() => {
-    document.title = title
-  }, [location.pathname, title])
-}
-
-function formatTableName(mesaId) {
-  const number = mesaId.replace('mesa-', '').padStart(2, '0')
-  return `Mesa ${number}`
-}
-
-function createBlankProductForm(categories) {
-  return {
-    id: '',
-    name: '',
-    description: '',
-    price: 0,
-    category: categories[0]?.name ?? 'Pizzas',
-    image: '',
-    available: true,
-    featured: false,
-    vegetarian: false,
-    prepTime: 15,
-  }
 }
 
 export default App
