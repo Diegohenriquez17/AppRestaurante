@@ -5,7 +5,7 @@ function norm(s) {
   return (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
 }
 
-export function getFoodKind(category, name) {
+function getFoodKind(category, name) {
   const c = norm(category)
   const n = norm(name)
   const hit = (re) => re.test(c) || re.test(n)

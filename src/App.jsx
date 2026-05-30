@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/set-state-in-effect, react-hooks/purity */
-import { Component, useEffect, useRef, useState, useMemo } from 'react'
+import { Component, useEffect, useRef, useState } from 'react'
 import QRCode from 'qrcode'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -12,9 +12,6 @@ import {
   Tooltip,
   XAxis,
   YAxis,
-  Cell,
-  Pie,
-  PieChart,
 } from 'recharts'
 import {
   Activity,
@@ -27,7 +24,6 @@ import {
   Check,
   ClipboardList,
   Clock3,
-  Clock,
   CreditCard,
   DollarSign,
   Download,
@@ -42,7 +38,6 @@ import {
   LogOut,
   Menu,
   MessageSquare,
-  Minus,
   Package,
   Pencil,
   Plus,
@@ -56,22 +51,14 @@ import {
   Timer,
   Trash2,
   TrendingUp,
-  TrendingDown,
   User,
   UserCog,
   UserPlus,
   Users,
   X,
-  XCircle,
   Building,
   Shield,
   Sparkles,
-  Coins,
-  Laptop,
-  Smartphone,
-  Globe,
-  FileText,
-  Zap,
   AlertTriangle,
 } from 'lucide-react'
 import {
@@ -83,7 +70,6 @@ import {
   Routes,
   useLocation,
   useNavigate,
-  useParams,
 } from 'react-router-dom'
 import { useAppStore } from './store/AppStore.jsx'
 import { MenuPage } from './pages/MenuPage.jsx'
@@ -92,14 +78,12 @@ import {
   formatTime,
   elapsedMinutes,
   slugify,
-  formatTableName,
   getKitchenBorderClass,
   buildSalesChartData,
   getTopProducts,
   createBlankProductForm,
 } from './lib/format.js'
 import { usePageTitle } from './hooks/usePageTitle.js'
-import { SyncBanner } from './components/ui/SyncBanner.jsx'
 
 function CustomSelect({
   value,
@@ -1091,7 +1075,6 @@ function RestaurantSuperadmin() {
   const inactiveOrgs = organizations.filter(o => !(o.status || '').toLowerCase().includes('activ'))
   const todayOrders = (state.orders || []).filter(o => new Date(o.createdAt).toDateString() === new Date().toDateString())
   const dailySales = todayOrders.reduce((s, o) => s + Number(o.total || 0), 0)
-  const activeOrders = (state.orders || []).filter(o => ['Pendiente', 'En preparacion', 'Listo'].includes(o.status))
   const openTickets = DEMO_TICKETS.filter(t => t.status !== 'cerrado').length
   const urgentTickets = DEMO_TICKETS.filter(t => t.priority === 'alta')
 
