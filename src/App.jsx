@@ -1679,8 +1679,9 @@ function CajeroLayout() {
   const location = useLocation()
 
   const handleLogout = () => {
+    // Personal: logout suave, vuelve al teclado de PIN sin cerrar la empresa.
     logout()
-    navigate('/login', { replace: true })
+    navigate('/pin', { replace: true })
   }
 
   const navItems = [
@@ -1764,8 +1765,9 @@ function GarzonLayout() {
   const navigate = useNavigate()
 
   const handleLogout = () => {
+    // Personal: logout suave, vuelve al teclado de PIN sin cerrar la empresa.
     logout()
-    navigate('/login', { replace: true })
+    navigate('/pin', { replace: true })
   }
 
   return (
@@ -2098,7 +2100,7 @@ function KitchenPage() {
           </div>
           <button
             type="button"
-            onClick={() => { logout(); navigate('/login', { replace: true }) }}
+            onClick={() => { logout(); navigate('/pin', { replace: true }) }}
             className="inline-flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-black text-rose-700 transition hover:bg-rose-100"
           >
             <LogOut size={16} />

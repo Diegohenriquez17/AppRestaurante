@@ -92,6 +92,9 @@ function loadSessions() {
 export function AppStoreProvider({ children }) {
   const [state, setState] = useState(loadInitialState)
   const [currentUser, setCurrentUser] = useState(loadAuthUser)
+  // true cuando el usuario activo entró por PIN (empleado), no por el login de
+  // empresa. Determina si al cerrar sesión se mantiene la sesión del dispositivo.
+  const [actingViaPin, setActingViaPin] = useState(false)
   const [sessions, setSessions] = useState(loadSessions)
   const [organizations, setOrganizations] = useState([])
   const [currentOrganizationId, setCurrentOrganizationId] = useState(() => {
@@ -283,6 +286,7 @@ export function AppStoreProvider({ children }) {
             }
             const loggedUser = mapStaffProfile(data)
             setCurrentUser(loggedUser)
+            setActingViaPin(false) // login de empresa: es el dueño de la sesión del dispositivo
             localStorage.setItem(AUTH_KEY, JSON.stringify(loggedUser))
             
             if (loggedUser.role === 'superadmin') {
@@ -305,6 +309,7 @@ export function AppStoreProvider({ children }) {
                 organizationId: null,
               }
               setCurrentUser(superadminUser)
+              setActingViaPin(false)
               localStorage.setItem(AUTH_KEY, JSON.stringify(superadminUser))
               return superadminUser
             }
@@ -323,6 +328,7 @@ export function AppStoreProvider({ children }) {
         if (!user) return null
 
         setCurrentUser(user)
+        setActingViaPin(true) // empleado entrando por PIN sobre la sesión de empresa
         localStorage.setItem(AUTH_KEY, JSON.stringify(user))
 
         // Record session start
@@ -388,7 +394,11 @@ export function AppStoreProvider({ children }) {
         return { organization: newOrg, staff: staffPayload }
       },
       async logout() {
-        if (remoteMode) {
+        // Logout suave: si quien sale es un empleado que entró por PIN, se mantiene
+        // la sesión de empresa del dispositivo (no se cierra Supabase Auth) para que
+        // el siguiente empleado solo tenga que marcar su PIN. Solo el dueño de la
+        // sesión (login de empresa) cierra la sesión del dispositivo por completo.
+        if (remoteMode && !actingViaPin) {
           await signOutRemote()
         }
         if (currentUser && currentUser.role !== 'superadmin') {
@@ -423,6 +433,7 @@ export function AppStoreProvider({ children }) {
           })
         }
         setCurrentUser(null)
+        setActingViaPin(false)
         localStorage.removeItem(AUTH_KEY)
 
         // Clear impersonation if logging out
@@ -843,7 +854,7 @@ export function AppStoreProvider({ children }) {
         }))
       },
     }),
-    [currentUser, sessions, organizations, currentOrganizationId, impersonatedOrgId, isHydrating, remoteError, remoteMode, state],
+    [currentUser, actingViaPin, sessions, organizations, currentOrganizationId, impersonatedOrgId, isHydrating, remoteError, remoteMode, state],
   )
 
   return <AppStoreContext.Provider value={api}>{children}</AppStoreContext.Provider>
