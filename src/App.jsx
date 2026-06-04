@@ -430,9 +430,8 @@ function LoginPage({ initialMode = 'email' }) {
   const [shake, setShake] = useState(false)
   const inputRef = useRef(null)
 
-  const [orgSlugInput, setOrgSlugInput] = useState('')
-  const [orgSearchError, setOrgSearchError] = useState('')
-
+  // Deep-link opcional: ?org=slug fija la sucursal (p. ej. desde un QR del local).
+  // El acceso por PIN igualmente requiere que la empresa tenga sesión iniciada.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const orgParam = params.get('org') || params.get('sucursal')
@@ -448,27 +447,6 @@ function LoginPage({ initialMode = 'email' }) {
       }
     }
   }, [organizations, switchOrganization])
-
-  const handleVerifyOrg = () => {
-    if (!orgSlugInput.trim()) {
-      setOrgSearchError('Por favor ingresa el nombre o código de tu sucursal.')
-      return
-    }
-    const cleanInput = orgSlugInput.trim().toLowerCase()
-    const found = organizations
-      .filter((o) => o.slug !== 'empresa-jefe' && o.slug !== 'ncxo-plus' && o.slug !== 'prueba-de-cambio')
-      .find(
-        (o) =>
-          o.slug?.trim().toLowerCase() === cleanInput ||
-          o.name?.trim().toLowerCase() === cleanInput
-      )
-    if (found) {
-      switchOrganization(found.id)
-      setOrgSearchError('')
-    } else {
-      setOrgSearchError('No se encontró ninguna sucursal con ese nombre o código.')
-    }
-  }
 
   // Registration modal state
   const [showRegisterModal, setShowRegisterModal] = useState(false)
@@ -671,9 +649,9 @@ function LoginPage({ initialMode = 'email' }) {
               {loginMode === 'email' ? 'Administración' : 'Personal de Local'}
             </h1>
             <p className="mt-1.5 text-sm text-stone-500 font-semibold">
-              {loginMode === 'email' 
-                ? 'Ingresa las credenciales de tu empresa' 
-                : 'Selecciona tu sucursal e ingresa tu PIN de acceso'}
+              {loginMode === 'email'
+                ? 'Ingresa las credenciales de tu empresa'
+                : 'Ingresa tu PIN de acceso de 4 dígitos'}
             </p>
           </div>
 
@@ -746,66 +724,27 @@ function LoginPage({ initialMode = 'email' }) {
           ) : (
             /* PIN Staff Login Form */
             <form onSubmit={(e) => e.preventDefault()} className="mt-6 space-y-4">
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-stone-500 mb-1.5">
-                  Sucursal / Restaurante
-                </label>
-                {activeOrg ? (
-                  <div className="flex h-12 w-full items-center justify-between rounded-lg border border-brand-200 bg-brand-50/50 px-4 text-sm font-semibold text-brand-900">
-                    <div className="flex items-center gap-2">
-                      <Building className="h-4 w-4 text-brand-600" />
-                      <span>{activeOrg.name}</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        switchOrganization('')
-                        setOrgSlugInput('')
-                        setOrgSearchError('')
-                        setPin('')
-                      }}
-                      className="text-xs font-bold text-brand-600 hover:text-brand-900 hover:underline transition"
-                    >
-                      Cambiar
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <div className="relative">
-                      <Building className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
-                      <input
-                        type="text"
-                        placeholder="Escribe el nombre o código de tu sucursal"
-                        value={orgSlugInput}
-                        onChange={(e) => {
-                          setOrgSlugInput(e.target.value)
-                          setOrgSearchError('')
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault()
-                            handleVerifyOrg()
-                          }
-                        }}
-                        className="h-12 w-full rounded-lg border border-stone-200 bg-stone-50/50 pl-11 pr-4 text-sm font-semibold text-stone-800 outline-none transition focus:border-brand-500 focus:bg-white focus:ring-1 focus:ring-brand-500 placeholder:text-stone-400"
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleVerifyOrg}
-                      className="h-10 w-full rounded-lg bg-stone-800 hover:bg-stone-900 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 shadow"
-                    >
-                      Verificar Sucursal
-                    </button>
-                    {orgSearchError && (
-                      <p className="text-xs text-red-500 font-semibold">{orgSearchError}</p>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {activeOrg && (
+              {activeOrg ? (
                 <>
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-stone-500 mb-1.5">
+                      Sucursal / Restaurante
+                    </label>
+                    <div className="flex h-12 w-full items-center justify-between rounded-lg border border-brand-200 bg-brand-50/50 px-4 text-sm font-semibold text-brand-900">
+                      <div className="flex items-center gap-2">
+                        <Building className="h-4 w-4 text-brand-600" />
+                        <span>{activeOrg.name}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => navigate('/login')}
+                        className="text-xs font-bold text-brand-600 hover:text-brand-900 hover:underline transition"
+                      >
+                        Cambiar empresa
+                      </button>
+                    </div>
+                  </div>
+
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider text-stone-500 mb-1.5">
                       PIN de acceso (4 dígitos)
@@ -839,6 +778,24 @@ function LoginPage({ initialMode = 'email' }) {
                     ))}
                   </div>
                 </>
+              ) : (
+                /* Sin empresa activa en este dispositivo: el administrador debe
+                   iniciar sesión primero para habilitar el acceso por PIN. */
+                <div className="rounded-lg border border-stone-200 bg-stone-50 p-5 text-center space-y-3">
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-brand-50 text-brand-600 border border-brand-100">
+                    <Building size={20} />
+                  </div>
+                  <p className="text-sm font-semibold text-stone-600">
+                    Este dispositivo aún no tiene una empresa activa. El administrador debe iniciar sesión primero para habilitar el acceso por PIN del personal.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/login')}
+                    className="h-11 w-full rounded-lg bg-stone-800 hover:bg-stone-900 text-white text-sm font-bold transition"
+                  >
+                    Iniciar sesión de empresa
+                  </button>
+                </div>
               )}
             </form>
           )}
@@ -984,6 +941,17 @@ function LoginPage({ initialMode = 'email' }) {
 }
 
 
+// Organizaciones internas/operadoras del SaaS (NO son clientes).
+// Regla del producto: toda empresa que se registra es un cliente. Estas son la
+// operadora (donde vive el superadmin) y otras orgs de sistema/demo.
+const OPERATOR_ORG_SLUGS = ['acrodevs-admin', 'empresa-jefe']
+
+function isClientOrg(org) {
+  if (!org) return false
+  if (org.is_operator || org.type === 'operator') return false
+  return !OPERATOR_ORG_SLUGS.includes((org.slug || '').toLowerCase())
+}
+
 // ─── Datos demo para el superadmin ────────────────────────────────────────────
 const DEMO_TICKETS = [
   { id: 't1', restaurant: 'Restaurante Guaton XII', subject: 'Error al imprimir comandas', priority: 'alta', status: 'abierto', created: new Date(Date.now() - 90*60000).toISOString(), sla: 4, assignee: 'Diego H.' },
@@ -1071,19 +1039,21 @@ function RestaurantSuperadmin() {
 
   usePageTitle('Superadmin | AcroDevs SV')
 
-  const totalMrr = organizations.reduce((s, o) => s + Number(o.mrr || 0), 0)
-  const activeOrgs = organizations.filter(o => (o.status || '').toLowerCase().includes('activ'))
-  const inactiveOrgs = organizations.filter(o => !(o.status || '').toLowerCase().includes('activ'))
+  // Solo las empresas cliente cuentan para metricas y listados (la operadora se excluye).
+  const clientOrgs = organizations.filter(isClientOrg)
+  const totalMrr = clientOrgs.reduce((s, o) => s + Number(o.mrr || 0), 0)
+  const activeOrgs = clientOrgs.filter(o => (o.status || '').toLowerCase().includes('activ'))
+  const inactiveOrgs = clientOrgs.filter(o => !(o.status || '').toLowerCase().includes('activ'))
   const todayOrders = (state.orders || []).filter(o => new Date(o.createdAt).toDateString() === new Date().toDateString())
   const dailySales = todayOrders.reduce((s, o) => s + Number(o.total || 0), 0)
   const openTickets = DEMO_TICKETS.filter(t => t.status !== 'cerrado').length
   const urgentTickets = DEMO_TICKETS.filter(t => t.priority === 'alta')
 
-  const filteredOrgs = organizations.filter(o =>
+  const filteredOrgs = clientOrgs.filter(o =>
     (o.name + ' ' + o.slug + ' ' + (o.rut || '')).toLowerCase().includes(searchQuery.toLowerCase())
   )
 
-  const mrrByPlan = organizations.reduce((acc, o) => {
+  const mrrByPlan = clientOrgs.reduce((acc, o) => {
     const p = o.plan || 'Basico'
     acc[p] = (acc[p] || 0) + Number(o.mrr || 0)
     return acc
@@ -1229,7 +1199,7 @@ function RestaurantSuperadmin() {
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               {[
                 { label: 'MRR Total', value: fmtCLP(totalMrr), sub: '+12% vs mes anterior', icon: TrendingUp, color: '#c2553d' },
-                { label: 'Restaurantes activos', value: activeOrgs.length, sub: inactiveOrgs.length + ' suspendidos · ' + organizations.length + ' total', icon: Building, color: '#7c3aed' },
+                { label: 'Restaurantes activos', value: activeOrgs.length, sub: inactiveOrgs.length + ' suspendidos · ' + clientOrgs.length + ' total', icon: Building, color: '#7c3aed' },
                 { label: 'Pedidos hoy', value: todayOrders.length, sub: fmtCLP(dailySales) + ' en ventas', icon: ShoppingBag, color: '#f59e0b' },
                 { label: 'Tickets soporte', value: openTickets, sub: urgentTickets.length + ' de alta prioridad', icon: MessageSquare, color: urgentTickets.length > 0 ? '#ef4444' : '#c2553d' },
               ].map(kpi => (
@@ -1443,7 +1413,7 @@ function RestaurantSuperadmin() {
                 { label: 'MRR Total', value: fmtCLP(totalMrr), trend: '+12%' },
                 { label: 'ARR Estimado', value: fmtCLP(totalMrr * 12), trend: '+12%' },
                 { label: 'Churn Rate', value: '2.4%', trend: '-0.3%' },
-                { label: 'ARPU', value: fmtCLP(organizations.length ? Math.round(totalMrr / organizations.length) : 0), trend: '+5%' },
+                { label: 'ARPU', value: fmtCLP(clientOrgs.length ? Math.round(totalMrr / clientOrgs.length) : 0), trend: '+5%' },
               ].map(k => (
                 <div key={k.label} className="rounded-2xl bg-white border border-stone-200/80 p-5 shadow-sm">
                   <p className="text-[10px] font-black uppercase tracking-wider text-stone-400">{k.label}</p>
@@ -3737,14 +3707,14 @@ function AdminUsersPage() {
                       <div className="min-w-0 flex-1">
                         <p className="text-[0.6rem] font-black uppercase tracking-[0.1em] text-blue-600">Link de acceso</p>
                         <p className="truncate text-xs font-mono text-blue-800">
-                          {window.location.origin}/login → PIN: {revealedPins.has(user.id) ? user.pin : '••••'}
+                          {window.location.origin}/pin → PIN: {revealedPins.has(user.id) ? user.pin : '••••'}
                         </p>
                       </div>
                       <button
                         type="button"
                         className="shrink-0 rounded-md border border-blue-200 bg-white px-2 py-1 text-[0.65rem] font-black text-blue-700 transition hover:bg-blue-100"
                         onClick={() => {
-                          void navigator.clipboard?.writeText(`${window.location.origin}/login — PIN: ${user.pin} (${cfg.label}: ${user.name})`)
+                          void navigator.clipboard?.writeText(`${window.location.origin}/pin — PIN: ${user.pin} (${cfg.label}: ${user.name})`)
                         }}
                         title="Copiar link + PIN"
                       >
@@ -4040,7 +4010,7 @@ function AdminReportsPage() {
         </div>
 
         <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm text-blue-700">
-          <strong>Login:</strong> Todos los usuarios acceden desde <code className="rounded bg-blue-100 px-1.5 py-0.5 font-mono text-xs">{window.location.origin}/login</code> ingresando su PIN de 4 dígitos.
+          <strong>Login:</strong> El personal accede desde <code className="rounded bg-blue-100 px-1.5 py-0.5 font-mono text-xs">{window.location.origin}/pin</code> ingresando su PIN de 4 dígitos (la empresa debe tener sesión iniciada en el dispositivo). El administrador entra con correo y contraseña desde <code className="rounded bg-blue-100 px-1.5 py-0.5 font-mono text-xs">{window.location.origin}/login</code>.
         </div>
       </section>
     </div>

@@ -340,9 +340,12 @@ export function AppStoreProvider({ children }) {
         return user
       },
       async registerRestaurant(restaurantName, adminName, adminEmail, adminPassword) {
+        // Regla del producto: toda empresa registrada es un CLIENTE. Siempre se crea
+        // como organizacion nueva con un admin de rol 'administrador' (nunca superadmin),
+        // plan 'Básico' y estado 'Activo'.
         if (remoteMode) {
           // Supabase Auth handles password hashing; the register_restaurant RPC
-          // atomically creates the org, settings and admin staff profile.
+          // atomically creates the org, settings and admin staff profile (rol administrador).
           const { organization, staff } = await registerRestaurantRemote(
             restaurantName,
             adminName,
@@ -358,7 +361,7 @@ export function AppStoreProvider({ children }) {
         const newOrg = {
           name: restaurantName,
           slug,
-          plan: 'Basico',
+          plan: 'Básico',
           status: 'Activo',
           rut: '',
           mrr: 0,
