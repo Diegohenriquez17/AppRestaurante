@@ -1,5 +1,6 @@
+import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Clock3, Flame, Leaf, Plus, Star } from 'lucide-react'
+import { Clock3, Flame, Info, Leaf, Plus, RotateCcw, Star } from 'lucide-react'
 import { currency } from '../../lib/format.js'
 import { FoodArt } from './FoodArt.jsx'
 
@@ -108,6 +109,148 @@ export function ProductRow({ index, product, quantity, onAdd }) {
         </button>
       </div>
     </motion.article>
+  )
+}
+
+// Tarjeta grande que se voltea (flip 3D) al tocarla para revelar
+// ingredientes/detalles. El "+" agrega al carrito sin voltear.
+export function FlipCard({ product, quantity, onAdd }) {
+  const [flipped, setFlipped] = useState(false)
+  const stop = (e, fn) => {
+    e.stopPropagation()
+    fn?.()
+  }
+  return (
+    <div className="group h-full [perspective:1400px]">
+      <button
+        type="button"
+        onClick={() => setFlipped((v) => !v)}
+        aria-label={`Ver información de ${product.name}`}
+        className="relative block aspect-[5/7] w-full cursor-pointer rounded-[1.6rem] text-left transition-transform duration-500 [transform-style:preserve-3d]"
+        style={flipped ? { transform: 'rotateY(180deg)' } : undefined}
+      >
+        {/* CARA FRONTAL */}
+        <div className="absolute inset-0 flex flex-col overflow-hidden rounded-[1.6rem] bg-white shadow-warm ring-1 ring-cream-200 [backface-visibility:hidden]">
+          <div className="relative flex-1 overflow-hidden">
+            {product.image ? (
+              <img
+                src={product.image}
+                alt={product.name}
+                className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+              />
+            ) : (
+              <FoodArt
+                category={product.category}
+                name={product.name}
+                className="h-full w-full transition duration-500 group-hover:scale-105"
+                iconClassName="h-1/3 w-1/3"
+              />
+            )}
+
+            {/* Botón girar / info (arriba-derecha) */}
+            <span
+              role="button"
+              tabIndex={-1}
+              onClick={(e) => stop(e, () => setFlipped(true))}
+              aria-label="Ver ingredientes"
+              className="absolute right-2.5 top-2.5 grid h-9 w-9 place-items-center rounded-full bg-white/85 text-ink shadow-sm backdrop-blur transition hover:bg-white active:scale-90"
+            >
+              <Info className="h-4 w-4" />
+            </span>
+
+            {quantity ? (
+              <span className="absolute left-2.5 top-2.5 rounded-full bg-brand-900/85 px-2.5 py-1 text-xs font-bold text-cream backdrop-blur">
+                ×{quantity}
+              </span>
+            ) : null}
+
+            {(product.featured || product.vegetarian) ? (
+              <div className="absolute bottom-2.5 left-2.5 flex flex-wrap gap-1.5">
+                {product.featured ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-cream/90 px-2 py-0.5 text-[0.6rem] font-bold uppercase tracking-wider text-brand-600 shadow-sm backdrop-blur">
+                    <Star className="h-2.5 w-2.5" /> Top
+                  </span>
+                ) : null}
+                {product.vegetarian ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-cream/90 px-2 py-0.5 text-[0.6rem] font-bold uppercase tracking-wider text-emerald-600 shadow-sm backdrop-blur">
+                    <Leaf className="h-2.5 w-2.5" /> Veg
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+
+          <div className="flex items-end justify-between gap-2 p-4">
+            <div className="min-w-0">
+              <h3 className="truncate font-display text-[1.05rem] font-semibold leading-tight text-ink">
+                {product.name}
+              </h3>
+              <p className="mt-0.5 line-clamp-1 text-[0.8rem] italic text-ink-muted">
+                {product.description}
+              </p>
+              <strong className="mt-1 block font-display text-xl font-semibold tabular-nums text-ink">
+                {currency.format(product.price)}
+              </strong>
+            </div>
+            <span
+              role="button"
+              tabIndex={-1}
+              onClick={(e) => stop(e, () => onAdd(product))}
+              aria-label={`Agregar ${product.name}`}
+              className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-brand-500 text-white shadow-glow transition hover:bg-brand-600 active:scale-90"
+            >
+              <Plus className="h-5 w-5" />
+            </span>
+          </div>
+        </div>
+
+        {/* CARA TRASERA */}
+        <div
+          className="absolute inset-0 flex flex-col overflow-hidden rounded-[1.6rem] p-4 text-cream shadow-warm [backface-visibility:hidden]"
+          style={{
+            transform: 'rotateY(180deg)',
+            background:
+              'radial-gradient(circle at 100% 0%, rgba(217,150,65,0.30), transparent 55%), linear-gradient(150deg, #2a221c 0%, #3a2c22 100%)',
+          }}
+        >
+          <div className="flex items-start justify-between gap-2">
+            <h3 className="font-display text-lg font-semibold leading-tight">{product.name}</h3>
+            <span
+              role="button"
+              tabIndex={-1}
+              onClick={(e) => stop(e, () => setFlipped(false))}
+              aria-label="Volver"
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/10 text-cream transition hover:bg-white/20 active:scale-90"
+            >
+              <RotateCcw className="h-4 w-4" />
+            </span>
+          </div>
+
+          <p className="mt-3 text-[0.62rem] font-bold uppercase tracking-[0.25em] text-gold-300">
+            Ingredientes
+          </p>
+          <p className="mt-1 flex-1 overflow-y-auto text-sm leading-relaxed text-cream/80 [scrollbar-width:none]">
+            {product.description}
+          </p>
+
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-cream/70">
+            <span className="inline-flex items-center gap-1">
+              <Clock3 className="h-3.5 w-3.5" /> {product.prepTime} min
+            </span>
+            {product.vegetarian ? (
+              <span className="inline-flex items-center gap-1">
+                <Leaf className="h-3.5 w-3.5" /> Vegetariano
+              </span>
+            ) : null}
+            {product.featured ? (
+              <span className="inline-flex items-center gap-1">
+                <Star className="h-3.5 w-3.5" /> Destacado
+              </span>
+            ) : null}
+          </div>
+        </div>
+      </button>
+    </div>
   )
 }
 

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Search, User } from 'lucide-react'
 import { useAppStore } from '../store/AppStore.jsx'
@@ -10,10 +10,11 @@ import { MenuHeader } from '../components/menu/MenuHeader.jsx'
 import { MenuNavBar, MenuIndex } from '../components/menu/MenuNav.jsx'
 import {
   FeaturedDish,
-  ProductRow,
+  FlipCard,
   PromoBanner,
   SectionHeader,
 } from '../components/menu/ProductCards.jsx'
+import { ServiceGate } from '../components/menu/ServiceGate.jsx'
 import { CartContent, CartDrawer, FloatingCartButton } from '../components/menu/Cart.jsx'
 import { OrderStatus, ToastNotification } from '../components/menu/OrderStatus.jsx'
 
@@ -31,8 +32,22 @@ export function MenuPage({ isGarzon }) {
     setCartItemNote,
     setCartTip,
     currentUser,
+    organizations,
+    currentOrganizationId,
+    switchOrganization,
   } = useAppStore()
-  const { mesaId = 'mesa-01' } = useParams()
+  const { mesaId = 'mesa-01', orgSlug } = useParams()
+
+  // El QR del cliente trae la empresa en la URL (/menu/:orgSlug/:mesaId).
+  // Resolvemos el slug → organización y la activamos para cargar su menú.
+  useEffect(() => {
+    if (!orgSlug || !organizations.length) return
+    const found = organizations.find((o) => o.slug === orgSlug)
+    if (found && found.id !== currentOrganizationId) {
+      switchOrganization(found.id)
+    }
+  }, [orgSlug, organizations, currentOrganizationId, switchOrganization])
+
   const cart = getCartForTable(mesaId)
   usePageTitle(`Menu ${formatTableName(mesaId)} | ${state.restaurant.name}`)
   const [search, setSearch] = useState('')
@@ -41,6 +56,28 @@ export function MenuPage({ isGarzon }) {
   const [guestCount, setGuestCount] = useState(2)
   const [cartOpen, setCartOpen] = useState(false)
   const [toast, setToast] = useState('')
+
+  // Modo de servicio: 'mesa' | 'domicilio'. El garzón siempre opera por mesa.
+  const SVC_KEY = `lasthit-svc-${mesaId}`
+  const [serviceMode, setServiceMode] = useState(() =>
+    isGarzon ? 'mesa' : sessionStorage.getItem(SVC_KEY) || null,
+  )
+  const [deliveryInfo, setDeliveryInfo] = useState(() => {
+    try {
+      return JSON.parse(sessionStorage.getItem(`${SVC_KEY}-info`) || 'null')
+    } catch {
+      return null
+    }
+  })
+
+  const chooseService = (mode, info) => {
+    setServiceMode(mode)
+    sessionStorage.setItem(SVC_KEY, mode)
+    if (info) {
+      setDeliveryInfo(info)
+      sessionStorage.setItem(`${SVC_KEY}-info`, JSON.stringify(info))
+    }
+  }
 
   const available = state.products.filter((p) => p.available)
   const itemCount = cart.items.reduce((sum, item) => sum + item.quantity, 0)
@@ -91,9 +128,13 @@ export function MenuPage({ isGarzon }) {
 
   const handleSubmitOrder = async () => {
     if (!cart.items.length) return
+    const isDelivery = serviceMode === 'domicilio'
+    const clientName = customerName || deliveryInfo?.name || ''
     const details = [
-      customerName ? `Cliente: ${customerName}` : '',
-      guestCount ? `Personas: ${guestCount}` : '',
+      isDelivery && deliveryInfo ? `Domicilio: ${deliveryInfo.address}` : '',
+      isDelivery && deliveryInfo ? `Teléfono: ${deliveryInfo.phone}` : '',
+      clientName ? `Cliente: ${clientName}` : '',
+      !isDelivery && guestCount ? `Personas: ${guestCount}` : '',
       customerNote ? `Nota: ${customerNote}` : '',
     ]
       .filter(Boolean)
@@ -107,7 +148,11 @@ export function MenuPage({ isGarzon }) {
       discount,
       tipAmount,
       total,
-      orderType: 'Comer en el local',
+      orderType: isDelivery ? 'Domicilio' : 'Comer en el local',
+      channel: isDelivery ? 'online' : 'qr',
+      customerName: isDelivery ? clientName : undefined,
+      customerPhone: isDelivery ? deliveryInfo?.phone || '' : undefined,
+      customerAddress: isDelivery ? deliveryInfo?.address || '' : undefined,
       waiterId: isGarzon && currentUser ? currentUser.id : undefined,
       waiterName: isGarzon && currentUser ? currentUser.name : undefined,
     })
@@ -139,6 +184,11 @@ export function MenuPage({ isGarzon }) {
     onSubmit: handleSubmitOrder,
   }
 
+  // Antes del menú: el cliente elige mesa o domicilio.
+  if (!serviceMode) {
+    return <ServiceGate restaurant={state.restaurant} mesaId={mesaId} onChoose={chooseService} />
+  }
+
   return (
     <main className="min-h-screen bg-cream pb-28 text-ink lg:pb-12">
       {isHydrating ? <SyncBanner text="Conectando con Supabase..." /> : null}
@@ -161,11 +211,21 @@ export function MenuPage({ isGarzon }) {
         </div>
       ) : null}
 
-      <MenuHeader restaurant={state.restaurant} mesaId={mesaId} />
+      <MenuHeader
+        restaurant={state.restaurant}
+        mesaId={mesaId}
+        serviceMode={serviceMode}
+        deliveryInfo={deliveryInfo}
+        onChangeService={() => {
+          sessionStorage.removeItem(SVC_KEY)
+          sessionStorage.removeItem(`${SVC_KEY}-info`)
+          setServiceMode(null)
+        }}
+      />
 
       <MenuNavBar sections={sections} activeId={activeId} search={search} onSearch={setSearch} />
 
-      <div className="mx-auto grid max-w-7xl gap-x-10 px-6 py-8 lg:grid-cols-[180px_minmax(0,1fr)_340px] lg:px-10">
+      <div className="mx-auto grid max-w-7xl gap-x-10 px-3 py-8 sm:px-6 lg:grid-cols-[180px_minmax(0,1fr)_340px] lg:px-10">
         {/* Índice (desktop) */}
         <MenuIndex sections={sections} activeId={activeId} />
 
@@ -183,11 +243,10 @@ export function MenuPage({ isGarzon }) {
             <section>
               <SectionHeader index={1} title="Resultados" count={searchResults.length} />
               {searchResults.length ? (
-                <div className="divide-y divide-cream-200">
-                  {searchResults.map((product, i) => (
-                    <ProductRow
+                <div className="grid grid-cols-2 gap-2.5 pt-5 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
+                  {searchResults.map((product) => (
+                    <FlipCard
                       key={product.id}
-                      index={i + 1}
                       product={product}
                       quantity={qtyOf(product.id)}
                       onAdd={handleAddProduct}
@@ -232,11 +291,10 @@ export function MenuPage({ isGarzon }) {
                       title={section.name}
                       count={section.count}
                     />
-                    <div className="divide-y divide-cream-200">
-                      {section.items.map((product, i) => (
-                        <ProductRow
+                    <div className="grid grid-cols-2 gap-2.5 pt-5 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
+                      {section.items.map((product) => (
+                        <FlipCard
                           key={product.id}
-                          index={i + 1}
                           product={product}
                           quantity={qtyOf(product.id)}
                           onAdd={handleAddProduct}

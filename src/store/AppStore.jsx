@@ -19,8 +19,23 @@ import {
   toggleRemoteProductAvailability,
   updateRemoteOrderStatus,
   updateRemoteRestaurantConfig,
-  loginWithEmailAndPassword,
+  signInWithEmail,
+  signOutRemote,
+  getSessionProfile,
+  registerRestaurantRemote,
 } from '../lib/repository.js'
+
+function mapStaffProfile(data) {
+  return {
+    id: data.id,
+    name: data.name,
+    role: data.role,
+    pin: data.pin,
+    email: data.email,
+    active: data.active,
+    organizationId: data.organization_id || null,
+  }
+}
 
 const STORAGE_KEY = 'lasthit-demo-state-v1'
 const AUTH_KEY = 'lasthit-auth-user'
@@ -135,6 +150,38 @@ export function AppStoreProvider({ children }) {
       .catch(console.error)
   }, [])
 
+  // Restore the persisted Supabase Auth session (the device authentication).
+  // The session backs all data access once RLS is locked down; currentUser is
+  // the person currently "acting" (the session owner, or a staff via PIN).
+  useEffect(() => {
+    if (!isSupabaseEnabled()) return
+    let active = true
+    getSessionProfile()
+      .then((profile) => {
+        if (!active) return
+        if (!profile) {
+          // No valid device session: drop any stale acting user.
+          setCurrentUser(null)
+          localStorage.removeItem(AUTH_KEY)
+          return
+        }
+        // Default the acting user to the session owner if nobody is set yet.
+        setCurrentUser((prev) => {
+          if (prev) return prev
+          const mapped = mapStaffProfile(profile)
+          localStorage.setItem(AUTH_KEY, JSON.stringify(mapped))
+          return mapped
+        })
+        if (profile.role !== 'superadmin' && profile.organization_id) {
+          setCurrentOrganizationId((prev) => prev || profile.organization_id)
+        }
+      })
+      .catch(console.error)
+    return () => {
+      active = false
+    }
+  }, [])
+
   // Load tenant-specific state
   useEffect(() => {
     if (!currentOrganizationId) return
@@ -149,6 +196,7 @@ export function AppStoreProvider({ children }) {
           restaurant: {
             ...current.restaurant,
             name: org.name,
+            slug: org.slug,
             primaryColor: org.slug === 'el-dios' ? '#10b981' : '#c2553d'
           }
         }))
@@ -162,8 +210,10 @@ export function AppStoreProvider({ children }) {
     loadRemoteState(currentOrganizationId)
       .then((remoteState) => {
         if (!active || !remoteState) return
+        const org = organizations.find((o) => o.id === currentOrganizationId)
         setState((current) => ({
           ...remoteState,
+          restaurant: { ...remoteState.restaurant, slug: org?.slug || '' },
           carts: current.carts || {},
           reservations: current.reservations || [],
         }))
@@ -227,19 +277,11 @@ export function AppStoreProvider({ children }) {
         if (pinOrEmail?.includes('@')) {
           const email = pinOrEmail.trim().toLowerCase()
           if (remoteMode) {
-            const data = await loginWithEmailAndPassword(email, password)
+            const data = await signInWithEmail(email, password)
             if (!data) {
               throw new Error('Credenciales incorrectas o usuario inactivo')
             }
-            const loggedUser = {
-              id: data.id,
-              name: data.name,
-              role: data.role,
-              pin: data.pin,
-              email: data.email,
-              active: data.active,
-              organizationId: data.organization_id || null,
-            }
+            const loggedUser = mapStaffProfile(data)
             setCurrentUser(loggedUser)
             localStorage.setItem(AUTH_KEY, JSON.stringify(loggedUser))
             
@@ -267,15 +309,11 @@ export function AppStoreProvider({ children }) {
               return superadminUser
             }
 
-            const localUser = (state.staffUsers || []).find(
-              (u) => u.email?.trim().toLowerCase() === email && u.password === password && u.active
-            )
-            if (!localUser) {
-              throw new Error('Credenciales incorrectas o usuario inactivo')
-            }
-            setCurrentUser(localUser)
-            localStorage.setItem(AUTH_KEY, JSON.stringify(localUser))
-            return localUser
+            // Sin Supabase no hay verificación de contraseñas segura (no se hashea
+            // en el frontend). El acceso por email/contraseña solo se permite contra
+            // Supabase Auth en modo remoto; en local el personal entra por PIN y el
+            // superadmin por las variables VITE_DEV_SUPERADMIN_*.
+            throw new Error('El acceso por email requiere conexión con Supabase. Usa tu PIN.')
           }
         }
 
@@ -302,39 +340,33 @@ export function AppStoreProvider({ children }) {
         return user
       },
       async registerRestaurant(restaurantName, adminName, adminEmail, adminPassword) {
+        if (remoteMode) {
+          // Supabase Auth handles password hashing; the register_restaurant RPC
+          // atomically creates the org, settings and admin staff profile.
+          const { organization, staff } = await registerRestaurantRemote(
+            restaurantName,
+            adminName,
+            adminEmail,
+            adminPassword,
+          )
+          const orgs = await loadOrganizations()
+          setOrganizations(orgs)
+          return { organization, staff }
+        }
+
         const slug = restaurantName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
-        const orgPayload = {
+        const newOrg = {
           name: restaurantName,
           slug,
           plan: 'Basico',
           status: 'Activo',
           rut: '',
-          mrr: 0
+          mrr: 0,
+          id: crypto.randomUUID(),
+          created_at: new Date().toISOString(),
         }
-        
-        let newOrg
-        if (remoteMode) {
-          newOrg = await saveRemoteOrganization(orgPayload)
-        } else {
-          newOrg = { ...orgPayload, id: crypto.randomUUID(), created_at: new Date().toISOString() }
-        }
-
-        // Add to state
         setOrganizations((prev) => [...prev, newOrg])
 
-        // Create default restaurant settings
-        const settingsPayload = {
-          singleton: false,
-          name: restaurantName,
-          whatsapp: '',
-          base_url: window.location.origin,
-          primary_color: '#0d9488',
-        }
-        if (remoteMode) {
-          await updateRemoteRestaurantConfig(settingsPayload, newOrg.id)
-        }
-
-        // Create admin user in staff_users
         const pin = Math.floor(1000 + Math.random() * 9000).toString()
         const staffPayload = {
           id: crypto.randomUUID(),
@@ -343,25 +375,19 @@ export function AppStoreProvider({ children }) {
           pin,
           active: true,
           email: adminEmail.trim().toLowerCase(),
-          password: adminPassword,
-          createdAt: new Date().toISOString()
+          createdAt: new Date().toISOString(),
         }
+        persist((current) => ({
+          ...current,
+          staffUsers: [...(current.staffUsers || []), staffPayload],
+        }))
 
-        if (remoteMode) {
-          await saveRemoteStaffUser(staffPayload, newOrg.id)
-          // reload organizations
-          const orgs = await loadOrganizations()
-          setOrganizations(orgs)
-        } else {
-          persist((current) => ({
-            ...current,
-            staffUsers: [...(current.staffUsers || []), staffPayload]
-          }))
-        }
-        
         return { organization: newOrg, staff: staffPayload }
       },
-      logout() {
+      async logout() {
+        if (remoteMode) {
+          await signOutRemote()
+        }
         if (currentUser && currentUser.role !== 'superadmin') {
           setSessions((prev) => {
             const idx = prev.findIndex(

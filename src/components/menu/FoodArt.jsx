@@ -135,12 +135,39 @@ const ARTS = {
   plate: Plate,
 }
 
+// Cada tipo de plato tiene su propia atmósfera cálida: un degradado suave + un
+// halo radial que da profundidad, en vez de un fondo gris plano. El trazo del
+// line-art hereda un tono entonado con el fondo (no el ink neutro).
+const KIND_THEME = {
+  pizza: { from: '#f7e3cf', to: '#ecc2a0', glow: 'rgba(217,150,65,0.45)', ink: '#9a3f2c' },
+  burger: { from: '#f5ddc6', to: '#e6bd94', glow: 'rgba(194,85,61,0.40)', ink: '#7d3122' },
+  hotdog: { from: '#f8e0c8', to: '#edc59a', glow: 'rgba(217,150,65,0.40)', ink: '#9a3f2c' },
+  drink: { from: '#eadfd0', to: '#d8c3a6', glow: 'rgba(196,131,31,0.38)', ink: '#7d3122' },
+  fries: { from: '#f9e6c4', to: '#f0cf94', glow: 'rgba(230,180,101,0.50)', ink: '#b87b1f' },
+  salad: { from: '#e4e7d3', to: '#cdd6ad', glow: 'rgba(120,150,70,0.35)', ink: '#4d6b2f' },
+  dessert: { from: '#f4dcd0', to: '#e7bca8', glow: 'rgba(194,85,61,0.38)', ink: '#9a3f2c' },
+  plate: { from: '#f3e6d4', to: '#e2cbac', glow: 'rgba(194,85,61,0.32)', ink: '#7d3122' },
+}
+
 export function FoodArt({ category, name, className = '', iconClassName = 'h-1/2 w-1/2' }) {
   const kind = getFoodKind(category, name)
   const Art = ARTS[kind] || Plate
+  const theme = KIND_THEME[kind] || KIND_THEME.plate
   return (
-    <div className={`grid place-items-center bg-cream-100 text-ink ${className}`}>
-      <Art className={iconClassName} />
+    <div
+      className={`relative grid place-items-center overflow-hidden ${className}`}
+      style={{
+        background: `radial-gradient(circle at 30% 25%, ${theme.glow}, transparent 60%), linear-gradient(140deg, ${theme.from} 0%, ${theme.to} 100%)`,
+        color: theme.ink,
+      }}
+    >
+      {/* Halo cálido tras el icono para dar volumen */}
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute h-2/3 w-2/3 rounded-full opacity-60 blur-2xl"
+        style={{ background: theme.glow }}
+      />
+      <Art className={`relative ${iconClassName}`} />
     </div>
   )
 }

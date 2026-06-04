@@ -193,44 +193,39 @@ export async function createRemoteOrder(payload, state, organizationId) {
     total: payload.total,
   })
 
-  const orderInsert = await supabase
-    .from('orders')
-    .insert({
-      table_id: tableRecord.id,
-      table_label: tableRecord.label,
-      order_type: payload.orderType,
-      note: payload.note,
-      subtotal: payload.subtotal,
-      discount: payload.discount,
-      tip_amount: payload.tipAmount,
-      total: payload.total,
-      status: 'Pendiente',
-      waiter_id: payload.waiterId || null,
-      waiter_name: payload.waiterName || null,
-      whatsapp_message: whatsAppMessage,
-      organization_id: organizationId,
-    })
-    .select('id, number, created_at')
-    .single()
-
-  throwIfError(orderInsert, 'orders.insert')
-
-  const orderItemsInsert = await supabase.from('order_items').insert(
-    payload.items.map((item) => ({
-      order_id: orderInsert.data.id,
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tableRecord.id)
+  const { data: rpcData, error: rpcError } = await supabase.rpc('place_order', {
+    p_org: organizationId,
+    p_table_id: isUuid ? tableRecord.id : null,
+    p_table_label: tableRecord.label,
+    p_order_type: payload.orderType,
+    p_note: payload.note,
+    p_subtotal: payload.subtotal,
+    p_discount: payload.discount,
+    p_tip: payload.tipAmount,
+    p_total: payload.total,
+    p_waiter_id: payload.waiterId || null,
+    p_waiter_name: payload.waiterName || null,
+    p_whatsapp: whatsAppMessage,
+    p_items: payload.items.map((item) => ({
       product_id: item.id,
       product_name: item.name,
       unit_price: item.price,
       quantity: item.quantity,
       notes: item.notes ?? '',
     })),
-  )
+    p_channel: payload.channel || 'salon',
+    p_customer_name: payload.customerName || null,
+    p_customer_phone: payload.customerPhone || null,
+    p_customer_address: payload.customerAddress || null,
+  })
 
-  throwIfError(orderItemsInsert, 'order_items.insert')
+  if (rpcError) throw new Error(`orders.place: ${rpcError.message}`)
+  const created = Array.isArray(rpcData) ? rpcData[0] : rpcData
 
   return {
-    id: orderInsert.data.id,
-    number: String(orderInsert.data.number).padStart(4, '0'),
+    id: created.order_id,
+    number: String(created.order_number).padStart(4, '0'),
     tableId: payload.mesaId,
     tableLabel: tableRecord.label,
     orderType: payload.orderType,
@@ -243,7 +238,7 @@ export async function createRemoteOrder(payload, state, organizationId) {
     status: 'Pendiente',
     waiterId: payload.waiterId || null,
     waiterName: payload.waiterName || null,
-    createdAt: orderInsert.data.created_at,
+    createdAt: created.order_created_at,
     whatsAppMessage,
   }
 }
@@ -319,10 +314,11 @@ export async function updateRemoteRestaurantConfig(config, organizationId) {
   throwIfMissingClient()
   const result = await supabase.from('restaurant_settings').upsert(
     {
+      singleton: false,
       name: config.name,
-      whatsapp: config.whatsapp,
-      base_url: config.baseUrl,
-      primary_color: config.primaryColor,
+      whatsapp: config.whatsapp ?? '',
+      base_url: config.baseUrl || getDefaultBaseUrl(),
+      primary_color: config.primaryColor || '#c2553d',
       organization_id: organizationId,
     },
     { onConflict: 'organization_id' },
@@ -340,7 +336,6 @@ export async function saveRemoteStaffUser(user, organizationId) {
     active: user.active,
     organization_id: organizationId,
     email: user.email || null,
-    password: user.password || null,
   }
   const result = await supabase
     .from('staff_users')
@@ -401,16 +396,81 @@ export function normalizeTableSlug(value) {
   return value.trim().toLowerCase().replaceAll(' ', '-')
 }
 
-export async function loginWithEmailAndPassword(email, password) {
+// --- Authentication (Supabase Auth) ---
+
+// Loads the staff profile (with its organization) for a given auth user id.
+export async function loadStaffProfileById(uid) {
   throwIfMissingClient()
   const { data, error } = await supabase
     .from('staff_users')
     .select('*, organizations(*)')
-    .eq('email', email.trim().toLowerCase())
-    .eq('password', password)
+    .eq('id', uid)
     .eq('active', true)
     .maybeSingle()
-
   if (error) throw new Error(error.message)
   return data
+}
+
+// Signs in with email/password against Supabase Auth and returns the staff
+// profile. Returns null on invalid credentials or inactive/missing profile.
+export async function signInWithEmail(email, password) {
+  throwIfMissingClient()
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: email.trim().toLowerCase(),
+    password,
+  })
+  if (error) return null
+  const uid = data.user?.id
+  if (!uid) return null
+  return loadStaffProfileById(uid)
+}
+
+// Restores the staff profile for the persisted device session, if any.
+export async function getSessionProfile() {
+  if (!supabase) return null
+  const { data } = await supabase.auth.getSession()
+  const uid = data.session?.user?.id
+  if (!uid) return null
+  return loadStaffProfileById(uid)
+}
+
+export async function signOutRemote() {
+  if (!supabase) return
+  await supabase.auth.signOut()
+}
+
+// Registers a new restaurant: creates the Supabase Auth user, then calls the
+// register_restaurant RPC (SECURITY DEFINER) which atomically creates the
+// organization, default settings and the admin staff profile (id = auth.uid()).
+export async function registerRestaurantRemote(restaurantName, adminName, adminEmail, adminPassword) {
+  throwIfMissingClient()
+  const email = adminEmail.trim().toLowerCase()
+
+  const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+    email,
+    password: adminPassword,
+    options: { data: { name: adminName } },
+  })
+  if (signUpError) throw new Error(signUpError.message)
+
+  let session = signUpData.session
+  if (!session) {
+    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+      email,
+      password: adminPassword,
+    })
+    if (signInError) {
+      throw new Error('Cuenta creada. Revisa tu correo para confirmarla antes de iniciar sesion.')
+    }
+    session = signInData.session
+  }
+
+  const { data: org, error: rpcError } = await supabase.rpc('register_restaurant', {
+    restaurant_name: restaurantName,
+    admin_name: adminName,
+  })
+  if (rpcError) throw new Error(rpcError.message)
+
+  const staff = await loadStaffProfileById(session.user.id)
+  return { organization: org, staff }
 }

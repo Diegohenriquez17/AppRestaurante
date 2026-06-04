@@ -163,6 +163,8 @@ export const demoState = {
   orders: [],
   carts: {},
   orderCounter: 120,
+  // ⚠️ PINs de demostración (modo local sin Supabase). NO usar en producción:
+  // cambia estos valores o crea usuarios reales con PIN autogenerado desde el panel admin.
   staffUsers: [
     { id: 'staff-1', name: 'Admin Principal', role: 'administrador', pin: '1234', active: true, createdAt: new Date().toISOString() },
     { id: 'staff-2', name: 'Chef Marco', role: 'cocina', pin: '5678', active: true, createdAt: new Date().toISOString() },

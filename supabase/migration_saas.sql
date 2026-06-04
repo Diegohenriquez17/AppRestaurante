@@ -32,9 +32,10 @@ to anon
 using (true)
 with check (true);
 
--- 2. MODIFICACIÓN DE LA TABLA staff_users PARA SOPORTAR EMAIL/PASSWORD
+-- 2. MODIFICACIÓN DE LA TABLA staff_users PARA SOPORTAR EMAIL
 alter table public.staff_users add column if not exists email text;
-alter table public.staff_users add column if not exists password text;
+-- Las contrasenas las gestiona Supabase Auth; se elimina cualquier columna heredada de texto plano.
+alter table public.staff_users drop column if exists password;
 
 -- Modificar restricción de roles para admitir 'superadmin'
 alter table public.staff_users drop constraint if exists staff_users_role_check;
@@ -125,7 +126,7 @@ insert into public.restaurant_settings (singleton, name, whatsapp, base_url, pri
 select false, 'Restaurante Guaton XII', '', 'http://localhost:5173', '#c2553d', id
 from public.organizations where slug = 'guaton-xii';
 
--- Administrador por organización (Login por Email)
-insert into public.staff_users (name, role, pin, active, email, password, organization_id)
-select 'Admin Guaton XII', 'administrador', '1234', true, 'admin-restaurante@example.invalid', 'CAMBIAR_PASSWORD_ADMIN', id
+-- Administrador por organización (Login por Email). La contrasena se define en Supabase Auth.
+insert into public.staff_users (name, role, pin, active, email, organization_id)
+select 'Admin Guaton XII', 'administrador', '1234', true, 'admin-restaurante@example.invalid', id
 from public.organizations where slug = 'guaton-xii';

@@ -245,6 +245,7 @@ function App() {
           <Route path="/login" element={<LoginPage initialMode="email" />} />
           <Route path="/pin" element={<LoginPage initialMode="pin" />} />
           <Route path="/menu/:mesaId" element={<MenuPage />} />
+          <Route path="/menu/:orgSlug/:mesaId" element={<MenuPage />} />
 
           {/* Protected: Cocina */}
           <Route path="/cocina" element={
@@ -991,10 +992,10 @@ const DEMO_TICKETS = [
 ]
 
 const DEMO_AUDIT = [
-  { id: 'a1', user: 'diegohenriquez176@gmail.com', action: 'Inicio de sesion como superadmin', ts: new Date(Date.now() - 5*60000).toISOString(), level: 'info' },
-  { id: 'a2', user: 'diegohen2005gonzales@gmail.com', action: 'Login como administrador — Restaurante Guaton XII', ts: new Date(Date.now() - 18*60000).toISOString(), level: 'info' },
-  { id: 'a3', user: 'unknown@intento.com', action: 'Intento de login fallido (5 intentos)', ts: new Date(Date.now() - 42*60000).toISOString(), level: 'warn' },
-  { id: 'a4', user: 'diegohenriquez176@gmail.com', action: 'Cambio de plan: Guaton XII a Pro', ts: new Date(Date.now() - 2*3600000).toISOString(), level: 'info' },
+  { id: 'a1', user: 'superadmin@demo.invalid', action: 'Inicio de sesion como superadmin', ts: new Date(Date.now() - 5*60000).toISOString(), level: 'info' },
+  { id: 'a2', user: 'admin@demo.invalid', action: 'Login como administrador — Restaurante Guaton XII', ts: new Date(Date.now() - 18*60000).toISOString(), level: 'info' },
+  { id: 'a3', user: 'unknown@demo.invalid', action: 'Intento de login fallido (5 intentos)', ts: new Date(Date.now() - 42*60000).toISOString(), level: 'warn' },
+  { id: 'a4', user: 'superadmin@demo.invalid', action: 'Cambio de plan: Guaton XII a Pro', ts: new Date(Date.now() - 2*3600000).toISOString(), level: 'info' },
   { id: 'a5', user: 'sistema', action: 'Backup automatico completado', ts: new Date(Date.now() - 6*3600000).toISOString(), level: 'success' },
 ]
 
@@ -2433,20 +2434,17 @@ function AdminLayout() {
   const renderDesktopLink = ([label, href, Icon, external]) => {
     const active = isActive(href)
     const baseClass =
-      'relative inline-flex items-center gap-1 whitespace-nowrap px-2 py-4 text-[0.8rem] transition'
+      "relative inline-flex h-full items-center gap-1.5 whitespace-nowrap px-3.5 text-[0.9rem] transition before:absolute before:inset-x-0 before:inset-y-2.5 before:rounded-xl before:transition before:content-['']"
     const stateClass = active
-      ? 'text-[#9a3f2c] font-semibold'
-      : 'text-stone-600 font-medium hover:text-stone-900'
+      ? 'text-[#9a3f2c] font-semibold before:bg-[#f5e0cc] before:border before:border-[#dd9d6f] before:shadow-sm'
+      : 'text-stone-600 font-medium hover:text-stone-900 hover:before:bg-stone-100'
 
     const content = (
-      <>
-        <Icon size={14} strokeWidth={active ? 2.4 : 2} />
+      <span className="relative z-10 inline-flex items-center gap-1.5">
+        <Icon size={17} strokeWidth={active ? 2.4 : 2} />
         <span>{label}</span>
-        {external ? <Share2 size={10} className="opacity-50" /> : null}
-        {active ? (
-          <span className="absolute inset-x-1 bottom-0 h-[2px] rounded-full bg-[#c2553d]" />
-        ) : null}
-      </>
+        {external ? <Share2 size={12} className="opacity-50" /> : null}
+      </span>
     )
 
     if (external) {
@@ -2509,21 +2507,21 @@ function AdminLayout() {
 
   return (
     <div className="min-h-screen bg-[#faf6f0] text-stone-900">
-      <header className="sticky top-0 z-40 border-b border-stone-200/70 bg-white/90 backdrop-blur">
-        <div className="flex w-full items-center gap-2 px-3 py-3 sm:px-4 lg:px-5 lg:py-0">
+      <header className="sticky top-0 z-40 border-b border-stone-200/70 bg-white/90 backdrop-blur lg:h-[70px]">
+        <div className="flex w-full items-center gap-2 px-3 py-3 sm:px-4 lg:h-full lg:px-5 lg:py-0">
           <Link to="/admin" className="flex shrink-0 items-center gap-2">
             <div
-              className="grid h-9 w-9 place-items-center rounded-md bg-[#2a221c] text-sm text-[#faf6f0]"
+              className="grid h-10 w-10 place-items-center rounded-lg bg-[#2a221c] text-base text-[#faf6f0]"
               style={{ fontFamily: 'var(--font-display)', fontWeight: 600 }}
             >
               A
             </div>
             <div className="hidden leading-tight min-[1100px]:block">
-              <p className="text-[0.55rem] font-semibold uppercase tracking-[0.22em] text-[#c2553d]">
+              <p className="text-[0.6rem] font-semibold uppercase tracking-[0.22em] text-[#c2553d]">
                 AcroDevs
               </p>
               <h2
-                className="mt-0.5 text-sm text-stone-900"
+                className="mt-0.5 text-base text-stone-900"
                 style={{ fontFamily: 'var(--font-display)', fontWeight: 600, letterSpacing: '-0.01em' }}
               >
                 {state.restaurant.name}
@@ -2531,7 +2529,7 @@ function AdminLayout() {
             </div>
           </Link>
 
-          <nav className="hidden flex-1 items-center justify-center gap-0 lg:flex">
+          <nav className="hidden min-w-0 flex-1 items-stretch justify-center gap-0.5 overflow-x-auto lg:flex [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {navItems.map(renderDesktopLink)}
           </nav>
 
@@ -2541,17 +2539,17 @@ function AdminLayout() {
                 <span className="absolute inset-0 animate-ping rounded-full bg-[#c2553d] opacity-40" />
                 <span className="relative h-2 w-2 rounded-full bg-[#c2553d]" />
               </span>
-              <span className="max-w-[100px] truncate text-xs font-semibold text-stone-700">
+              <span className="max-w-[120px] truncate text-sm font-semibold text-stone-700">
                 {currentUser?.name || 'Admin'}
               </span>
             </div>
             <button
               type="button"
               onClick={handleLogout}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-black text-rose-700 transition hover:bg-rose-100"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-black text-rose-700 transition hover:bg-rose-100"
               title="Cerrar sesión"
             >
-              <LogOut size={14} />
+              <LogOut size={16} />
               Salir
             </button>
           </div>
@@ -3456,6 +3454,13 @@ function AdminUsersPage() {
   usePageTitle(`Usuarios | ${state.restaurant.name}`)
   const [form, setForm] = useState({ name: '', role: 'garzon' })
   const [filterRole, setFilterRole] = useState('todos')
+  const [revealedPins, setRevealedPins] = useState(() => new Set())
+  const togglePinReveal = (id) =>
+    setRevealedPins((prev) => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
   const [activeTab, setActiveTab] = useState('equipo')
   const [expandedUser, setExpandedUser] = useState(null)
   const [expandedSession, setExpandedSession] = useState(null)
@@ -3675,9 +3680,15 @@ function AdminUsersPage() {
                             <span className={`rounded-full px-2.5 py-0.5 text-xs font-black ${cfg.color}`}>
                               {cfg.label}
                             </span>
-                            <span className="inline-flex items-center gap-1 rounded-full bg-stone-200 px-2.5 py-0.5 text-xs font-bold text-stone-600">
-                              <Hash size={12} /> PIN: {user.pin}
-                            </span>
+                            <button
+                              type="button"
+                              onClick={() => togglePinReveal(user.id)}
+                              className="inline-flex items-center gap-1 rounded-full bg-stone-200 px-2.5 py-0.5 text-xs font-bold text-stone-600 transition hover:bg-stone-300"
+                              title={revealedPins.has(user.id) ? 'Ocultar PIN' : 'Mostrar PIN'}
+                            >
+                              <Hash size={12} /> PIN: {revealedPins.has(user.id) ? user.pin : '••••'}
+                              {revealedPins.has(user.id) ? <EyeOff size={12} /> : <Eye size={12} />}
+                            </button>
                             <span className={`rounded-full px-2 py-0.5 text-xs font-black ${user.active ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
                               {user.active ? 'Activo' : 'Inactivo'}
                             </span>
@@ -3726,7 +3737,7 @@ function AdminUsersPage() {
                       <div className="min-w-0 flex-1">
                         <p className="text-[0.6rem] font-black uppercase tracking-[0.1em] text-blue-600">Link de acceso</p>
                         <p className="truncate text-xs font-mono text-blue-800">
-                          {window.location.origin}/login → PIN: {user.pin}
+                          {window.location.origin}/login → PIN: {revealedPins.has(user.id) ? user.pin : '••••'}
                         </p>
                       </div>
                       <button
@@ -4073,11 +4084,22 @@ function AdminConfigPage() {
             />
           </label>
           <label className="field">
-            <span>Dominio base</span>
+            <span>Dominio base (para los QR)</span>
             <input
               value={config.baseUrl}
               onChange={(event) => setConfig({ ...config, baseUrl: event.target.value })}
+              placeholder="https://tu-dominio.com"
             />
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, fontSize: '0.78rem', color: '#8a7d70' }}>
+              <button
+                type="button"
+                onClick={() => setConfig({ ...config, baseUrl: window.location.origin })}
+                style={{ borderRadius: 9999, border: '1px solid #e8ddd0', background: '#fbf2ea', color: '#9a3f2c', padding: '4px 10px', fontWeight: 700, cursor: 'pointer' }}
+              >
+                Usar dominio actual
+              </button>
+              <span>Déjalo vacío para usar el dominio donde está publicada la app.</span>
+            </span>
           </label>
           <label className="field">
             <span>Color principal</span>
@@ -4150,9 +4172,17 @@ function QrTableCard({ table }) {
     return () => clearInterval(interval)
   }, [isOccupied, oldestOrderTime])
 
+  // Incluye el slug de la empresa para que el QR cargue el tenant correcto.
+  // Si no hay dominio configurado, usa el dominio actual (funciona en prod).
+  const menuRelPath = state.restaurant.slug
+    ? `/menu/${state.restaurant.slug}/${table.slug}`
+    : `/menu/${table.slug}`
+  const baseUrl = (state.restaurant.baseUrl || window.location.origin).replace(/\/$/, '')
+  const menuFullUrl = `${baseUrl}${menuRelPath}`
+
   useEffect(() => {
     let active = true
-    QRCode.toDataURL(`${state.restaurant.baseUrl}/menu/${table.slug}`, {
+    QRCode.toDataURL(menuFullUrl, {
       margin: 1,
       width: 320,
     }).then((value) => {
@@ -4161,7 +4191,7 @@ function QrTableCard({ table }) {
     return () => {
       active = false
     }
-  }, [state.restaurant.baseUrl, table.slug])
+  }, [menuFullUrl])
 
   const downloadQr = () => {
     if (!qrCode) return
@@ -4187,7 +4217,7 @@ function QrTableCard({ table }) {
         </div>
         <a
           className="inline-flex h-10 items-center justify-center rounded-lg border border-stone-200 bg-white px-3 font-black"
-          href={`/menu/${table.slug}`}
+          href={menuRelPath}
           target="_blank"
           rel="noopener noreferrer"
         >
@@ -4249,13 +4279,13 @@ function QrTableCard({ table }) {
       </div>
 
       <p className="break-all rounded-lg bg-stone-50 p-3 text-sm text-stone-500">
-        {state.restaurant.baseUrl}/menu/{table.slug}
+        {menuFullUrl}
       </p>
 
       <div className="grid grid-cols-3 gap-2">
         <a
           className="grid h-11 place-items-center rounded-lg border border-stone-200 bg-white text-stone-700"
-          href={`/menu/${table.slug}`}
+          href={menuRelPath}
           target="_blank"
           rel="noopener noreferrer"
           title="Ver menu en nueva pestaña"
@@ -4274,7 +4304,7 @@ function QrTableCard({ table }) {
           type="button"
           className="grid h-11 place-items-center rounded-lg border border-stone-200 bg-white text-stone-700"
           title="Compartir QR"
-          onClick={() => void navigator.clipboard?.writeText(`${state.restaurant.baseUrl}/menu/${table.slug}`)}
+          onClick={() => void navigator.clipboard?.writeText(menuFullUrl)}
         >
           <Share2 size={18} />
         </button>

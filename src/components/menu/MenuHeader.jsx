@@ -1,8 +1,9 @@
 import { motion } from 'framer-motion'
-import { ChevronDown } from 'lucide-react'
+import { Bike, ChevronDown, RefreshCw } from 'lucide-react'
 import { formatTableName } from '../../lib/format.js'
 
-export function MenuHeader({ restaurant, mesaId }) {
+export function MenuHeader({ restaurant, mesaId, serviceMode = 'mesa', deliveryInfo, onChangeService }) {
+  const isDelivery = serviceMode === 'domicilio'
   return (
     <header className="relative overflow-hidden bg-brand-900 text-cream">
       {/* Capa de gradiente cálido */}
@@ -61,9 +62,27 @@ export function MenuHeader({ restaurant, mesaId }) {
             Pide desde tu mesa. Cada plato va directo a cocina, recién hecho.
           </p>
           <div className="flex items-center gap-6 text-sm">
-            <Meta label="Mesa" value={formatTableName(mesaId).replace('Mesa ', '')} />
+            {isDelivery ? (
+              <Meta label="Servicio" value="Domicilio" />
+            ) : (
+              <Meta label="Mesa" value={formatTableName(mesaId).replace('Mesa ', '')} />
+            )}
             <span className="h-8 w-px bg-white/10" />
-            <Meta label="Servicio" value="En sala" />
+            {isDelivery && deliveryInfo?.address ? (
+              <Meta label="Entrega" value={deliveryInfo.address} />
+            ) : (
+              <Meta label="Servicio" value={isDelivery ? 'Domicilio' : 'En sala'} />
+            )}
+            {onChangeService ? (
+              <button
+                type="button"
+                onClick={onChangeService}
+                className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-cream/80 backdrop-blur transition hover:bg-white/10 hover:text-cream"
+              >
+                {isDelivery ? <Bike className="h-3.5 w-3.5" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                Cambiar
+              </button>
+            ) : null}
           </div>
         </div>
 

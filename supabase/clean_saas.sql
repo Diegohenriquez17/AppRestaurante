@@ -1,7 +1,9 @@
 -- ============================================================
 -- SCRIPT DE MIGRACIÓN Y LIMPIEZA TOTAL (clean_saas.sql)
 -- Ejecuta esto en tu editor SQL de Supabase para reparar tu base de datos,
--- crear las columnas requeridas (email, password) y configurar tus accesos.
+-- crear la columna requerida (email) y configurar tus accesos.
+-- Nota: la autenticacion por contrasena la maneja Supabase Auth (auth.users).
+-- NO se guardan contrasenas en public.staff_users.
 -- ============================================================
 
 -- 1. CREACIÓN DE LA TABLA: organizations (Si no existe)
@@ -22,9 +24,10 @@ alter table public.organizations enable row level security;
 drop policy if exists "public organizations all" on public.organizations;
 create policy "public organizations all" on public.organizations for all to anon using (true) with check (true);
 
--- 2. MODIFICACIÓN DE LA TABLA staff_users PARA SOPORTAR EMAIL/PASSWORD Y SUPERADMIN
+-- 2. MODIFICACIÓN DE LA TABLA staff_users PARA SOPORTAR EMAIL Y SUPERADMIN
 alter table public.staff_users add column if not exists email text;
-alter table public.staff_users add column if not exists password text;
+-- Las contrasenas las gestiona Supabase Auth; se elimina cualquier columna heredada de texto plano.
+alter table public.staff_users drop column if exists password;
 
 -- Modificar restricción de roles para admitir 'superadmin'
 alter table public.staff_users drop constraint if exists staff_users_role_check;
@@ -120,9 +123,9 @@ VALUES (
   '#0d9488'
 );
 
--- Crear el Usuario Superadmin demo.
--- Cambia email/password inmediatamente. No uses passwords reales en scripts versionados.
-INSERT INTO public.staff_users (id, organization_id, name, role, pin, active, email, password)
+-- Crear el Usuario Superadmin demo (perfil). La contrasena se define en Supabase Auth.
+-- El id debe coincidir con el auth.users.id del usuario creado en Authentication.
+INSERT INTO public.staff_users (id, organization_id, name, role, pin, active, email)
 VALUES (
   '22222222-2222-2222-2222-222222222222',
   '11111111-1111-1111-1111-111111111111',
@@ -130,8 +133,7 @@ VALUES (
   'superadmin',
   '9999',
   true,
-  'superadmin@example.invalid',
-  'CAMBIAR_PASSWORD_SUPERADMIN'
+  'superadmin@example.invalid'
 );
 
 -- 6. SEMBRAR ORGANIZACIÓN DEL ADMINISTRADOR DE RESTAURANTE ("Restaurante Guaton XII")
@@ -157,9 +159,9 @@ VALUES (
   '#c2553d'
 );
 
--- Crear el Usuario Administrador demo.
--- Cambia email/password inmediatamente. No uses passwords reales en scripts versionados.
-INSERT INTO public.staff_users (id, organization_id, name, role, pin, active, email, password)
+-- Crear el Usuario Administrador demo (perfil). La contrasena se define en Supabase Auth.
+-- El id debe coincidir con el auth.users.id del usuario creado en Authentication.
+INSERT INTO public.staff_users (id, organization_id, name, role, pin, active, email)
 VALUES (
   '44444444-4444-4444-4444-444444444444',
   '33333333-3333-3333-3333-333333333333',
@@ -167,8 +169,7 @@ VALUES (
   'administrador',
   '7777',
   true,
-  'admin-restaurante@example.invalid',
-  'CAMBIAR_PASSWORD_ADMIN'
+  'admin-restaurante@example.invalid'
 );
 
 -- 7. Crear personal para Restaurante Guaton XII (Garzones y Cajeros de prueba)
