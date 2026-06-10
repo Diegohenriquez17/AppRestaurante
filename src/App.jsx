@@ -17,9 +17,11 @@ import {
   Activity,
   BadgePercent,
   BarChart3,
+  Ban,
   CalendarDays,
   ChefHat,
   CheckCircle2,
+  Copy,
   ChevronDown,
   Check,
   ClipboardList,
@@ -28,15 +30,14 @@ import {
   DollarSign,
   Download,
   Eye,
-  EyeOff,
   Flame,
-  Hash,
   History,
+  KeyRound,
   LayoutDashboard,
+  LayoutGrid,
   Lock,
   LogIn,
   LogOut,
-  Menu,
   MessageSquare,
   Package,
   Pencil,
@@ -48,6 +49,7 @@ import {
   Share2,
   ShoppingBag,
   Tags,
+  Ticket,
   Timer,
   Trash2,
   TrendingUp,
@@ -73,6 +75,7 @@ import {
 } from 'react-router-dom'
 import { useAppStore } from './store/AppStore.jsx'
 import { MenuPage } from './pages/MenuPage.jsx'
+import { LoginPage } from './pages/LoginPage.jsx'
 import {
   currency,
   formatTime,
@@ -357,20 +360,6 @@ function RequireAuth({ roles, children }) {
   return children
 }
 
-function NexoLogo({ className = "h-20 w-20 text-white" }) {
-  return (
-    <svg className={className} viewBox="0 0 100 100" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <polygon points="50,15 85,35 85,75 50,95 15,75 15,35" fill="none" className="stroke-current" />
-      <line x1="50" y1="15" x2="50" y2="95" className="stroke-current opacity-30" />
-      <line x1="15" y1="35" x2="50" y2="55" className="stroke-current opacity-30" />
-      <line x1="85" y1="35" x2="50" y2="55" className="stroke-current opacity-30" />
-      <path d="M30,65 L45,50 L60,58 L75,38" className="stroke-brand-200" strokeWidth="3" />
-      <circle cx="75" cy="38" r="3" fill="currentColor" />
-      <polyline points="68,38 75,38 75,45" className="stroke-brand-200" strokeWidth="3" />
-    </svg>
-  )
-}
-
 class SuperadminErrorBoundary extends Component {
   constructor(props) {
     super(props)
@@ -416,528 +405,6 @@ class SuperadminErrorBoundary extends Component {
       </main>
     )
   }
-}
-
-function LoginPage({ initialMode = 'email' }) {
-  const { login, currentUser, organizations, switchOrganization, currentOrganizationId, registerRestaurant } = useAppStore()
-  const navigate = useNavigate()
-  const [loginMode] = useState(initialMode) // 'email' | 'pin'
-  const [pin, setPin] = useState('')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
-  const [error, setError] = useState('')
-  const [shake, setShake] = useState(false)
-  const inputRef = useRef(null)
-
-  // Deep-link opcional: ?org=slug fija la sucursal (p. ej. desde un QR del local).
-  // El acceso por PIN igualmente requiere que la empresa tenga sesión iniciada.
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const orgParam = params.get('org') || params.get('sucursal')
-    if (orgParam && organizations.length > 0) {
-      const cleanParam = orgParam.trim().toLowerCase()
-      const found = organizations.find(
-        (o) =>
-          o.slug?.trim().toLowerCase() === cleanParam ||
-          o.name?.trim().toLowerCase() === cleanParam
-      )
-      if (found) {
-        switchOrganization(found.id)
-      }
-    }
-  }, [organizations, switchOrganization])
-
-  // Registration modal state
-  const [showRegisterModal, setShowRegisterModal] = useState(false)
-  const [regCompanyName, setRegCompanyName] = useState('')
-  const [regAdminName, setRegAdminName] = useState('')
-  const [regEmail, setRegEmail] = useState('')
-  const [regPassword, setRegPassword] = useState('')
-  const [regError, setRegError] = useState('')
-  const [regSuccess, setRegSuccess] = useState(false)
-  const [regLoading, setRegLoading] = useState(false)
-
-  useEffect(() => {
-    if (currentUser) {
-      const redirectMap = {
-        superadmin: '/superadmin',
-        administrador: '/admin',
-        cocina: '/cocina',
-        cajero: '/cajero',
-        garzon: '/garzon',
-      }
-      navigate(redirectMap[currentUser.role] || '/admin', { replace: true })
-    }
-  }, [currentUser, navigate])
-
-  const handlePinChange = async (value) => {
-    const digits = value.replace(/\D/g, '').slice(0, 4)
-    setPin(digits)
-    setError('')
-
-    if (digits.length === 4) {
-      try {
-        const user = await login(digits)
-        if (user) {
-          const redirectMap = {
-            administrador: '/admin',
-            cocina: '/cocina',
-            cajero: '/cajero',
-            garzon: '/garzon',
-          }
-          navigate(redirectMap[user.role] || '/admin', { replace: true })
-        } else {
-          setError('PIN incorrecto o usuario inactivo')
-          setShake(true)
-          setTimeout(() => {
-            setShake(false)
-            setPin('')
-          }, 600)
-        }
-      } catch (err) {
-        setError(err.message || 'Error al iniciar sesión')
-        setShake(true)
-        setTimeout(() => {
-          setShake(false)
-          setPin('')
-        }, 600)
-      }
-    }
-  }
-
-  const handleEmailSubmit = async (e) => {
-    e.preventDefault()
-    setError('')
-    if (!email) {
-      setError('Ingresa tu correo electrónico')
-      return
-    }
-    if (!password) {
-      setError('Ingresa tu contraseña')
-      return
-    }
-
-    try {
-      const user = await login(email, password)
-      if (user) {
-        if (user.role === 'superadmin') {
-          navigate('/superadmin', { replace: true })
-        } else {
-          navigate('/admin', { replace: true })
-        }
-      } else {
-        setError('Credenciales incorrectas o usuario inactivo')
-        setShake(true)
-        setTimeout(() => setShake(false), 600)
-      }
-    } catch (err) {
-      setError(err.message || 'Error al iniciar sesión')
-      setShake(true)
-      setTimeout(() => setShake(false), 600)
-    }
-  }
-
-  const handleRegisterSubmit = async (e) => {
-    e.preventDefault()
-    setRegError('')
-    if (!regCompanyName || !regAdminName || !regEmail || !regPassword) {
-      setRegError('Completa todos los campos')
-      return
-    }
-    setRegLoading(true)
-    try {
-      await registerRestaurant(regCompanyName, regAdminName, regEmail, regPassword)
-      setRegSuccess(true)
-      setTimeout(() => {
-        setShowRegisterModal(false)
-        setRegSuccess(false)
-        setRegCompanyName('')
-        setRegAdminName('')
-        setRegEmail('')
-        setRegPassword('')
-        setEmail(regEmail)
-      }, 2500)
-    } catch (err) {
-      setRegError(err.message || 'Error al registrar la empresa')
-    } finally {
-      setRegLoading(false)
-    }
-  }
-
-  const activeOrg = organizations.find((o) => o.id === currentOrganizationId)
-
-  return (
-    <div className="flex min-h-screen bg-stone-50 font-sans">
-      {/* LEFT PANEL: Branding (Teal Gradient / Nexo style) */}
-      <div className="relative hidden w-1/2 flex-col justify-between bg-brand-900 p-12 text-white lg:flex overflow-hidden">
-        {/* Background wave decorative pattern */}
-        <div className="absolute inset-0 opacity-[0.08] pointer-events-none">
-          <svg className="h-full w-full" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-              <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                <path d="M 40 0 L 0 0 0 40" fill="none" stroke="currentColor" strokeWidth="1" />
-              </pattern>
-            </defs>
-            <rect width="100%" height="100%" fill="url(#grid)" />
-          </svg>
-        </div>
-        <div className="absolute -right-32 -bottom-32 h-[450px] w-[450px] rounded-full bg-brand-600/30 blur-[100px]" />
-        
-        {/* Top brand indicator */}
-        <div className="z-10 flex items-center gap-2">
-          <span className="text-sm font-bold tracking-[0.2em] uppercase opacity-75">AcroDevs Systems</span>
-        </div>
-
-        {/* Center graphics matching nexo.acrodevs.cl */}
-        <div className="z-10 my-auto flex flex-col items-center text-center">
-          <motion.div
-            initial={{ scale: 0.8, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ duration: 0.5 }}
-            className="mb-8"
-          >
-            <NexoLogo className="h-28 w-28 text-brand-200 drop-shadow-xl animate-pulse" />
-          </motion.div>
-
-          <h2 className="text-4xl font-extrabold tracking-tight text-white drop-shadow-md">
-            Empresa de Jefe
-          </h2>
-          <p className="mt-3 text-lg font-medium text-brand-100 opacity-90">
-            Sistema Inteligente de Gestión
-          </p>
-
-          <div className="mt-8 flex items-center gap-1.5 rounded-full border border-brand-400/30 bg-brand-900/30 px-4 py-1.5 text-sm font-bold text-brand-200">
-            <CheckCircle2 size={16} className="text-brand-300" />
-            <span>Empresa verificada ✓</span>
-          </div>
-        </div>
-
-        {/* Footer legal */}
-        <div className="z-10 flex justify-between text-xs text-brand-200/60">
-          <span>AcroDevs · Sistema de Ventas</span>
-          <div className="flex gap-4">
-            <a href="#" className="hover:underline">Términos</a>
-            <a href="#" className="hover:underline">Privacidad</a>
-            <a href="#" className="hover:underline">Contacto</a>
-          </div>
-        </div>
-      </div>
-
-      {/* RIGHT PANEL: Authentication Form */}
-      <div className="flex w-full flex-col justify-between bg-white px-6 py-12 lg:w-1/2 md:px-16 lg:px-24">
-        {/* Responsive Header for Mobile/Tablet */}
-        <div className="flex justify-between items-center lg:hidden">
-          <div className="flex items-center gap-2 text-brand-700">
-            <NexoLogo className="h-10 w-10 text-brand-600" />
-            <span className="font-extrabold text-lg">Empresa de Jefe</span>
-          </div>
-          <span className="text-xs bg-brand-50 border border-brand-200 px-2 py-0.5 rounded text-brand-700 font-bold">✓ Verificado</span>
-        </div>
-
-        <div className="my-auto mx-auto w-full max-w-md">
-          {/* Lock/Security Icon Badge */}
-          <div className="mb-6 flex justify-center lg:justify-start">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-50 text-brand-600 border border-brand-100">
-              <Lock size={20} />
-            </div>
-          </div>
-
-          {/* Heading */}
-          <div className="text-center lg:text-left">
-            <h1 className="text-2xl font-black text-stone-800">
-              {loginMode === 'email' ? 'Administración' : 'Personal de Local'}
-            </h1>
-            <p className="mt-1.5 text-sm text-stone-500 font-semibold">
-              {loginMode === 'email'
-                ? 'Ingresa las credenciales de tu empresa'
-                : 'Ingresa tu PIN de acceso de 4 dígitos'}
-            </p>
-          </div>
-
-          {/* Error Message Alert */}
-          {error && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mt-4 rounded-lg bg-rose-50 border border-rose-100 p-3 text-xs font-bold text-rose-600 text-center"
-            >
-              {error}
-            </motion.div>
-          )}
-
-          {/* Email / Password Form */}
-          {loginMode === 'email' ? (
-            <form onSubmit={handleEmailSubmit} className="mt-6 space-y-4">
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-stone-500 mb-1.5">
-                  Correo electrónico
-                </label>
-                <div className="relative">
-                  <User className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => { setEmail(e.target.value); setError(''); }}
-                    placeholder="ejemplo@empresa.com"
-                    className="h-12 w-full rounded-lg border border-stone-200 bg-stone-50/50 pl-11 pr-4 text-sm font-semibold text-stone-800 outline-none transition focus:border-brand-500 focus:bg-white focus:ring-1 focus:ring-brand-500"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <div className="flex justify-between items-center mb-1.5">
-                  <label className="block text-xs font-bold uppercase tracking-wider text-stone-500">
-                    Contraseña
-                  </label>
-                  <button type="button" className="text-xs font-bold text-brand-600 hover:underline">
-                    ¿Olvidaste tu contraseña?
-                  </button>
-                </div>
-                <div className="relative">
-                  <Lock className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    value={password}
-                    onChange={(e) => { setPassword(e.target.value); setError(''); }}
-                    placeholder="••••••••"
-                    className="h-12 w-full rounded-lg border border-stone-200 bg-stone-50/50 pl-11 pr-12 text-sm font-semibold text-stone-800 outline-none transition focus:border-brand-500 focus:bg-white focus:ring-1 focus:ring-brand-500"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400 hover:text-stone-600 transition"
-                  >
-                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
-              </div>
-
-              <motion.button
-                whileTap={{ scale: 0.98 }}
-                type="submit"
-                className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-[#c2553d] hover:bg-[#9a3f2c] text-sm font-bold text-white shadow-md shadow-brand-700/10 transition"
-              >
-                <span>Iniciar Sesión</span>
-              </motion.button>
-            </form>
-          ) : (
-            /* PIN Staff Login Form */
-            <form onSubmit={(e) => e.preventDefault()} className="mt-6 space-y-4">
-              {activeOrg ? (
-                <>
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-stone-500 mb-1.5">
-                      Sucursal / Restaurante
-                    </label>
-                    <div className="flex h-12 w-full items-center justify-between rounded-lg border border-brand-200 bg-brand-50/50 px-4 text-sm font-semibold text-brand-900">
-                      <div className="flex items-center gap-2">
-                        <Building className="h-4 w-4 text-brand-600" />
-                        <span>{activeOrg.name}</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => navigate('/login')}
-                        className="text-xs font-bold text-brand-600 hover:text-brand-900 hover:underline transition"
-                      >
-                        Cambiar empresa
-                      </button>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-stone-500 mb-1.5">
-                      PIN de acceso (4 dígitos)
-                    </label>
-                    <motion.div animate={shake ? { x: [-10, 10, -6, 6, -3, 3, 0] } : {}} transition={{ duration: 0.4 }}>
-                      <div className="relative">
-                        <Lock className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
-                        <input
-                          ref={inputRef}
-                          type="password"
-                          inputMode="numeric"
-                          pattern="[0-9]*"
-                          maxLength={4}
-                          value={pin}
-                          onChange={(e) => handlePinChange(e.target.value)}
-                          placeholder="••••"
-                          className="h-12 w-full rounded-lg border border-stone-200 bg-stone-50/50 pl-11 text-center text-xl font-bold tracking-[0.5em] text-stone-800 outline-none transition focus:border-brand-500 focus:bg-white focus:ring-1 focus:ring-brand-500 placeholder:tracking-[0.2em] placeholder:text-stone-300"
-                        />
-                      </div>
-                    </motion.div>
-                  </div>
-
-                  <div className="flex items-center justify-center gap-3 py-2">
-                    {[0, 1, 2, 3].map((i) => (
-                      <div
-                        key={i}
-                        className={`h-2.5 w-2.5 rounded-full border transition-all ${
-                          pin.length > i ? 'bg-brand-600 border-brand-600 scale-110' : 'border-stone-300 bg-stone-100'
-                        }`}
-                      />
-                    ))}
-                  </div>
-                </>
-              ) : (
-                /* Sin empresa activa en este dispositivo: el administrador debe
-                   iniciar sesión primero para habilitar el acceso por PIN. */
-                <div className="rounded-lg border border-stone-200 bg-stone-50 p-5 text-center space-y-3">
-                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-brand-50 text-brand-600 border border-brand-100">
-                    <Building size={20} />
-                  </div>
-                  <p className="text-sm font-semibold text-stone-600">
-                    Este dispositivo aún no tiene una empresa activa. El administrador debe iniciar sesión primero para habilitar el acceso por PIN del personal.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => navigate('/login')}
-                    className="h-11 w-full rounded-lg bg-stone-800 hover:bg-stone-900 text-white text-sm font-bold transition"
-                  >
-                    Iniciar sesión de empresa
-                  </button>
-                </div>
-              )}
-            </form>
-          )}
-
-          {/* Links and Mode Switchers */}
-          <div className="mt-8 flex flex-col items-center space-y-3 text-center">
-            {loginMode === 'email' && (
-              <button
-                type="button"
-                onClick={() => setShowRegisterModal(true)}
-                className="text-xs font-extrabold text-brand-600 hover:text-brand-700 hover:underline transition"
-              >
-                Registrar nueva empresa
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Footer brand info */}
-        <div className="mt-12 text-center text-xs text-stone-400 font-medium">
-          Desarrollado por <span className="font-extrabold text-brand-600">AcroDevs</span> · Todos los derechos reservados
-        </div>
-      </div>
-
-      {/* REGISTER RESTAURANT MODAL */}
-      <AnimatePresence>
-        {showRegisterModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/60 p-4 backdrop-blur-sm">
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="relative w-full max-w-md overflow-hidden rounded-2xl bg-white p-6 shadow-2xl border border-stone-100"
-            >
-              {/* Close Button */}
-              <button
-                onClick={() => setShowRegisterModal(false)}
-                className="absolute right-4 top-4 text-stone-400 hover:text-stone-600 transition"
-              >
-                <X size={18} />
-              </button>
-
-              <div className="mb-4">
-                <h3 className="text-lg font-black text-stone-800">Registrar Nueva Empresa</h3>
-                <p className="text-xs text-stone-500 font-semibold mt-0.5">
-                  Crea tu local en el sistema e ingresa las credenciales administrativas.
-                </p>
-              </div>
-
-              {regError && (
-                <div className="mb-4 rounded-lg bg-rose-50 border border-rose-100 p-3 text-xs font-bold text-rose-600">
-                  {regError}
-                </div>
-              )}
-
-              {regSuccess && (
-                <div className="mb-4 rounded-lg bg-emerald-50 border border-emerald-100 p-3 text-xs font-bold text-emerald-700 text-center">
-                  🎉 ¡Empresa registrada con éxito! Puedes iniciar sesión ahora.
-                </div>
-              )}
-
-              <form onSubmit={handleRegisterSubmit} className="space-y-3.5">
-                <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-stone-400 mb-1">
-                    Nombre del Restaurante / Empresa
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={regCompanyName}
-                    onChange={(e) => setRegCompanyName(e.target.value)}
-                    placeholder="Ej. Restaurante Guaton XII"
-                    className="h-10 w-full rounded-lg border border-stone-200 px-3 text-sm font-semibold outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 text-stone-800"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-stone-400 mb-1">
-                    Nombre del Administrador
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={regAdminName}
-                    onChange={(e) => setRegAdminName(e.target.value)}
-                    placeholder="Ej. Diego Henríquez"
-                    className="h-10 w-full rounded-lg border border-stone-200 px-3 text-sm font-semibold outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 text-stone-800"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-stone-400 mb-1">
-                    Correo electrónico del Administrador
-                  </label>
-                  <input
-                    type="email"
-                    required
-                    value={regEmail}
-                    onChange={(e) => setRegEmail(e.target.value)}
-                    placeholder="ejemplo@correo.com"
-                    className="h-10 w-full rounded-lg border border-stone-200 px-3 text-sm font-semibold outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 text-stone-800"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-stone-400 mb-1">
-                    Contraseña del Administrador
-                  </label>
-                  <input
-                    type="password"
-                    required
-                    value={regPassword}
-                    onChange={(e) => setRegPassword(e.target.value)}
-                    placeholder="Mínimo 6 caracteres"
-                    minLength={6}
-                    className="h-10 w-full rounded-lg border border-stone-200 px-3 text-sm font-semibold outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 text-stone-800"
-                  />
-                </div>
-
-                <div className="mt-6 flex justify-end gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowRegisterModal(false)}
-                    className="h-10 rounded-lg px-4 text-sm font-bold text-stone-500 hover:bg-stone-50 transition"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={regLoading || regSuccess}
-                    className="h-10 rounded-lg bg-brand-600 hover:bg-brand-700 disabled:bg-brand-400 text-white px-5 text-sm font-bold shadow transition flex items-center justify-center"
-                  >
-                    {regLoading ? 'Registrando...' : 'Registrar Empresa'}
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-    </div>
-  )
 }
 
 
@@ -1019,6 +486,11 @@ function RestaurantSuperadmin() {
     logout,
     currentUser,
     remoteError,
+    inviteCodes,
+    refreshInviteCodes,
+    generateInviteCode,
+    revokeInviteCode,
+    removeInviteCode,
   } = useAppStore()
   const navigate = useNavigate()
 
@@ -1037,7 +509,48 @@ function RestaurantSuperadmin() {
   const [modulesByOrg, setModulesByOrg] = useState(null)
   const [modulesOrgId, setModulesOrgId] = useState('')
 
+  // Códigos de invitación
+  const [inviteNote, setInviteNote] = useState('')
+  const [inviteExpiry, setInviteExpiry] = useState('30')
+  const [inviteBusy, setInviteBusy] = useState(false)
+  const [inviteError, setInviteError] = useState('')
+  const [copiedCodeId, setCopiedCodeId] = useState(null)
+
   usePageTitle('Superadmin | AcroDevs SV')
+
+  useEffect(() => {
+    refreshInviteCodes().catch((err) => setInviteError(err.message || 'No se pudieron cargar los códigos'))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const inviteStatus = (c) => {
+    if (c.revokedAt) return { label: 'Revocado', cls: 'bg-stone-100/80 text-stone-500 border-stone-200' }
+    if (c.usedAt) return { label: 'Usado', cls: 'bg-blue-50/80 text-blue-600 border-blue-200' }
+    if (c.expiresAt && new Date(c.expiresAt) < new Date()) return { label: 'Vencido', cls: 'bg-amber-50/80 text-amber-600 border-amber-200' }
+    return { label: 'Disponible', cls: 'bg-emerald-50/80 text-emerald-600 border-emerald-200' }
+  }
+
+  const handleGenerateInvite = async () => {
+    setInviteBusy(true)
+    setInviteError('')
+    try {
+      await generateInviteCode({
+        note: inviteNote.trim(),
+        expiresDays: inviteExpiry === 'nunca' ? null : Number(inviteExpiry),
+      })
+      setInviteNote('')
+    } catch (err) {
+      setInviteError(err.message || 'Error al generar el código')
+    } finally {
+      setInviteBusy(false)
+    }
+  }
+
+  const handleCopyInvite = (c) => {
+    void navigator.clipboard?.writeText(c.code)
+    setCopiedCodeId(c.id)
+    setTimeout(() => setCopiedCodeId(null), 1600)
+  }
 
   // Solo las empresas cliente cuentan para metricas y listados (la operadora se excluye).
   const clientOrgs = organizations.filter(isClientOrg)
@@ -1125,7 +638,8 @@ function RestaurantSuperadmin() {
 
   const TABS = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'restaurantes', label: 'Restaurantes', icon: Building },
+    { id: 'restaurantes', label: 'Clientes', icon: Building },
+    { id: 'codigos', label: 'Códigos', icon: Ticket },
     { id: 'finanzas', label: 'Finanzas', icon: DollarSign },
     { id: 'soporte', label: 'Soporte', icon: MessageSquare, badge: openTickets },
     { id: 'modulos', label: 'Modulos', icon: Sparkles },
@@ -1137,9 +651,9 @@ function RestaurantSuperadmin() {
   const fmtCLP = v => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(v)
 
   return (
-    <main className="min-h-screen w-full bg-[#faf6f0] text-stone-950">
+    <main className="glass-page w-full text-stone-950">
       {/* HEADER */}
-      <header className="sticky top-0 z-40 border-b border-stone-200/80 bg-white/95 backdrop-blur-xl shadow-sm">
+      <header className="sticky top-0 z-40 border-b border-white/60 bg-white/55 shadow-sm backdrop-blur-2xl">
         <div className="flex items-center justify-between gap-4 px-4 py-3 lg:px-8">
           <div className="flex items-center gap-3 min-w-0">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl shadow-lg" style={{ background: 'linear-gradient(135deg,#c2553d,#9a3f2c)' }}>
@@ -1178,7 +692,7 @@ function RestaurantSuperadmin() {
         <nav className="flex gap-1.5 overflow-x-auto px-4 pb-3 lg:px-8 [scrollbar-width:none]">
           {TABS.map(({ id, label, icon: Icon, badge }) => (
             <button key={id} type="button" onClick={() => setActiveTab(id)}
-              className={`relative inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl px-4 text-xs font-black transition-all ${activeTab === id ? 'bg-stone-900 text-white shadow-lg' : 'bg-white text-stone-500 ring-1 ring-stone-200 hover:ring-stone-300 hover:text-stone-800'}`}>
+              className={`relative inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl px-4 text-xs font-black transition-all ${activeTab === id ? 'bg-stone-900 text-white shadow-lg' : 'bg-white/50 text-stone-500 ring-1 ring-white/70 backdrop-blur hover:text-stone-800 hover:ring-stone-300'}`}>
               <Icon size={14} />{label}
               {badge > 0 && <span className="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-black text-white">{badge}</span>}
             </button>
@@ -1203,7 +717,7 @@ function RestaurantSuperadmin() {
                 { label: 'Pedidos hoy', value: todayOrders.length, sub: fmtCLP(dailySales) + ' en ventas', icon: ShoppingBag, color: '#f59e0b' },
                 { label: 'Tickets soporte', value: openTickets, sub: urgentTickets.length + ' de alta prioridad', icon: MessageSquare, color: urgentTickets.length > 0 ? '#ef4444' : '#c2553d' },
               ].map(kpi => (
-                <div key={kpi.label} className="relative overflow-hidden rounded-2xl bg-white border border-stone-200/80 p-5 shadow-sm hover:shadow-md transition">
+                <div key={kpi.label} className="relative overflow-hidden glass-card p-5 transition hover:shadow-xl">
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ background: kpi.color + '18' }}>
                       <kpi.icon size={18} style={{ color: kpi.color }} />
@@ -1218,7 +732,7 @@ function RestaurantSuperadmin() {
             </div>
 
             <div className="grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-              <div className="rounded-2xl bg-white border border-stone-200/80 p-6 shadow-sm">
+              <div className="glass-card p-6">
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h2 className="text-sm font-black text-stone-900">Ingresos Mensuales (MRR)</h2>
@@ -1253,13 +767,13 @@ function RestaurantSuperadmin() {
                 </div>
               </div>
 
-              <div className="rounded-2xl bg-white border border-stone-200/80 p-6 shadow-sm">
+              <div className="glass-card p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-sm font-black text-stone-900">Restaurantes</h2>
                   <button onClick={() => setActiveTab('restaurantes')} className="text-[11px] font-bold text-brand-600 hover:underline">Ver todos →</button>
                 </div>
                 <div className="space-y-2">
-                  {organizations.slice(0, 5).map(org => (
+                  {clientOrgs.slice(0, 5).map(org => (
                     <div key={org.id} className="flex items-center justify-between rounded-xl border border-stone-100 bg-stone-50 px-3 py-2.5 hover:bg-stone-100/80 transition">
                       <div className="flex items-center gap-2.5 min-w-0">
                         <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-brand-100 text-[11px] font-black text-brand-700">
@@ -1281,7 +795,7 @@ function RestaurantSuperadmin() {
             </div>
 
             <div className="grid gap-4 xl:grid-cols-2">
-              <div className="rounded-2xl bg-white border border-stone-200/80 p-6 shadow-sm">
+              <div className="glass-card p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-sm font-black text-stone-900">Tickets Urgentes</h2>
                   <button onClick={() => setActiveTab('soporte')} className="text-[11px] font-bold text-rose-500 hover:underline">Ver soporte →</button>
@@ -1308,7 +822,7 @@ function RestaurantSuperadmin() {
                 ))}
               </div>
 
-              <div className="rounded-2xl bg-white border border-stone-200/80 p-6 shadow-sm">
+              <div className="glass-card p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-sm font-black text-stone-900">Estado de Servicios</h2>
                   <button onClick={() => setActiveTab('monitoreo')} className="text-[11px] font-bold text-brand-600 hover:underline">Ver monitoreo →</button>
@@ -1340,7 +854,7 @@ function RestaurantSuperadmin() {
                 <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
                 <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
                   placeholder="Buscar por nombre, slug, RUT..."
-                  className="h-10 w-full rounded-xl border border-stone-200 bg-white pl-10 pr-4 text-sm font-semibold outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20" />
+                  className="glass-input h-10 w-full pl-10 pr-4 text-sm font-semibold" />
               </div>
               <button onClick={openCreateModal}
                 className="sm:ml-auto flex h-10 items-center gap-1.5 rounded-xl px-4 text-xs font-black text-white shadow"
@@ -1348,7 +862,7 @@ function RestaurantSuperadmin() {
                 <Plus size={14} /> Nuevo restaurante
               </button>
             </div>
-            <div className="rounded-2xl bg-white border border-stone-200/80 shadow-sm overflow-hidden">
+            <div className="glass-card overflow-hidden">
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-stone-100 bg-stone-50">
@@ -1405,6 +919,116 @@ function RestaurantSuperadmin() {
           </div>
         )}
 
+        {/* ── CÓDIGOS DE INVITACIÓN ── */}
+        {activeTab === 'codigos' && (
+          <div className="space-y-4">
+            <div className="glass-card p-6">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <h2 className="text-sm font-black text-stone-900">Códigos de invitación</h2>
+                  <p className="mt-0.5 text-[11px] text-stone-500">
+                    Cada registro de empresa exige un código. Genera uno por cliente y entrégaselo de forma privada; es de un solo uso.
+                  </p>
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <input
+                    type="text"
+                    value={inviteNote}
+                    onChange={e => setInviteNote(e.target.value)}
+                    placeholder="Nota (ej: La Parrilla del Puerto)"
+                    className="glass-input h-10 w-full text-xs font-semibold sm:w-56"
+                  />
+                  <select
+                    value={inviteExpiry}
+                    onChange={e => setInviteExpiry(e.target.value)}
+                    className="glass-input h-10 w-full text-xs font-bold sm:w-36"
+                  >
+                    <option value="7">Vence en 7 días</option>
+                    <option value="30">Vence en 30 días</option>
+                    <option value="90">Vence en 90 días</option>
+                    <option value="nunca">Sin vencimiento</option>
+                  </select>
+                  <button
+                    onClick={handleGenerateInvite}
+                    disabled={inviteBusy}
+                    className="flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl px-4 text-xs font-black text-white shadow disabled:opacity-50"
+                    style={{ background: 'linear-gradient(135deg,#c2553d,#9a3f2c)' }}
+                  >
+                    <Plus size={14} /> {inviteBusy ? 'Generando…' : 'Generar código'}
+                  </button>
+                </div>
+              </div>
+              {inviteError && (
+                <div className="mt-3 rounded-xl border border-rose-200/70 bg-rose-50/80 px-4 py-2.5 text-xs font-bold text-rose-600">{inviteError}</div>
+              )}
+            </div>
+
+            <div className="glass-card overflow-hidden">
+              {inviteCodes.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-stone-400">
+                  <Ticket size={32} className="mb-3 text-stone-300" />
+                  <p className="text-sm font-semibold">Aún no hay códigos generados</p>
+                  <p className="mt-1 text-xs">Genera el primero para poder registrar un cliente nuevo.</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-stone-200/50">
+                  {inviteCodes.map(c => {
+                    const st = inviteStatus(c)
+                    const usedOrg = c.usedByOrg ? organizations.find(o => o.id === c.usedByOrg) : null
+                    const isAvailable = st.label === 'Disponible'
+                    return (
+                      <div key={c.id} className="flex flex-col gap-3 px-5 py-4 transition hover:bg-white/40 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${isAvailable ? 'bg-emerald-50/80 text-emerald-600' : 'bg-stone-100/80 text-stone-400'}`}>
+                            <Ticket size={16} />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <code className="font-mono text-sm font-black tracking-[0.08em] text-stone-900">{c.code}</code>
+                              <button
+                                onClick={() => handleCopyInvite(c)}
+                                className="inline-flex items-center gap-1 rounded-full border border-stone-200/80 bg-white/60 px-2 py-0.5 text-[10px] font-black text-stone-500 transition hover:text-stone-800"
+                                title="Copiar código"
+                              >
+                                <Copy size={10} /> {copiedCodeId === c.id ? '¡Copiado!' : 'Copiar'}
+                              </button>
+                              <span className={`rounded-full border px-2 py-0.5 text-[9px] font-black uppercase ${st.cls}`}>{st.label}</span>
+                            </div>
+                            <p className="mt-1 truncate text-[11px] font-medium text-stone-400">
+                              {c.note ? c.note + ' · ' : ''}
+                              Creado {saFormatRelative(c.createdAt)}
+                              {c.expiresAt ? ' · vence ' + new Date(c.expiresAt).toLocaleDateString('es-CL') : ' · sin vencimiento'}
+                              {usedOrg ? ' · usado por ' + usedOrg.name : c.usedAt ? ' · usado' : ''}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          {isAvailable && (
+                            <button
+                              onClick={() => revokeInviteCode(c.id)}
+                              className="flex h-8 items-center gap-1 rounded-lg border border-amber-200/80 bg-amber-50/70 px-2.5 text-[10px] font-black text-amber-700 transition hover:bg-amber-100"
+                              title="Revocar (deja de servir para registrarse)"
+                            >
+                              <Ban size={11} /> Revocar
+                            </button>
+                          )}
+                          <button
+                            onClick={() => removeInviteCode(c.id)}
+                            className="flex h-8 w-8 items-center justify-center rounded-lg border border-stone-200/80 text-stone-400 transition hover:border-red-200 hover:text-red-500"
+                            title="Eliminar código"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* ── FINANZAS ── */}
         {activeTab === 'finanzas' && (
           <div className="space-y-4">
@@ -1415,14 +1039,14 @@ function RestaurantSuperadmin() {
                 { label: 'Churn Rate', value: '2.4%', trend: '-0.3%' },
                 { label: 'ARPU', value: fmtCLP(clientOrgs.length ? Math.round(totalMrr / clientOrgs.length) : 0), trend: '+5%' },
               ].map(k => (
-                <div key={k.label} className="rounded-2xl bg-white border border-stone-200/80 p-5 shadow-sm">
+                <div key={k.label} className="glass-card p-5">
                   <p className="text-[10px] font-black uppercase tracking-wider text-stone-400">{k.label}</p>
                   <p className="mt-2 text-2xl font-black text-stone-900">{k.value}</p>
                   <p className="mt-1 text-[10px] font-black text-emerald-600">{k.trend}</p>
                 </div>
               ))}
             </div>
-            <div className="rounded-2xl bg-white border border-stone-200/80 p-6 shadow-sm">
+            <div className="glass-card p-6">
               <h2 className="mb-4 text-sm font-black text-stone-900">MRR por Plan</h2>
               <div className="space-y-3">
                 {Object.entries(mrrByPlan).map(([plan, mrr]) => {
@@ -1467,7 +1091,7 @@ function RestaurantSuperadmin() {
               ))}
             </div>
             {selectedTicket ? (
-              <div className="rounded-2xl bg-white border border-stone-200/80 shadow-sm flex flex-col" style={{ minHeight: 480 }}>
+              <div className="glass-card flex flex-col" style={{ minHeight: 480 }}>
                 <div className="border-b border-stone-100 px-6 py-4">
                   <h2 className="text-base font-black text-stone-900">{selectedTicket.subject}</h2>
                   <p className="text-[11px] text-stone-500 mt-0.5">🏪 {selectedTicket.restaurant} · Asignado: <strong>{selectedTicket.assignee}</strong> · SLA: {selectedTicket.sla}h</p>
@@ -1507,7 +1131,7 @@ function RestaurantSuperadmin() {
         {/* ── MODULOS ── */}
         {activeTab === 'modulos' && (
           <div className="space-y-4">
-            <div className="rounded-2xl bg-white border border-stone-200/80 p-6 shadow-sm">
+            <div className="glass-card p-6">
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-sm font-black text-stone-900">Modulos por restaurante</h2>
                 <select value={modulesOrgId} onChange={e => setModulesOrgId(e.target.value)}
@@ -1546,7 +1170,7 @@ function RestaurantSuperadmin() {
         {/* ── MONITOREO ── */}
         {activeTab === 'monitoreo' && (
           <div className="space-y-4">
-            <div className="rounded-2xl bg-white border border-stone-200/80 p-6 shadow-sm">
+            <div className="glass-card p-6">
               <h2 className="mb-4 text-sm font-black text-stone-900">Estado de Servicios en Tiempo Real</h2>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {SERVICE_STATUS_LIST.map(svc => (
@@ -1584,7 +1208,7 @@ function RestaurantSuperadmin() {
                 { label: 'Intentos fallidos hoy', value: '1', icon: '⚠️', sub: 'Bloqueada 60s automaticamente' },
                 { label: 'Ultimo acceso superadmin', value: 'Hace 5min', icon: '🔐', sub: currentUser?.email || '' },
               ].map(k => (
-                <div key={k.label} className="rounded-2xl bg-white border border-stone-200/80 p-5 shadow-sm">
+                <div key={k.label} className="glass-card p-5">
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-xl">{k.icon}</span>
                     <p className="text-[10px] font-black uppercase tracking-wider text-stone-400">{k.label}</p>
@@ -1594,7 +1218,7 @@ function RestaurantSuperadmin() {
                 </div>
               ))}
             </div>
-            <div className="rounded-2xl bg-white border border-stone-200/80 shadow-sm overflow-hidden">
+            <div className="glass-card overflow-hidden">
               <div className="flex items-center justify-between px-6 py-4 border-b border-stone-100">
                 <h2 className="text-sm font-black text-stone-900">Log de Auditoria</h2>
               </div>
@@ -1693,8 +1317,8 @@ function CajeroLayout() {
     href === '/cajero' ? location.pathname === '/cajero' : location.pathname.startsWith(href)
 
   return (
-    <div className="min-h-screen bg-[#faf6f0] text-stone-900">
-      <header className="sticky top-0 z-40 border-b border-stone-200/70 bg-white/90 backdrop-blur">
+    <div className="glass-page min-h-screen text-stone-900">
+      <header className="sticky top-0 z-40 border-b border-white/60 bg-white/55 backdrop-blur-2xl">
         <div className="flex w-full items-center gap-4 px-4 py-3 sm:px-6 lg:px-8">
           <div className="flex shrink-0 items-center gap-3">
             <div
@@ -1753,9 +1377,39 @@ function CajeroLayout() {
         </div>
       </header>
 
-      <section className="min-w-0 w-full px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+      <section className="min-w-0 w-full px-4 py-6 pb-32 sm:px-6 lg:px-8 lg:py-8 lg:pb-8">
         <Outlet />
       </section>
+
+      {/* ── Navegación móvil: barra flotante inferior ── */}
+      <nav
+        className="fixed inset-x-3 bottom-3 z-50 flex items-stretch rounded-[1.4rem] border border-white/70 bg-white/75 px-1 shadow-[0_18px_45px_rgba(42,34,28,0.18)] backdrop-blur-2xl lg:hidden"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+        aria-label="Navegación principal"
+      >
+        {navItems.map(([label, href, Icon]) => {
+          const active = isActive(href)
+          return (
+            <NavLink
+              key={href}
+              to={href}
+              end={href === '/cajero'}
+              className="flex min-w-0 flex-1 flex-col items-center gap-1 py-2"
+            >
+              <span
+                className={`grid h-9 w-14 place-items-center rounded-full transition-all ${
+                  active ? 'bg-[#f5e0cc] text-[#9a3f2c]' : 'text-stone-500'
+                }`}
+              >
+                <Icon size={20} strokeWidth={active ? 2.4 : 2} />
+              </span>
+              <span className={`text-[0.62rem] leading-none ${active ? 'font-bold text-[#9a3f2c]' : 'font-semibold text-stone-500'}`}>
+                {label}
+              </span>
+            </NavLink>
+          )
+        })}
+      </nav>
     </div>
   )
 }
@@ -1771,12 +1425,12 @@ function GarzonLayout() {
   }
 
   return (
-    <div className="min-h-screen bg-[#faf6f0] text-stone-900">
-      <header className="sticky top-0 z-40 border-b border-stone-200/70 bg-white/90 backdrop-blur">
+    <div className="glass-page min-h-screen text-stone-900">
+      <header className="sticky top-0 z-40 border-b border-white/60 bg-white/55 backdrop-blur-2xl">
         <div className="flex w-full items-center gap-3 px-4 py-3 sm:px-6">
           <div className="flex shrink-0 items-center gap-3">
             <div
-              className="grid h-10 w-10 place-items-center rounded-md bg-emerald-600 text-base text-white"
+              className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-600 text-base text-white shadow-lg shadow-emerald-600/25"
               style={{ fontFamily: 'var(--font-display)', fontWeight: 600 }}
             >
               G
@@ -1795,12 +1449,9 @@ function GarzonLayout() {
           </div>
 
           <div className="ml-auto flex items-center gap-3">
-            <div className="flex items-center gap-2 rounded-full border border-stone-200 bg-[#fbf8f3] px-3 py-1.5">
+            <div className="glass-soft flex items-center gap-2 rounded-full px-3 py-1.5">
               <User size={14} className="text-emerald-600" />
               <span className="text-xs font-semibold text-stone-700">{currentUser?.name}</span>
-              <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[0.6rem] font-black text-emerald-700">
-                PIN: {currentUser?.pin}
-              </span>
             </div>
             <button
               type="button"
@@ -1824,6 +1475,7 @@ function GarzonLayout() {
 function GarzonTablesPage() {
   const { state, currentUser } = useAppStore()
   usePageTitle(`Mis Mesas | ${state.restaurant.name}`)
+  const [tableFilter, setTableFilter] = useState('todas')
 
   const today = new Date().toISOString().slice(0, 10)
   const todayOrders = state.orders.filter(
@@ -1832,61 +1484,139 @@ function GarzonTablesPage() {
   const myOrders = todayOrders.filter((order) => order.waiterId === currentUser?.id)
   const myTotalSales = myOrders.reduce((sum, o) => sum + o.total, 0)
 
+  // Estado de cada mesa según sus pedidos activos (ni entregados ni cancelados)
+  const tableInfo = state.tables.map((table) => {
+    const activeOrders = state.orders.filter(
+      (order) => order.tableId === table.slug && !['Entregado', 'Cancelado'].includes(order.status),
+    )
+    const isOccupied = activeOrders.length > 0
+    const isMine = activeOrders.some((o) => o.waiterId === currentUser?.id)
+    return { table, activeOrders, isOccupied, isMine }
+  })
+
+  const counts = {
+    todas: tableInfo.length,
+    mias: tableInfo.filter((t) => t.isMine).length,
+    libres: tableInfo.filter((t) => !t.isOccupied).length,
+    ocupadas: tableInfo.filter((t) => t.isOccupied && !t.isMine).length,
+  }
+
+  const visibleTables = tableInfo.filter(({ isOccupied, isMine }) => {
+    if (tableFilter === 'mias') return isMine
+    if (tableFilter === 'libres') return !isOccupied
+    if (tableFilter === 'ocupadas') return isOccupied && !isMine
+    return true
+  })
+
+  const FILTERS = [
+    ['todas', 'Todas'],
+    ['mias', 'Mis mesas'],
+    ['libres', 'Libres'],
+    ['ocupadas', 'Ocupadas'],
+  ]
+
   return (
-    <div className="grid gap-5 w-full overflow-hidden">
-      {/* Garzon header */}
-      <section className="rounded-xl border border-stone-200 bg-white p-5 shadow-soft">
-        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+    <div className="grid w-full gap-5 overflow-hidden">
+      {/* Encabezado del turno */}
+      <section className="glass-card p-6">
+        <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-center">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-600">Mi turno</p>
-            <h1 className="mt-2 text-3xl font-black text-stone-950">Hola, {currentUser?.name} 👋</h1>
-            <p className="mt-1 text-sm text-stone-500">Selecciona una mesa para tomar el pedido. Cada pedido queda registrado a tu nombre.</p>
+            <h1 className="mt-2 text-3xl text-stone-950" style={{ fontFamily: 'var(--font-display)', fontWeight: 600, letterSpacing: '-0.02em' }}>
+              Hola, {currentUser?.name} 👋
+            </h1>
+            <p className="mt-1 text-sm text-stone-500">
+              Elige una mesa para tomar el pedido. Todo lo que registres queda a tu nombre.
+            </p>
           </div>
-          <div className="grid grid-cols-3 gap-3">
-            <div className="rounded-xl border border-stone-200 bg-stone-50 p-3 text-center">
-              <p className="text-[0.6rem] font-black uppercase text-stone-400">Pedidos</p>
-              <strong className="mt-1 block text-xl font-black text-stone-950">{myOrders.length}</strong>
-            </div>
-            <div className="rounded-xl border border-stone-200 bg-stone-50 p-3 text-center">
-              <p className="text-[0.6rem] font-black uppercase text-stone-400">Ventas</p>
-              <strong className="mt-1 block text-xl font-black text-stone-950">{currency.format(myTotalSales)}</strong>
-            </div>
-            <div className="rounded-xl border border-stone-200 bg-stone-50 p-3 text-center">
-              <p className="text-[0.6rem] font-black uppercase text-stone-400">Mesas</p>
-              <strong className="mt-1 block text-xl font-black text-stone-950">
-                {[...new Set(myOrders.map((o) => o.tableLabel))].length}
-              </strong>
-            </div>
+          <div className="grid shrink-0 grid-cols-3 gap-3">
+            {[
+              ['Pedidos', myOrders.length],
+              ['Ventas', currency.format(myTotalSales)],
+              ['Mesas', [...new Set(myOrders.map((o) => o.tableLabel))].length],
+            ].map(([label, value]) => (
+              <div key={label} className="glass-soft rounded-xl p-3 text-center">
+                <p className="text-[0.6rem] font-black uppercase tracking-wider text-stone-400">{label}</p>
+                <strong className="mt-1 block text-xl font-black text-stone-950">{value}</strong>
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* Tables grid */}
-      <div className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-        {state.tables.map((table) => (
-          <GarzonTableCard key={table.id} table={table} currentUser={currentUser} />
+      {/* Filtros de salón */}
+      <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none]">
+        {FILTERS.map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setTableFilter(id)}
+            className={`inline-flex h-10 shrink-0 items-center gap-2 rounded-full px-4 text-sm font-bold transition ${
+              tableFilter === id
+                ? 'bg-stone-900 text-white shadow-lg'
+                : 'glass-soft text-stone-600 hover:text-stone-900'
+            }`}
+          >
+            {label}
+            <span className={`rounded-full px-2 py-0.5 text-[0.65rem] font-black ${
+              tableFilter === id ? 'bg-white/20 text-white' : 'bg-stone-900/5 text-stone-500'
+            }`}>
+              {counts[id]}
+            </span>
+          </button>
         ))}
       </div>
+
+      {/* Salón */}
+      {visibleTables.length ? (
+        <div className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+          {visibleTables.map(({ table, activeOrders, isOccupied, isMine }) => (
+            <GarzonTableCard
+              key={table.id}
+              table={table}
+              activeOrders={activeOrders}
+              isOccupied={isOccupied}
+              isMine={isMine}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="glass-soft grid place-items-center rounded-2xl py-16 text-center">
+          <p className="text-sm font-semibold text-stone-400">No hay mesas en este filtro.</p>
+        </div>
+      )}
     </div>
   )
 }
 
-function GarzonTableCard({ table, currentUser }) {
-  const { state } = useAppStore()
-  const [qrCode, setQrCode] = useState('')
+// Mini ilustración de mesa con sillas (line-art) que refleja el estado
+function TableSketch({ tone = 'text-stone-300', className = 'h-12 w-12' }) {
+  return (
+    <svg className={`${className} ${tone}`} viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
+      <circle cx="32" cy="32" r="13" />
+      <path d="M32 8v7" /><path d="M32 49v7" />
+      <path d="M8 32h7" /><path d="M49 32h7" />
+      <path d="M14.6 14.6l5 5" opacity="0.45" /><path d="M44.4 44.4l5 5" opacity="0.45" />
+      <path d="M49.4 14.6l-5 5" opacity="0.45" /><path d="M19.6 44.4l-5 5" opacity="0.45" />
+    </svg>
+  )
+}
+
+function GarzonTableCard({ table, activeOrders, isOccupied, isMine }) {
   const [elapsed, setElapsed] = useState('')
 
-  const tableActiveOrders = state.orders.filter(
-    (order) => order.tableId === table.slug && !['Entregado', 'Cancelado'].includes(order.status),
-  )
-  const isOccupied = tableActiveOrders.length > 0
-  const isMine = tableActiveOrders.some((o) => o.waiterId === currentUser?.id)
   const tableWaiter = isOccupied
-    ? tableActiveOrders.find((o) => o.waiterName)?.waiterName
+    ? activeOrders.find((o) => o.waiterName)?.waiterName
     : null
+  const itemCount = activeOrders.reduce(
+    (sum, order) => sum + order.items.reduce((s, item) => s + item.quantity, 0),
+    0,
+  )
+  const activeTotal = activeOrders.reduce((sum, order) => sum + order.total, 0)
+  const lastStatus = activeOrders[0]?.status
 
   const oldestOrderTime = isOccupied
-    ? tableActiveOrders.reduce((oldest, order) => {
+    ? activeOrders.reduce((oldest, order) => {
         const t = new Date(order.createdAt).getTime()
         return t < oldest ? t : oldest
       }, Infinity)
@@ -1901,96 +1631,69 @@ function GarzonTableCard({ table, currentUser }) {
       const diff = Date.now() - oldestOrderTime
       const hours = Math.floor(diff / 3600000)
       const minutes = Math.floor((diff % 3600000) / 60000)
-      const seconds = Math.floor((diff % 60000) / 1000)
-      setElapsed(
-        `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`,
-      )
+      setElapsed(hours > 0 ? `${hours}h ${String(minutes).padStart(2, '0')}m` : `${minutes} min`)
     }
     tick()
-    const interval = setInterval(tick, 1000)
+    const interval = setInterval(tick, 30000)
     return () => clearInterval(interval)
   }, [isOccupied, oldestOrderTime])
 
-  useEffect(() => {
-    let active = true
-    QRCode.toDataURL(`${window.location.origin}/garzon/mesa/${table.slug}`, {
-      margin: 1,
-      width: 280,
-    }).then((value) => {
-      if (active) setQrCode(value)
-    })
-    return () => {
-      active = false
-    }
-  }, [table.slug])
+  const tone = isMine
+    ? { ring: 'ring-emerald-300/70', chip: 'bg-emerald-100/80 text-emerald-700', dot: 'bg-emerald-500', sketch: 'text-emerald-500/70', label: 'Mi mesa' }
+    : isOccupied
+      ? { ring: 'ring-rose-200/70', chip: 'bg-rose-100/80 text-rose-700', dot: 'bg-rose-500', sketch: 'text-rose-400/70', label: `Atiende ${tableWaiter || 'otro garzón'}` }
+      : { ring: 'ring-white/60', chip: 'bg-stone-100/90 text-stone-600', dot: 'bg-stone-400', sketch: 'text-stone-300', label: 'Libre' }
 
   return (
-    <article className={`grid min-w-0 gap-3 rounded-xl border p-4 shadow-soft ${
-      isMine
-        ? 'border-emerald-300 bg-emerald-50'
-        : isOccupied
-          ? 'border-rose-200 bg-rose-50/50'
-          : 'border-stone-200 bg-white'
-    }`}>
+    <article className={`glass-card relative grid min-w-0 gap-4 p-5 ring-1 ${tone.ring}`}>
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className={`mb-2 inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-black uppercase tracking-[0.12em] ${
-            isMine
-              ? 'bg-emerald-100 text-emerald-700'
-              : isOccupied
-                ? 'bg-rose-100 text-rose-700'
-                : 'bg-brand-50 text-brand-700'
-          }`}>
-            <span className={`h-2 w-2 rounded-full ${
-              isMine ? 'bg-emerald-500 animate-pulse' : isOccupied ? 'bg-rose-500 animate-pulse' : 'bg-brand-500'
-            }`} />
-            {isMine ? 'Mi mesa' : isOccupied ? `Ocupada (${tableWaiter || 'otro'})` : 'Libre'}
+        <div className="min-w-0">
+          <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-[0.68rem] font-black uppercase tracking-[0.12em] ${tone.chip}`}>
+            <span className={`h-2 w-2 rounded-full ${tone.dot} ${isOccupied ? 'animate-pulse' : ''}`} />
+            {tone.label}
           </div>
-          <h2 className="text-xl font-black text-stone-950">{table.label}</h2>
-          {tableWaiter ? (
-            <p className="mt-1 text-sm font-bold text-stone-500">
-              <User size={14} className="mr-1 inline" />
-              {tableWaiter}
-            </p>
-          ) : null}
+          <h2 className="mt-2.5 text-2xl text-stone-950" style={{ fontFamily: 'var(--font-display)', fontWeight: 600 }}>
+            {table.label}
+          </h2>
         </div>
-        <Link
-          to={`/garzon/mesa/${table.slug}`}
-          className="inline-flex h-10 items-center justify-center rounded-lg bg-emerald-600 px-4 font-black text-white shadow-md transition hover:bg-emerald-700"
-        >
-          Atender ↗
-        </Link>
+        <TableSketch tone={tone.sketch} />
       </div>
 
-      {isOccupied && elapsed ? (
-        <div className="flex items-center gap-3 rounded-xl border border-rose-200 bg-gradient-to-r from-rose-50 to-brand-50 p-2.5">
-          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-rose-500 text-white shadow-md shadow-rose-200">
-            <Timer size={18} />
+      {isOccupied ? (
+        <div className="glass-soft grid gap-2 rounded-xl p-3">
+          <div className="flex items-center justify-between text-sm">
+            <span className="inline-flex items-center gap-1.5 font-bold text-stone-600">
+              <Clock3 size={14} className={isMine ? 'text-emerald-600' : 'text-rose-500'} />
+              {elapsed || '—'}
+            </span>
+            <span className="rounded-full bg-white/70 px-2.5 py-0.5 text-[0.65rem] font-black uppercase tracking-wide text-stone-500">
+              {lastStatus}
+            </span>
           </div>
-          <div>
-            <p className="text-[0.6rem] font-black uppercase tracking-[0.14em] text-rose-600">Ocupada</p>
-            <p className="text-lg font-black tabular-nums text-stone-950">{elapsed}</p>
+          <div className="flex items-end justify-between">
+            <span className="text-xs font-semibold text-stone-500">
+              {activeOrders.length} {activeOrders.length === 1 ? 'pedido' : 'pedidos'} · {itemCount} ítems
+            </span>
+            <strong className="text-lg font-black text-stone-950">{currency.format(activeTotal)}</strong>
           </div>
         </div>
-      ) : null}
-
-      <div className="rounded-xl border border-stone-200 bg-stone-50 p-2">
-        {qrCode ? (
-          <img
-            src={qrCode}
-            alt={`QR ${table.label}`}
-            className="mx-auto aspect-square w-full max-w-[180px] rounded-lg bg-white p-1.5"
-          />
-        ) : (
-          <div className="mx-auto aspect-square w-full max-w-[180px] rounded-lg bg-white" />
-        )}
-      </div>
+      ) : (
+        <p className="rounded-xl border border-dashed border-stone-300/80 px-3 py-3.5 text-center text-xs font-semibold text-stone-400">
+          Mesa disponible, sin pedidos activos
+        </p>
+      )}
 
       <Link
         to={`/garzon/mesa/${table.slug}`}
-        className="grid h-11 place-items-center rounded-lg bg-emerald-600 font-black text-white shadow-md transition hover:bg-emerald-700"
+        className={`grid h-12 place-items-center rounded-xl text-sm font-black text-white shadow-lg transition hover:-translate-y-0.5 ${
+          isMine
+            ? 'bg-emerald-600 shadow-emerald-600/25 hover:bg-emerald-700'
+            : isOccupied
+              ? 'bg-stone-900 shadow-stone-900/20 hover:bg-stone-800'
+              : 'bg-[#c2553d] shadow-[#c2553d]/25 hover:bg-[#9a3f2c]'
+        }`}
       >
-        Tomar pedido de {table.label}
+        {isMine ? 'Seguir atendiendo' : isOccupied ? 'Ver mesa' : 'Tomar pedido'}
       </Link>
     </article>
   )
@@ -2379,7 +2082,7 @@ function AdminLayout() {
   const { state, currentUser, logout } = useAppStore()
   const location = useLocation()
   const navigate = useNavigate()
-  const [menuOpen, setMenuOpen] = useState(false)
+  const [moreOpen, setMoreOpen] = useState(false)
 
   const handleLogout = () => {
     logout()
@@ -2400,8 +2103,16 @@ function AdminLayout() {
     ['Configuración', '/admin/configuracion', Settings],
   ]
 
+  // Navegación móvil: las 4 secciones de uso diario van en la barra inferior;
+  // el resto vive en la hoja "Más".
+  const mobileMainHrefs = ['/admin', '/admin/pedidos', '/admin/mesas', '/admin/productos']
+  const mobileMainItems = mobileMainHrefs.map((href) => navItems.find((item) => item[1] === href))
+  const mobileMoreItems = navItems.filter((item) => !mobileMainHrefs.includes(item[1]))
+
   const isActive = (href) =>
     href === '/admin' ? location.pathname === '/admin' : location.pathname.startsWith(href)
+
+  const moreIsActive = mobileMoreItems.some(([, href]) => isActive(href))
 
   const renderDesktopLink = ([label, href, Icon, external]) => {
     const active = isActive(href)
@@ -2434,52 +2145,67 @@ function AdminLayout() {
     )
   }
 
-  const renderMobileLink = ([label, href, Icon, external]) => {
+  // Pestaña de la barra inferior móvil (icono + etiqueta corta)
+  const renderTabItem = ([label, href, Icon]) => {
     const active = isActive(href)
-    const baseClass = 'flex items-center gap-3 rounded-lg px-3 py-2.5 text-[0.92rem] transition'
-    const stateClass = active
-      ? 'bg-[#fbf2ea] text-[#9a3f2c] font-semibold'
-      : 'text-stone-700 font-medium hover:bg-stone-100'
-
-    const content = (
-      <>
-        <Icon size={18} strokeWidth={active ? 2.4 : 2} />
-        <span>{label}</span>
-        {external ? <Share2 size={13} className="ml-auto opacity-50" /> : null}
-      </>
-    )
-
-    if (external) {
-      return (
-        <a
-          key={href}
-          href={href}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={() => setMenuOpen(false)}
-          className={`${baseClass} ${stateClass}`}
-        >
-          {content}
-        </a>
-      )
-    }
-
+    const shortLabel = href === '/admin' ? 'Inicio' : label
     return (
       <NavLink
         key={href}
         to={href}
         end={href === '/admin'}
-        onClick={() => setMenuOpen(false)}
-        className={`${baseClass} ${stateClass}`}
+        onClick={() => setMoreOpen(false)}
+        className="flex min-w-0 flex-1 flex-col items-center gap-1 py-2"
       >
+        <span
+          className={`grid h-9 w-14 place-items-center rounded-full transition-all ${
+            active ? 'bg-[#f5e0cc] text-[#9a3f2c]' : 'text-stone-500'
+          }`}
+        >
+          <Icon size={20} strokeWidth={active ? 2.4 : 2} />
+        </span>
+        <span className={`text-[0.62rem] leading-none ${active ? 'font-bold text-[#9a3f2c]' : 'font-semibold text-stone-500'}`}>
+          {shortLabel}
+        </span>
+      </NavLink>
+    )
+  }
+
+  // Mosaico de la hoja "Más"
+  const renderMoreTile = ([label, href, Icon, external]) => {
+    const active = isActive(href)
+    const tileClass = `flex flex-col items-center gap-2 rounded-2xl px-2 py-4 text-center transition ${
+      active ? 'bg-[#f5e0cc] text-[#9a3f2c]' : 'glass-soft text-stone-600 active:scale-95'
+    }`
+    const content = (
+      <>
+        <span className={`grid h-11 w-11 place-items-center rounded-xl ${active ? 'bg-white/70 text-[#9a3f2c]' : 'bg-white/60 text-[#c2553d]'}`}>
+          <Icon size={21} strokeWidth={active ? 2.4 : 2} />
+        </span>
+        <span className="text-[0.72rem] font-bold leading-tight">
+          {label}
+          {external ? <Share2 size={10} className="ml-1 inline opacity-50" /> : null}
+        </span>
+      </>
+    )
+
+    if (external) {
+      return (
+        <a key={href} href={href} target="_blank" rel="noopener noreferrer" onClick={() => setMoreOpen(false)} className={tileClass}>
+          {content}
+        </a>
+      )
+    }
+    return (
+      <NavLink key={href} to={href} end={href === '/admin'} onClick={() => setMoreOpen(false)} className={tileClass}>
         {content}
       </NavLink>
     )
   }
 
   return (
-    <div className="min-h-screen bg-[#faf6f0] text-stone-900">
-      <header className="sticky top-0 z-40 border-b border-stone-200/70 bg-white/90 backdrop-blur lg:h-[70px]">
+    <div className="glass-page min-h-screen text-stone-900">
+      <header className="sticky top-0 z-40 border-b border-white/60 bg-white/55 backdrop-blur-2xl lg:h-[70px]">
         <div className="flex w-full items-center gap-2 px-3 py-3 sm:px-4 lg:h-full lg:px-5 lg:py-0">
           <Link to="/admin" className="flex shrink-0 items-center gap-2">
             <div
@@ -2488,12 +2214,12 @@ function AdminLayout() {
             >
               A
             </div>
-            <div className="hidden leading-tight min-[1100px]:block">
+            <div className="min-w-0 leading-tight">
               <p className="text-[0.6rem] font-semibold uppercase tracking-[0.22em] text-[#c2553d]">
                 AcroDevs
               </p>
               <h2
-                className="mt-0.5 text-base text-stone-900"
+                className="mt-0.5 truncate text-base text-stone-900"
                 style={{ fontFamily: 'var(--font-display)', fontWeight: 600, letterSpacing: '-0.01em' }}
               >
                 {state.restaurant.name}
@@ -2528,24 +2254,96 @@ function AdminLayout() {
 
           <button
             type="button"
-            className="ml-auto inline-flex h-10 w-10 items-center justify-center rounded-md border border-stone-200 bg-white text-stone-700 lg:hidden"
-            onClick={() => setMenuOpen((v) => !v)}
-            aria-label="Abrir menu"
+            onClick={handleLogout}
+            className="ml-auto inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-rose-200/70 bg-rose-50/70 text-rose-600 transition active:scale-95 lg:hidden"
+            aria-label="Cerrar sesión"
           >
-            {menuOpen ? <X size={20} /> : <Menu size={20} />}
+            <LogOut size={18} />
           </button>
         </div>
-
-        {menuOpen ? (
-          <div className="border-t border-stone-200/70 bg-white px-4 py-3 lg:hidden">
-            <nav className="grid gap-0.5">{navItems.map(renderMobileLink)}</nav>
-          </div>
-        ) : null}
       </header>
 
-      <section className="min-w-0 w-full px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+      <section className="min-w-0 w-full px-4 py-6 pb-32 sm:px-6 lg:px-8 lg:py-8 lg:pb-8">
         <Outlet />
       </section>
+
+      {/* ── Navegación móvil: barra flotante inferior ── */}
+      <nav
+        className="fixed inset-x-3 bottom-3 z-50 flex items-stretch rounded-[1.4rem] border border-white/70 bg-white/75 px-1 shadow-[0_18px_45px_rgba(42,34,28,0.18)] backdrop-blur-2xl lg:hidden"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+        aria-label="Navegación principal"
+      >
+        {mobileMainItems.map(renderTabItem)}
+        <button
+          type="button"
+          onClick={() => setMoreOpen((v) => !v)}
+          className="flex min-w-0 flex-1 flex-col items-center gap-1 py-2"
+          aria-expanded={moreOpen}
+          aria-label="Más secciones"
+        >
+          <span
+            className={`grid h-9 w-14 place-items-center rounded-full transition-all ${
+              moreOpen || moreIsActive ? 'bg-[#f5e0cc] text-[#9a3f2c]' : 'text-stone-500'
+            }`}
+          >
+            <LayoutGrid size={20} strokeWidth={moreOpen || moreIsActive ? 2.4 : 2} />
+          </span>
+          <span className={`text-[0.62rem] leading-none ${moreOpen || moreIsActive ? 'font-bold text-[#9a3f2c]' : 'font-semibold text-stone-500'}`}>
+            Más
+          </span>
+        </button>
+      </nav>
+
+      {/* ── Hoja inferior "Más" ── */}
+      <AnimatePresence>
+        {moreOpen && (
+          <>
+            <motion.button
+              type="button"
+              key="more-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setMoreOpen(false)}
+              className="fixed inset-0 z-30 bg-stone-900/35 backdrop-blur-sm lg:hidden"
+              aria-label="Cerrar menú"
+            />
+            <motion.div
+              key="more-sheet"
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 30, stiffness: 320 }}
+              className="glass-strong fixed inset-x-0 bottom-0 z-40 rounded-t-[1.8rem] px-5 pt-3 lg:hidden"
+              style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 96px)' }}
+              role="dialog"
+              aria-label="Más secciones"
+            >
+              <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-stone-300/80" />
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <p className="text-[0.62rem] font-black uppercase tracking-[0.18em] text-[#c2553d]">Panel</p>
+                  <h3 className="text-lg text-stone-900" style={{ fontFamily: 'var(--font-display)', fontWeight: 600 }}>
+                    Todas las secciones
+                  </h3>
+                </div>
+                <div className="glass-soft flex items-center gap-2 rounded-full px-3 py-1.5">
+                  <span className="relative grid h-2 w-2 place-items-center">
+                    <span className="absolute inset-0 animate-ping rounded-full bg-[#c2553d] opacity-40" />
+                    <span className="relative h-2 w-2 rounded-full bg-[#c2553d]" />
+                  </span>
+                  <span className="max-w-[110px] truncate text-xs font-bold text-stone-700">
+                    {currentUser?.name || 'Admin'}
+                  </span>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4">
+                {mobileMoreItems.map(renderMoreTile)}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
@@ -3422,17 +3220,14 @@ function AdminReservationsPage() {
 }
 
 function AdminUsersPage() {
-  const { state, sessions, addStaffUser, removeStaffUser, toggleStaffUser, getUserSessions } = useAppStore()
+  const { state, sessions, addStaffUser, removeStaffUser, toggleStaffUser, regenerateStaffPin, getUserSessions } = useAppStore()
   usePageTitle(`Usuarios | ${state.restaurant.name}`)
-  const [form, setForm] = useState({ name: '', role: 'garzon' })
+  const [form, setForm] = useState({ name: '', rut: '', email: '', phone: '', role: 'garzon' })
+  const [formError, setFormError] = useState('')
+  const [saving, setSaving] = useState(false)
+  // El PIN se entrega UNA sola vez (al crear o regenerar); no queda visible en la UI.
+  const [pinReveal, setPinReveal] = useState(null) // { user, pin, mode: 'nuevo'|'regenerado' }
   const [filterRole, setFilterRole] = useState('todos')
-  const [revealedPins, setRevealedPins] = useState(() => new Set())
-  const togglePinReveal = (id) =>
-    setRevealedPins((prev) => {
-      const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
-      return next
-    })
   const [activeTab, setActiveTab] = useState('equipo')
   const [expandedUser, setExpandedUser] = useState(null)
   const [expandedSession, setExpandedSession] = useState(null)
@@ -3446,11 +3241,38 @@ function AdminUsersPage() {
     garzon: { label: 'Garzón', icon: User, color: 'bg-emerald-50 text-emerald-700', description: 'Atención de mesas y pedidos' },
   }
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault()
-    if (!form.name.trim()) return
-    addStaffUser(form.name.trim(), form.role)
-    setForm({ name: '', role: form.role })
+    setFormError('')
+    if (!form.name.trim()) return setFormError('Ingresa el nombre completo.')
+    if (!form.rut.trim()) return setFormError('Ingresa el RUT.')
+    if (!form.email.trim() || !form.email.includes('@')) return setFormError('Ingresa un correo válido.')
+    if (!form.phone.trim()) return setFormError('Ingresa el teléfono.')
+    setSaving(true)
+    try {
+      const created = await addStaffUser({
+        name: form.name.trim(),
+        rut: form.rut.trim(),
+        email: form.email.trim(),
+        phone: form.phone.trim(),
+        role: form.role,
+      })
+      setPinReveal({ user: created, pin: created.pin, mode: 'nuevo' })
+      setForm({ name: '', rut: '', email: '', phone: '', role: form.role })
+    } catch (err) {
+      setFormError(err.message || 'No se pudo crear el usuario.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleRegeneratePin = async (user) => {
+    try {
+      const pin = await regenerateStaffPin(user.id)
+      setPinReveal({ user, pin, mode: 'regenerado' })
+    } catch (err) {
+      setFormError(err.message || 'No se pudo regenerar el PIN.')
+    }
   }
 
   const filteredUsers = filterRole === 'todos'
@@ -3497,7 +3319,7 @@ function AdminUsersPage() {
       <AdminPageHeader
         eyebrow="Equipo"
         title="Usuarios"
-        description="Gestiona roles de administradores, cocina, cajeros y garzones. Los garzones reciben un PIN aleatorio de acceso."
+        description="Registra a tu equipo con sus datos de contacto y asígnale un rol. El PIN de acceso se entrega una sola vez, de forma privada."
       />
 
       {/* Role summary cards */}
@@ -3561,21 +3383,61 @@ function AdminUsersPage() {
       {activeTab === 'equipo' ? (
       <section className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
         {/* Create user form */}
-        <form className="rounded-xl border border-stone-200 bg-white p-5 shadow-soft" onSubmit={handleSubmit}>
+        <form className="glass-card h-fit p-5" onSubmit={handleSubmit}>
           <div className="mb-4 flex items-center justify-between">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.16em] text-brand-600">Nuevo</p>
-              <h2 className="text-xl font-black text-stone-950">Crear usuario</h2>
+              <h2 className="text-xl font-black text-stone-950">Registrar integrante</h2>
             </div>
             <UserPlus className="text-brand-600" size={24} />
           </div>
+          {formError && (
+            <div className="mb-3 rounded-xl border border-rose-200/70 bg-rose-50/80 p-3 text-xs font-bold text-rose-600">
+              {formError}
+            </div>
+          )}
           <div className="grid gap-3">
             <label className="field">
               <span>Nombre completo</span>
               <input
+                className="glass-input"
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
-                placeholder="Ej: Carlos Lopez"
+                placeholder="Ej: Carlos López"
+                required
+              />
+            </label>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="field">
+                <span>RUT</span>
+                <input
+                  className="glass-input"
+                  value={form.rut}
+                  onChange={(e) => setForm({ ...form, rut: e.target.value })}
+                  placeholder="12.345.678-9"
+                  required
+                />
+              </label>
+              <label className="field">
+                <span>Teléfono</span>
+                <input
+                  className="glass-input"
+                  type="tel"
+                  value={form.phone}
+                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                  placeholder="+56 9 1234 5678"
+                  required
+                />
+              </label>
+            </div>
+            <label className="field">
+              <span>Correo (Gmail)</span>
+              <input
+                className="glass-input"
+                type="email"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                placeholder="nombre@gmail.com"
                 required
               />
             </label>
@@ -3592,17 +3454,13 @@ function AdminUsersPage() {
                 ]}
               />
             </label>
-            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-700">
-              <strong>PIN auto-generado:</strong> Al crear un usuario se genera un PIN aleatorio de 4 dígitos como login.
-              {form.role === 'garzon' ? ' El garzón queda asociado a las mesas que atiende.' : ''}
-              {form.role === 'cocina' ? ' Solo podrá acceder al panel de cocina.' : ''}
-              {form.role === 'cajero' ? ' Solo podrá acceder a pedidos y reportes.' : ''}
-              {form.role === 'administrador' ? ' Tendrá acceso completo al sistema.' : ''}
-            </div>
-            <button type="submit" className="primary-button">
+            <p className="text-xs leading-5 text-stone-500">
+              Al registrarlo se genera un PIN de acceso de 4 dígitos que verás <strong>una única vez</strong> para entregárselo en persona. Si lo olvida, puedes regenerarlo desde su tarjeta.
+            </p>
+            <button type="submit" disabled={saving} className="primary-button disabled:opacity-60">
               <span className="inline-flex items-center gap-2">
                 <UserPlus size={18} />
-                Crear usuario
+                {saving ? 'Registrando…' : 'Registrar integrante'}
               </span>
             </button>
           </div>
@@ -3640,7 +3498,7 @@ function AdminUsersPage() {
                 const Icon = cfg.icon
                 const stats = getUserDayStats(user.id)
                 return (
-                  <article key={user.id} className="rounded-xl border border-stone-200 bg-stone-50 p-4">
+                  <article key={user.id} className="glass-soft rounded-xl p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-3">
                         <div className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl ${cfg.color}`}>
@@ -3652,22 +3510,26 @@ function AdminUsersPage() {
                             <span className={`rounded-full px-2.5 py-0.5 text-xs font-black ${cfg.color}`}>
                               {cfg.label}
                             </span>
-                            <button
-                              type="button"
-                              onClick={() => togglePinReveal(user.id)}
-                              className="inline-flex items-center gap-1 rounded-full bg-stone-200 px-2.5 py-0.5 text-xs font-bold text-stone-600 transition hover:bg-stone-300"
-                              title={revealedPins.has(user.id) ? 'Ocultar PIN' : 'Mostrar PIN'}
-                            >
-                              <Hash size={12} /> PIN: {revealedPins.has(user.id) ? user.pin : '••••'}
-                              {revealedPins.has(user.id) ? <EyeOff size={12} /> : <Eye size={12} />}
-                            </button>
                             <span className={`rounded-full px-2 py-0.5 text-xs font-black ${user.active ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
                               {user.active ? 'Activo' : 'Inactivo'}
                             </span>
                           </div>
+                          <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-stone-500">
+                            {user.rut ? <span>RUT {user.rut}</span> : null}
+                            {user.email ? <span>{user.email}</span> : null}
+                            {user.phone ? <span>{user.phone}</span> : null}
+                          </div>
                         </div>
                       </div>
                       <div className="flex gap-1">
+                        <button
+                          type="button"
+                          className="grid h-9 w-9 place-items-center rounded-lg border border-stone-200 bg-white/70 text-stone-500 transition hover:text-brand-600"
+                          onClick={() => handleRegeneratePin(user)}
+                          title="Regenerar PIN (se muestra una sola vez)"
+                        >
+                          <KeyRound size={16} />
+                        </button>
                         <button
                           type="button"
                           className={`grid h-9 w-9 place-items-center rounded-lg border text-sm ${user.active ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}
@@ -3689,39 +3551,18 @@ function AdminUsersPage() {
 
                     {/* Day stats */}
                     <div className="mt-3 grid grid-cols-3 gap-2">
-                      <div className="rounded-lg bg-white p-2 text-center">
+                      <div className="rounded-lg bg-white/70 p-2 text-center">
                         <p className="text-[0.6rem] font-black uppercase text-stone-400">Pedidos hoy</p>
                         <strong className="text-sm text-stone-700">{stats.orderCount}</strong>
                       </div>
-                      <div className="rounded-lg bg-white p-2 text-center">
+                      <div className="rounded-lg bg-white/70 p-2 text-center">
                         <p className="text-[0.6rem] font-black uppercase text-stone-400">Ventas hoy</p>
                         <strong className="text-sm text-stone-700">{currency.format(stats.totalSales)}</strong>
                       </div>
-                      <div className="rounded-lg bg-white p-2 text-center">
+                      <div className="rounded-lg bg-white/70 p-2 text-center">
                         <p className="text-[0.6rem] font-black uppercase text-stone-400">Mesas</p>
                         <strong className="text-sm text-stone-700">{stats.tables.length ? stats.tables.join(', ') : '—'}</strong>
                       </div>
-                    </div>
-
-                    {/* Login link */}
-                    <div className="mt-3 flex items-center gap-2 rounded-lg border border-blue-100 bg-blue-50 p-2.5">
-                      <Lock size={14} className="shrink-0 text-blue-600" />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[0.6rem] font-black uppercase tracking-[0.1em] text-blue-600">Link de acceso</p>
-                        <p className="truncate text-xs font-mono text-blue-800">
-                          {window.location.origin}/pin → PIN: {revealedPins.has(user.id) ? user.pin : '••••'}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        className="shrink-0 rounded-md border border-blue-200 bg-white px-2 py-1 text-[0.65rem] font-black text-blue-700 transition hover:bg-blue-100"
-                        onClick={() => {
-                          void navigator.clipboard?.writeText(`${window.location.origin}/pin — PIN: ${user.pin} (${cfg.label}: ${user.name})`)
-                        }}
-                        title="Copiar link + PIN"
-                      >
-                        Copiar
-                      </button>
                     </div>
                   </article>
                 )
@@ -3910,6 +3751,63 @@ function AdminUsersPage() {
         </div>
       </section>
       )}
+
+      {/* PIN entregado una sola vez */}
+      <AnimatePresence>
+        {pinReveal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/40 p-4 backdrop-blur-md"
+          >
+            <motion.div
+              initial={{ scale: 0.94, opacity: 0, y: 12 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.94, opacity: 0, y: 12 }}
+              className="glass-strong w-full max-w-sm p-7 text-center"
+            >
+              <div className="glass-soft mx-auto grid h-14 w-14 place-items-center rounded-2xl text-[#c2553d]">
+                <KeyRound size={24} />
+              </div>
+              <h3 className="mt-4 text-xl text-stone-900" style={{ fontFamily: 'var(--font-display)', fontWeight: 600 }}>
+                {pinReveal.mode === 'nuevo' ? 'Integrante registrado' : 'PIN regenerado'}
+              </h3>
+              <p className="mt-1 text-sm font-semibold text-stone-500">
+                PIN de acceso de <strong className="text-stone-800">{pinReveal.user.name}</strong>
+              </p>
+              <div className="mt-5 flex items-center justify-center gap-3">
+                {String(pinReveal.pin).split('').map((digit, i) => (
+                  <span key={i} className="glass-soft grid h-14 w-12 place-items-center rounded-xl text-2xl font-black text-stone-900">
+                    {digit}
+                  </span>
+                ))}
+              </div>
+              <p className="mt-4 rounded-xl border border-amber-200/70 bg-amber-50/80 p-3 text-xs font-semibold text-amber-700">
+                Entrégalo en persona. Por seguridad no se volverá a mostrar; si se olvida, regenera uno nuevo.
+              </p>
+              <div className="mt-5 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    void navigator.clipboard?.writeText(String(pinReveal.pin))
+                  }}
+                  className="flex h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-stone-200 bg-white/70 text-sm font-bold text-stone-700 transition hover:bg-white"
+                >
+                  <Copy size={14} /> Copiar PIN
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPinReveal(null)}
+                  className="h-11 flex-1 rounded-xl bg-stone-900 text-sm font-bold text-white transition hover:bg-stone-800"
+                >
+                  Listo
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

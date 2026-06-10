@@ -23,6 +23,11 @@ import {
   signOutRemote,
   getSessionProfile,
   registerRestaurantRemote,
+  updateRemoteStaffPin,
+  loadInviteCodes,
+  createRemoteInviteCode,
+  revokeRemoteInviteCode,
+  deleteRemoteInviteCode,
 } from '../lib/repository.js'
 
 function mapStaffProfile(data) {
@@ -32,6 +37,8 @@ function mapStaffProfile(data) {
     role: data.role,
     pin: data.pin,
     email: data.email,
+    rut: data.rut || '',
+    phone: data.phone || '',
     active: data.active,
     organizationId: data.organization_id || null,
   }
@@ -40,6 +47,7 @@ function mapStaffProfile(data) {
 const STORAGE_KEY = 'lasthit-demo-state-v1'
 const AUTH_KEY = 'lasthit-auth-user'
 const SESSIONS_KEY = 'lasthit-sessions-v1'
+const INVITES_KEY = 'lasthit-invite-codes-v1'
 const CHANNEL_NAME = 'lasthit-demo-sync'
 const AppStoreContext = createContext(null)
 
@@ -64,6 +72,22 @@ function generatePin(existingPins) {
     pin = String(Math.floor(1000 + Math.random() * 9000))
   } while (existingPins.includes(pin))
   return pin
+}
+
+// Código de invitación legible, sin caracteres ambiguos (0/O, 1/I/L).
+function generateInviteCodeString() {
+  const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
+  const bytes = crypto.getRandomValues(new Uint8Array(8))
+  const chars = Array.from(bytes, (b) => alphabet[b % alphabet.length])
+  return `ACRO-${chars.slice(0, 4).join('')}-${chars.slice(4).join('')}`
+}
+
+function loadLocalInviteCodes() {
+  const saved = localStorage.getItem(INVITES_KEY)
+  if (saved) {
+    try { return JSON.parse(saved) } catch { return [] }
+  }
+  return []
 }
 
 function getDevSuperadminCredentials() {
@@ -96,6 +120,7 @@ export function AppStoreProvider({ children }) {
   // empresa. Determina si al cerrar sesión se mantiene la sesión del dispositivo.
   const [actingViaPin, setActingViaPin] = useState(false)
   const [sessions, setSessions] = useState(loadSessions)
+  const [inviteCodes, setInviteCodes] = useState(loadLocalInviteCodes)
   const [organizations, setOrganizations] = useState([])
   const [currentOrganizationId, setCurrentOrganizationId] = useState(() => {
     return localStorage.getItem('lasthit-current-org-id') || ''
@@ -117,6 +142,13 @@ export function AppStoreProvider({ children }) {
   useEffect(() => {
     localStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions))
   }, [sessions])
+
+  // Persist local invite codes (solo relevante en modo demo sin Supabase)
+  useEffect(() => {
+    if (!isSupabaseEnabled()) {
+      localStorage.setItem(INVITES_KEY, JSON.stringify(inviteCodes))
+    }
+  }, [inviteCodes])
 
   // Load organizations on startup
   useEffect(() => {
@@ -345,22 +377,35 @@ export function AppStoreProvider({ children }) {
         setSessions((prev) => [newSession, ...prev])
         return user
       },
-      async registerRestaurant(restaurantName, adminName, adminEmail, adminPassword) {
+      async registerRestaurant(restaurantName, adminName, adminEmail, adminPassword, inviteCode) {
         // Regla del producto: toda empresa registrada es un CLIENTE. Siempre se crea
         // como organizacion nueva con un admin de rol 'administrador' (nunca superadmin),
-        // plan 'Básico' y estado 'Activo'.
+        // plan 'Básico' y estado 'Activo'. El registro requiere un código de invitación
+        // generado por el superadmin.
         if (remoteMode) {
           // Supabase Auth handles password hashing; the register_restaurant RPC
-          // atomically creates the org, settings and admin staff profile (rol administrador).
+          // atomically creates the org, settings and admin staff profile (rol administrador)
+          // y consume el código de invitación.
           const { organization, staff } = await registerRestaurantRemote(
             restaurantName,
             adminName,
             adminEmail,
             adminPassword,
+            inviteCode,
           )
           const orgs = await loadOrganizations()
           setOrganizations(orgs)
           return { organization, staff }
+        }
+
+        // Modo demo: valida contra los códigos locales generados por el superadmin.
+        const normalized = (inviteCode || '').trim().toUpperCase()
+        const invite = inviteCodes.find((c) => c.code.toUpperCase() === normalized)
+        if (!invite) throw new Error('El código de invitación no existe. Verifícalo con tu proveedor.')
+        if (invite.revokedAt) throw new Error('Este código de invitación fue revocado.')
+        if (invite.usedAt) throw new Error('Este código de invitación ya fue utilizado.')
+        if (invite.expiresAt && new Date(invite.expiresAt) < new Date()) {
+          throw new Error('Este código de invitación está vencido.')
         }
 
         const slug = restaurantName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
@@ -390,6 +435,12 @@ export function AppStoreProvider({ children }) {
           ...current,
           staffUsers: [...(current.staffUsers || []), staffPayload],
         }))
+
+        setInviteCodes((prev) =>
+          prev.map((c) =>
+            c.id === invite.id ? { ...c, usedAt: new Date().toISOString(), usedByOrg: newOrg.id } : c,
+          ),
+        )
 
         return { organization: newOrg, staff: staffPayload }
       },
@@ -489,6 +540,77 @@ export function AppStoreProvider({ children }) {
           await deleteRemoteOrganization(orgId)
         }
         setOrganizations((prev) => prev.filter((o) => o.id !== orgId))
+      },
+
+      // --- Códigos de invitación (solo superadmin) ---
+      inviteCodes,
+      async refreshInviteCodes() {
+        if (!remoteMode) return inviteCodes
+        const rows = await loadInviteCodes()
+        const mapped = rows.map((row) => ({
+          id: row.id,
+          code: row.code,
+          note: row.note || '',
+          createdAt: row.created_at,
+          expiresAt: row.expires_at,
+          usedAt: row.used_at,
+          usedByOrg: row.used_by_org,
+          revokedAt: row.revoked_at,
+        }))
+        setInviteCodes(mapped)
+        return mapped
+      },
+      async generateInviteCode({ note = '', expiresDays = null } = {}) {
+        const code = generateInviteCodeString()
+        const expiresAt = expiresDays
+          ? new Date(Date.now() + expiresDays * 86400000).toISOString()
+          : null
+        if (remoteMode) {
+          const row = await createRemoteInviteCode({
+            code,
+            note,
+            expiresAt,
+            createdBy: currentUser?.id || null,
+          })
+          const mapped = {
+            id: row.id,
+            code: row.code,
+            note: row.note || '',
+            createdAt: row.created_at,
+            expiresAt: row.expires_at,
+            usedAt: row.used_at,
+            usedByOrg: row.used_by_org,
+            revokedAt: row.revoked_at,
+          }
+          setInviteCodes((prev) => [mapped, ...prev])
+          return mapped
+        }
+        const local = {
+          id: crypto.randomUUID(),
+          code,
+          note,
+          createdAt: new Date().toISOString(),
+          expiresAt,
+          usedAt: null,
+          usedByOrg: null,
+          revokedAt: null,
+        }
+        setInviteCodes((prev) => [local, ...prev])
+        return local
+      },
+      async revokeInviteCode(codeId) {
+        if (remoteMode) {
+          await revokeRemoteInviteCode(codeId)
+        }
+        setInviteCodes((prev) =>
+          prev.map((c) => (c.id === codeId ? { ...c, revokedAt: new Date().toISOString() } : c)),
+        )
+      },
+      async removeInviteCode(codeId) {
+        if (remoteMode) {
+          await deleteRemoteInviteCode(codeId)
+        }
+        setInviteCodes((prev) => prev.filter((c) => c.id !== codeId))
       },
       getUserSessions(userId) {
         return sessions.filter((s) => s.userId === userId)
@@ -769,7 +891,7 @@ export function AppStoreProvider({ children }) {
       },
 
       // Staff Users
-      async addStaffUser(name, role) {
+      async addStaffUser({ name, role, rut = '', email = '', phone = '' }) {
         const existingPins = (state.staffUsers || []).map((u) => u.pin)
         const pin = generatePin(existingPins)
         const newUser = {
@@ -777,29 +899,54 @@ export function AppStoreProvider({ children }) {
           name,
           role,
           pin,
+          rut,
+          email: email.trim().toLowerCase(),
+          phone,
           active: true,
           createdAt: new Date().toISOString(),
         }
         if (remoteMode) {
           const remoteUser = await saveRemoteStaffUser(newUser, currentOrganizationId)
+          const mapped = {
+            id: remoteUser.id,
+            name: remoteUser.name,
+            role: remoteUser.role,
+            pin: remoteUser.pin,
+            rut: remoteUser.rut || '',
+            email: remoteUser.email || '',
+            phone: remoteUser.phone || '',
+            active: remoteUser.active,
+            createdAt: remoteUser.created_at,
+          }
           persist((current) => ({
             ...current,
-            staffUsers: [...(current.staffUsers || []), {
-              id: remoteUser.id,
-              name: remoteUser.name,
-              role: remoteUser.role,
-              pin: remoteUser.pin,
-              active: remoteUser.active,
-              createdAt: remoteUser.created_at,
-            }],
+            staffUsers: [...(current.staffUsers || []), mapped],
           }))
-          return remoteUser
+          return mapped
         }
         persist((current) => ({
           ...current,
           staffUsers: [...(current.staffUsers || []), newUser],
         }))
         return newUser
+      },
+      // Genera un PIN nuevo para un usuario (el PIN nunca se vuelve a mostrar
+      // después de la creación; esta es la vía para recuperar el acceso).
+      async regenerateStaffPin(userId) {
+        const existingPins = (state.staffUsers || [])
+          .filter((u) => u.id !== userId)
+          .map((u) => u.pin)
+        const pin = generatePin(existingPins)
+        if (remoteMode) {
+          await updateRemoteStaffPin(userId, pin)
+        }
+        persist((current) => ({
+          ...current,
+          staffUsers: (current.staffUsers || []).map((user) =>
+            user.id === userId ? { ...user, pin } : user,
+          ),
+        }))
+        return pin
       },
       async removeStaffUser(userId) {
         if (remoteMode) {
@@ -854,7 +1001,7 @@ export function AppStoreProvider({ children }) {
         }))
       },
     }),
-    [currentUser, actingViaPin, sessions, organizations, currentOrganizationId, impersonatedOrgId, isHydrating, remoteError, remoteMode, state],
+    [currentUser, actingViaPin, sessions, inviteCodes, organizations, currentOrganizationId, impersonatedOrgId, isHydrating, remoteError, remoteMode, state],
   )
 
   return <AppStoreContext.Provider value={api}>{children}</AppStoreContext.Provider>

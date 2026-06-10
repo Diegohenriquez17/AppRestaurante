@@ -155,6 +155,9 @@ export async function loadRemoteState(organizationId) {
     role: item.role,
     pin: item.pin,
     active: item.active,
+    rut: item.rut || '',
+    phone: item.phone || '',
+    email: item.email || '',
     createdAt: item.created_at,
   }))
 
@@ -336,6 +339,8 @@ export async function saveRemoteStaffUser(user, organizationId) {
     active: user.active,
     organization_id: organizationId,
     email: user.email || null,
+    rut: user.rut || '',
+    phone: user.phone || '',
   }
   const result = await supabase
     .from('staff_users')
@@ -356,6 +361,63 @@ export async function toggleRemoteStaffUser(userId, active) {
   throwIfMissingClient()
   const result = await supabase.from('staff_users').update({ active }).eq('id', userId)
   throwIfError(result, 'staff_users.update')
+}
+
+export async function updateRemoteStaffPin(userId, pin) {
+  throwIfMissingClient()
+  const result = await supabase.from('staff_users').update({ pin }).eq('id', userId)
+  throwIfError(result, 'staff_users.update_pin')
+}
+
+// --- Invite codes (gestión exclusiva del superadmin vía RLS) ---
+
+export async function loadInviteCodes() {
+  throwIfMissingClient()
+  const result = await supabase
+    .from('invite_codes')
+    .select('*')
+    .order('created_at', { ascending: false })
+  throwIfError(result, 'invite_codes')
+  return result.data || []
+}
+
+export async function createRemoteInviteCode({ code, note, expiresAt, createdBy }) {
+  throwIfMissingClient()
+  const result = await supabase
+    .from('invite_codes')
+    .insert({
+      code,
+      note: note || '',
+      expires_at: expiresAt || null,
+      created_by: createdBy || null,
+    })
+    .select('*')
+    .single()
+  throwIfError(result, 'invite_codes.insert')
+  return result.data
+}
+
+export async function revokeRemoteInviteCode(codeId) {
+  throwIfMissingClient()
+  const result = await supabase
+    .from('invite_codes')
+    .update({ revoked_at: new Date().toISOString() })
+    .eq('id', codeId)
+  throwIfError(result, 'invite_codes.revoke')
+}
+
+export async function deleteRemoteInviteCode(codeId) {
+  throwIfMissingClient()
+  const result = await supabase.from('invite_codes').delete().eq('id', codeId)
+  throwIfError(result, 'invite_codes.delete')
+}
+
+// Pre-valida un código de invitación sin necesidad de sesión (RPC anon).
+export async function checkInviteCode(inviteCode) {
+  throwIfMissingClient()
+  const { data, error } = await supabase.rpc('check_invite_code', { invite_code: inviteCode })
+  if (error) throw new Error(`invite.check: ${error.message}`)
+  return data // 'valid' | 'invalid' | 'used' | 'revoked' | 'expired'
 }
 
 function throwIfError(result, label) {
@@ -442,9 +504,16 @@ export async function signOutRemote() {
 // Registers a new restaurant: creates the Supabase Auth user, then calls the
 // register_restaurant RPC (SECURITY DEFINER) which atomically creates the
 // organization, default settings and the admin staff profile (id = auth.uid()).
-export async function registerRestaurantRemote(restaurantName, adminName, adminEmail, adminPassword) {
+export async function registerRestaurantRemote(restaurantName, adminName, adminEmail, adminPassword, inviteCode) {
   throwIfMissingClient()
   const email = adminEmail.trim().toLowerCase()
+
+  // Validar el código ANTES de crear la cuenta de Auth para no dejar
+  // usuarios huérfanos si el código no sirve.
+  const codeStatus = await checkInviteCode(inviteCode)
+  if (codeStatus !== 'valid') {
+    throw new Error(inviteCodeErrorMessage(codeStatus))
+  }
 
   const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
     email,
@@ -468,9 +537,26 @@ export async function registerRestaurantRemote(restaurantName, adminName, adminE
   const { data: org, error: rpcError } = await supabase.rpc('register_restaurant', {
     restaurant_name: restaurantName,
     admin_name: adminName,
+    invite_code: inviteCode,
   })
-  if (rpcError) throw new Error(rpcError.message)
+  if (rpcError) {
+    const msg = rpcError.message || ''
+    if (msg.includes('INVITE_')) {
+      throw new Error(inviteCodeErrorMessage(msg.replace('INVITE_', '').toLowerCase()))
+    }
+    throw new Error(msg)
+  }
 
   const staff = await loadStaffProfileById(session.user.id)
   return { organization: org, staff }
+}
+
+function inviteCodeErrorMessage(status) {
+  const messages = {
+    invalid: 'El código de invitación no existe. Verifícalo con tu proveedor.',
+    used: 'Este código de invitación ya fue utilizado.',
+    revoked: 'Este código de invitación fue revocado.',
+    expired: 'Este código de invitación está vencido.',
+  }
+  return messages[status] || 'Código de invitación no válido.'
 }
